@@ -1,5 +1,5 @@
 // If your backend is hosted somewhere else later, change this:
-const API_BASE_URL = "";
+const API_BASE_URL = "https://scam-detector-production.up.railway.app";
 
 const contentInput = document.getElementById("content-input");
 const analyzeBtn = document.getElementById("analyze-btn");
@@ -63,10 +63,13 @@ async function analyzeContent() {
     const result = await response.json();
 
     // Update UI
-    verdictBadge.textContent = `${result.verdict} (${result.category.toUpperCase()})`;
-    setVerdictStyle(result.verdict);
+    verdictBadge.textContent = `Score: ${result.score}`;
+    setVerdictStyle(result.score === 0 ? "SAFE" : "SUSPICIOUS");
 
-    explanationEl.textContent = result.explanation;
+    explanationEl.textContent = result.score === 0
+      ? "No scam detected."
+      : "Potential scam indicators detected.";
+
 
     // Reasons
     reasonsList.innerHTML = "";
