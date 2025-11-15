@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Scam Link & Text Detector</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="app-header">
+      <h1>Scam Link & Text Detector</h1>
+      <p class="subtitle">Paste a link or message below. Get instant results.</p>
+    </header>
+
+    <main class="app-main">
+      <section class="input-section">
+        <label for="content-input" class="input-label">Enter your text or URL:</label>
+        <textarea
+          id="content-input"
+          placeholder="Paste a link or message here..."
+          rows="6"
+        ></textarea>
+
+        <div class="mode-row">
+          <span>Mode:</span>
+          <label>
+            <input type="radio" name="mode" value="auto" checked />
+            Auto
+          </label>
+          <label>
+            <input type="radio" name="mode" value="url" />
+            URL
+          </label>
+          <label>
+            <input type="radio" name="mode" value="text" />
+            Text
+          </label>
+        </div>
+
+        <button id="analyze-btn">Analyze</button>
+        <p id="status" class="status"></p>
+      </section>
+
+      <section class="result-section" id="result-section" hidden>
+        <h2>Result</h2>
+        <div id="verdict-badge" class="verdict-badge">–</div>
+        <p id="explanation" class="explanation"></p>
+        <ul id="reasons-list" class="reasons-list"></ul>
+      </section>
+    </main>
+
+    <footer class="app-footer">
+      <p>MVP v1 — For safety awareness only. Not financial advice.</p>
+    </footer>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>

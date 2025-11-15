@@ -1,0 +1,157 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: #0b1020;
+  color: #f5f7ff;
+  display: flex;
+  justify-content: center;
+  padding: 24px;
+  min-height: 100vh;
+}
+
+.app {
+  width: 100%;
+  max-width: 760px;
+  background: #141a2c;
+  border-radius: 16px;
+  padding: 24px 20px;
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.4);
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.app-header {
+  text-align: center;
+}
+
+.app-header h1 {
+  font-size: 1.8rem;
+  margin-bottom: 6px;
+}
+
+.subtitle {
+  color: #a6b0d8;
+  font-size: 0.92rem;
+}
+
+.input-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.input-label {
+  font-size: 0.9rem;
+  color: #c5c8e6;
+}
+
+textarea {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid #272f4f;
+  background: #0f1424;
+  color: #f5f7ff;
+  padding: 10px 12px;
+  resize: vertical;
+  min-height: 120px;
+  font-size: 0.95rem;
+}
+
+textarea::placeholder {
+  color: #636b8f;
+}
+
+textarea:focus {
+  outline: none;
+  border-color: #4c7dff;
+  box-shadow: 0 0 0 1px rgba(76, 125, 255, 0.4);
+}
+
+.mode-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  color: #a6b0d8;
+  font-size: 0.85rem;
+}
+
+#analyze-btn {
+  align-self: flex-start;
+  border: none;
+  border-radius: 999px;
+  padding: 8px 18px;
+  background: #4c7dff;
+  color: #fff;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: 0.08s ease;
+}
+
+#analyze-btn:hover {
+  background: #3e6af0;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 14px rgba(76, 125, 255, 0.4);
+}
+
+.status {
+  min-height: 18px;
+  color: #a6b0d8;
+  font-size: 0.8rem;
+}
+
+.result-section {
+  border: 1px solid #272f4f;
+  border-radius: 12px;
+  padding: 14px;
+  background: radial-gradient(circle at top left, #1c2442, #101527);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.verdict-badge {
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-weight: 600;
+  align-self: flex-start;
+}
+
+.verdict-safe {
+  background: rgba(22, 163, 74, 0.15);
+  border: 1px solid rgba(22, 163, 74, 0.6);
+  color: #4ade80;
+}
+
+.verdict-suspicious {
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.6);
+  color: #facc15;
+}
+
+.verdict-dangerous {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.6);
+  color: #fca5a5;
+}
+
+.reasons-list {
+  list-style: disc;
+  padding-left: 18px;
+  color: #c5c8e6;
+  font-size: 0.85rem;
+}
+
+.app-footer {
+  text-align: center;
+  font-size: 0.75rem;
+  color: #7b84aa;
+  border-top: 1px solid #1d2338;
+  padding-top: 8px;
+}
