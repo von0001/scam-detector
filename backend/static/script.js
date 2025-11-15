@@ -100,13 +100,10 @@ async function runOCR(imageFile) {
   statusEl.textContent = "Reading screenshot…";
   statusEl.classList.add("loading");
 
-  const Tesseract = await import(
-    "https://cdn.jsdelivr.net/npm/tesseract.js@4.0.2/dist/tesseract.min.js"
-  );
-
   try {
     const worker = await Tesseract.createWorker();
 
+    await worker.load();
     await worker.loadLanguage("eng");
     await worker.initialize("eng");
 
