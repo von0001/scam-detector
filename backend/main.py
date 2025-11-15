@@ -1,13 +1,15 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
-from backend.models import AnalyzeRequest, AnalyzeResponse
-from backend.url_scanner import analyze_url
-from backend.text_scanner import analyze_text
+from text_scanner import analyze_text
+from url_scanner import analyze_url
 
 app = FastAPI()
 
-# Allow frontend to talk to backend
+# CORS (allows your frontend to call backend)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -16,60 +18,34 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Serve /static files
+app.mount("/static", StaticFiles(directory="backend/static"), name="static")
+
+class AnalyzeRequest(BaseModel):
+    content: str
+    mode: str = "auto"
+
 @app.get("/health")
-def health_check():
+def health():
     return {"status": "ok"}
 
-
-@app.post("/analyze", response_model=AnalyzeResponse)
-def analyze(request: AnalyzeRequest):
-    content = request.content.strip()
+@app.post("/analyze")
+def analyze(req: AnalyzeRequest):
+    content = req.content.strip()
+    mode = req.mode.lower()
 
     if not content:
-        raise HTTPException(status_code=400, detail="Content is empty.")
+        return JSONResponse({"error": "Content cannot be empty"}, status_code=400)
 
-    # Determine mode
-    if request.mode == "url":
-        mode = "url"
-    elif request.mode == "text":
-        mode = "text"
-    else:
-        # Auto-detect
-        looks_like_url = (
-            ("http://" in content.lower())
-            or ("https://" in content.lower())
-            or ("www." in content.lower())
-            or (" " not in content and "." in content)
-        )
-        mode = "url" if looks_like_url else "text"
+    if mode == "text" or (mode == "auto" and not content.startswith("http")):
+        return analyze_text(content)
 
-    # Run correct scanner
-    if mode == "url":
-        result = analyze_url(content)
-    else:
-        result = analyze_text(content)
+    if mode == "url" or content.startswith("http"):
+        return analyze_url(content)
 
-    score = result["score"]
-    reasons = result.get("reasons", [])
+    return {"verdict": "SAFE", "category": "unknown", "reasons": [], "explanation": "Could not classify"}
 
-    # Score → verdict
-    if score <= 1:
-        verdict = "SAFE"
-    elif score <= 4:
-        verdict = "SUSPICIOUS"
-    else:
-        verdict = "DANGEROUS"
-
-    explanation = (
-        "Flagged for: " + "; ".join(reasons)
-        if reasons else
-        "No strong scam signs detected (not a guarantee of safety)."
-    )
-
-    return AnalyzeResponse(
-        category=mode,
-        verdict=verdict,
-        score=score,
-        explanation=explanation,
-        reasons=reasons
-    )
+# SERVE THE FRONTEND
+@app.get("/")
+async def serve_home():
+    return FileResponse("backend/static/index.html")

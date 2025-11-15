@@ -1,5 +1,5 @@
 // If your backend is hosted somewhere else later, change this:
-const API_BASE_URL = "http://localhost:8000";
+const API_BASE_URL = "";
 
 const contentInput = document.getElementById("content-input");
 const analyzeBtn = document.getElementById("analyze-btn");
