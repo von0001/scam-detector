@@ -39,6 +39,19 @@
         </div>
 
         <button id="analyze-btn">Analyze</button>
+
+        <!-- ⭐ OCR Upload + Drag Drop ⭐ -->
+        <div class="ocr-container">
+          <button id="ocr-btn" class="ocr-button">📷 Upload Screenshot (OCR)</button>
+          <input type="file" id="ocr-file" accept="image/*" hidden />
+
+          <div id="drop-zone" class="drop-zone">
+            Drag & Drop Screenshot Here
+          </div>
+        </div>
+        <br>
+
+
         <p id="status" class="status"></p>
       </section>
 
@@ -54,6 +67,9 @@
       <p>MVP v1 — For safety awareness only. Not financial advice.</p>
     </footer>
   </div>
+
+  <!-- ⭐ Tesseract.js OCR Engine ⭐ -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4.0.2/dist/tesseract.min.js"></script>
 
   <script src="script.js"></script>
 </body>
