@@ -10,16 +10,22 @@ const verdictBadge = document.getElementById("verdict-badge");
 const explanationEl = document.getElementById("explanation");
 const reasonsList = document.getElementById("reasons-list");
 
-// Get selected mode (auto/url/text)
+const ocrBtn = document.getElementById("ocr-btn");
+const fileInput = document.getElementById("ocr-file");
+const dropZone = document.getElementById("drop-zone");
+
+// ----------------------
+// GET SELECTED MODE
+// ----------------------
 function getSelectedMode() {
   const radios = document.querySelectorAll('input[name="mode"]');
-  for (const r of radios) {
-    if (r.checked) return r.value;
-  }
+  for (const r of radios) if (r.checked) return r.value;
   return "auto";
 }
 
-// Update badge color
+// ----------------------
+// SET VERDICT COLOR
+// ----------------------
 function setVerdictStyle(verdict) {
   verdictBadge.classList.remove(
     "verdict-safe",
@@ -32,7 +38,9 @@ function setVerdictStyle(verdict) {
   else if (verdict === "DANGEROUS") verdictBadge.classList.add("verdict-dangerous");
 }
 
-// Run analysis
+// ----------------------
+// RUN ANALYSIS
+// ----------------------
 async function analyzeContent() {
   const content = contentInput.value.trim();
   const mode = getSelectedMode();
@@ -62,16 +70,12 @@ async function analyzeContent() {
 
     const result = await response.json();
 
-    // Update UI
     verdictBadge.textContent = `Score: ${result.score}`;
     setVerdictStyle(result.score === 0 ? "SAFE" : "SUSPICIOUS");
 
-    explanationEl.textContent = result.score === 0
-      ? "No scam detected."
-      : "Potential scam indicators detected.";
+    explanationEl.textContent =
+      result.score === 0 ? "No scam detected." : "Potential scam indicators detected.";
 
-
-    // Reasons
     reasonsList.innerHTML = "";
     result.reasons.forEach((reason) => {
       const li = document.createElement("li");
@@ -88,6 +92,86 @@ async function analyzeContent() {
     analyzeBtn.disabled = false;
   }
 }
+
+// -------------------------------------------------------------------
+// OCR (Tesseract.js) — Upload + Drag/Drop + Paste
+// -------------------------------------------------------------------
+async function runOCR(imageFile) {
+  statusEl.textContent = "Reading screenshot…";
+  statusEl.classList.add("loading");
+
+  const Tesseract = await import(
+    "https://cdn.jsdelivr.net/npm/tesseract.js@4.0.2/dist/tesseract.min.js"
+  );
+
+  try {
+    const worker = await Tesseract.createWorker();
+
+    await worker.loadLanguage("eng");
+    await worker.initialize("eng");
+
+    const { data } = await worker.recognize(imageFile);
+
+    await worker.terminate();
+
+    const extractedText = data.text.trim();
+
+    if (!extractedText) {
+      statusEl.textContent = "No readable text found.";
+      statusEl.classList.remove("loading");
+      return;
+    }
+
+    contentInput.value = extractedText;
+    statusEl.textContent = "Text extracted — analyzing…";
+    statusEl.classList.remove("loading");
+
+    analyzeContent();
+  } catch (err) {
+    console.error(err);
+    statusEl.textContent = "Failed to read image.";
+    statusEl.classList.remove("loading");
+  }
+}
+
+// Upload button
+ocrBtn.addEventListener("click", () => fileInput.click());
+
+// File upload selection
+fileInput.addEventListener("change", () => {
+  if (fileInput.files.length) {
+    runOCR(fileInput.files[0]);
+  }
+});
+
+// ------- Drag & Drop -------
+dropZone.addEventListener("dragover", (e) => {
+  e.preventDefault();
+  dropZone.classList.add("dragover");
+});
+
+dropZone.addEventListener("dragleave", () => {
+  dropZone.classList.remove("dragover");
+});
+
+dropZone.addEventListener("drop", (e) => {
+  e.preventDefault();
+  dropZone.classList.remove("dragover");
+
+  const file = e.dataTransfer.files[0];
+  if (file) runOCR(file);
+});
+
+// ------- Paste screenshot (Ctrl+V) -------
+document.addEventListener("paste", (e) => {
+  for (const item of e.clipboardData.items) {
+    if (item.type.startsWith("image/")) {
+      const file = item.getAsFile();
+      runOCR(file);
+      return;
+    }
+  }
+});
 
 // Button click
 analyzeBtn.addEventListener("click", (e) => {

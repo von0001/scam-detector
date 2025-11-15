@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="stylesheet" href="style.css" />
 </head>
+
 <body>
   <div class="app">
     <header class="app-header">
@@ -16,6 +17,7 @@
     <main class="app-main">
       <section class="input-section">
         <label for="content-input" class="input-label">Enter your text or URL:</label>
+
         <textarea
           id="content-input"
           placeholder="Paste a link or message here..."
@@ -24,23 +26,14 @@
 
         <div class="mode-row">
           <span>Mode:</span>
-          <label>
-            <input type="radio" name="mode" value="auto" checked />
-            Auto
-          </label>
-          <label>
-            <input type="radio" name="mode" value="url" />
-            URL
-          </label>
-          <label>
-            <input type="radio" name="mode" value="text" />
-            Text
-          </label>
+          <label><input type="radio" name="mode" value="auto" checked /> Auto</label>
+          <label><input type="radio" name="mode" value="url" /> URL</label>
+          <label><input type="radio" name="mode" value="text" /> Text</label>
         </div>
 
         <button id="analyze-btn">Analyze</button>
 
-        <!-- ⭐ OCR Upload + Drag Drop ⭐ -->
+        <!-- ⭐ OCR UPLOAD (Button + Drag & Drop) ⭐ -->
         <div class="ocr-container">
           <button id="ocr-btn" class="ocr-button">📷 Upload Screenshot (OCR)</button>
           <input type="file" id="ocr-file" accept="image/*" hidden />
@@ -49,8 +42,6 @@
             Drag & Drop Screenshot Here
           </div>
         </div>
-        <br>
-
 
         <p id="status" class="status"></p>
       </section>
@@ -68,9 +59,7 @@
     </footer>
   </div>
 
-  <!-- ⭐ Tesseract.js OCR Engine ⭐ -->
-  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4.0.2/dist/tesseract.min.js"></script>
-
+  <!-- Script should load LAST -->
   <script src="script.js"></script>
 </body>
 </html>
