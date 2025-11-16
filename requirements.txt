@@ -5,3 +5,4 @@ pillow
 pytesseract
 bcrypt
 itsdangerous
+tldextract
