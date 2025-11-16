@@ -12,7 +12,7 @@ from .text_scanner import analyze_text
 from .url_scanner import analyze_url
 
 # ⭐ Import analytics
-from analytics.analytics import record_event, get_analytics
+from backend.analytics.analytics import record_event, get_analytics
 
 app = FastAPI()
 
