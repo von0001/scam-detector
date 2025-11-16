@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>ScamDetector Analytics Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="style.css"/>
+    <style>
+        body { padding: 20px; color: white; }
+        .card {
+            background:#1b1b1b;
+            padding:20px;
+            border-radius:12px;
+            margin-bottom:20px;
+        }
+        .grid {
+            display:grid;
+            grid-template-columns: repeat(auto-fit,minmax(250px,1fr));
+            gap:20px;
+        }
+        h1 { text-align:center; margin-bottom:30px; }
+    </style>
+</head>
+
+<body>
+    <h1>📊 ScamDetector Analytics Dashboard</h1>
+
+    <div class="grid">
+        <div class="card"><h2>Total Requests</h2><p id="total"></p></div>
+        <div class="card"><h2>Scam Detections</h2><p id="scam"></p></div>
+        <div class="card"><h2>Safe Detections</h2><p id="safe"></p></div>
+        <div class="card"><h2>OCR Uses</h2><p id="ocr"></p></div>
+    </div>
+
+    <div class="card">
+        <h2>Traffic Over Time</h2>
+        <canvas id="trafficChart"></canvas>
+    </div>
+
+    <div class="card">
+        <h2>Scam vs Safe</h2>
+        <canvas id="pieChart"></canvas>
+    </div>
+
+    <script>
+        async function loadData() {
+            const res = await fetch("/admin/analytics");
+            const data = await res.json();
+
+            document.getElementById("total").innerText = data.total_requests;
+            document.getElementById("scam").innerText = data.scam_detections;
+            document.getElementById("safe").innerText = data.safe_detections;
+            document.getElementById("ocr").innerText = data.ocr_uses;
+
+            // Convert timestamps → readable dates
+            const labels = data.timestamp_log.map(t => {
+                const d = new Date(t * 1000);
+                return d.toLocaleTimeString();
+            });
+
+            const ctx1 = document.getElementById("trafficChart");
+            new Chart(ctx1, {
+                type: "line",
+                data: {
+                    labels,
+                    datasets: [{
+                        label: "Total Requests",
+                        data: labels.map(() => 1), // 1 hit per timestamp
+                        borderColor: "cyan",
+                        borderWidth: 2
+                    }]
+                }
+            });
+
+            const ctx2 = document.getElementById("pieChart");
+            new Chart(ctx2, {
+                type: "pie",
+                data: {
+                    labels: ["Safe", "Scam"],
+                    datasets: [{
+                        data: [data.safe_detections, data.scam_detections],
+                        backgroundColor: ["#4CAF50", "#E53935"]
+                    }]
+                }
+            });
+        }
+
+        loadData();
+    </script>
+</body>
+</html>
