@@ -159,9 +159,18 @@ def analytics_admin():
 @app.get("/")
 def serve_frontend():
     return FileResponse("backend/static/index.html")
+
 @app.get("/privacy")
 def serve_privacy():
     return FileResponse("backend/static/privacy.html")
+
+@app.get("/terms")
+def serve_terms():
+    return FileResponse("backend/static/terms.html")
+
+@app.get("/support")
+def serve_support():
+    return FileResponse("backend/static/support.html")
 
 
 # -----------------------------
