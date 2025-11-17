@@ -4,10 +4,10 @@ from fastapi.responses import JSONResponse, FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from PIL import Image
-import pytesseract
 import io
+import pytesseract
 
-# Import scanners
+# Scanners
 from .text_scanner import analyze_text
 from .url_scanner import analyze_url
 
@@ -20,9 +20,9 @@ from backend.auth import verify_password, create_session, verify_session, COOKIE
 
 app = FastAPI()
 
-# -----------------------------
+# ---------------------------------------------------------
 # CORS
-# -----------------------------
+# ---------------------------------------------------------
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -31,27 +31,26 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# -----------------------------
-# ADMIN LOGIN PROTECTION MIDDLEWARE
-# -----------------------------
+
+# ---------------------------------------------------------
+# Admin Protection Middleware
+# ---------------------------------------------------------
 @app.middleware("http")
 async def admin_protect(request: Request, call_next):
-
     path = request.url.path
 
-    # Protect admin pages EXCEPT the login page
+    # Protect /admin except /admin/login
     if path.startswith("/admin") and not path.startswith("/admin/login"):
-
-        cookie = request.cookies.get(COOKIE_NAME)
-        if not cookie or not verify_session(cookie):
-            return RedirectResponse("/admin/login")   # redirect to login
+        session = request.cookies.get(COOKIE_NAME)
+        if not session or not verify_session(session):
+            return RedirectResponse("/admin/login")
 
     return await call_next(request)
 
 
-# -----------------------------
-# OCR ENDPOINT
-# -----------------------------
+# ---------------------------------------------------------
+# OCR Endpoint
+# ---------------------------------------------------------
 @app.post("/ocr")
 async def ocr(image: UploadFile = File(...)):
     record_event("ocr")
@@ -63,16 +62,43 @@ async def ocr(image: UploadFile = File(...)):
     return {"text": text.strip()}
 
 
-# -----------------------------
-# ANALYZE ENDPOINT
-# -----------------------------
+# ---------------------------------------------------------
+# Analyze Request Model (Frontend → Backend)
+# ---------------------------------------------------------
 class AnalyzeRequest(BaseModel):
     content: str
     mode: str = "auto"
 
+
+# ---------------------------------------------------------
+# Utility: Normalize backend output → full ScamResult model
+# ---------------------------------------------------------
+def build_response(score: int, category: str, reasons, explanation: str):
+    """Ensure the API ALWAYS returns full ScamResult shape."""
+
+    if score >= 30:
+        verdict = "DANGEROUS"
+    elif score >= 10:
+        verdict = "SUSPICIOUS"
+    else:
+        verdict = "SAFE"
+
+    return {
+        "score": score,
+        "verdict": verdict,
+        "category": category,
+        "explanation": explanation,
+        "reasons": reasons or []
+    }
+
+
+# ---------------------------------------------------------
+# ANALYZE ENDPOINT (❤️ FIXED VERSION)
+# ---------------------------------------------------------
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
 
 @app.post("/analyze")
 def analyze(req: AnalyzeRequest):
@@ -84,44 +110,64 @@ def analyze(req: AnalyzeRequest):
     if not content:
         return JSONResponse({"error": "content is empty"}, status_code=400)
 
-    # Text
+    # --------------------------
+    # TEXT MODE
+    # --------------------------
     if mode == "text" or (mode == "auto" and not content.startswith("http")):
-        result = analyze_text(content)
+        raw = analyze_text(content)
+        response = build_response(
+            score=raw["score"],
+            category="text",
+            reasons=raw.get("reasons", []),
+            explanation="Analysis based on scam text patterns."
+        )
 
-    # URL
+    # --------------------------
+    # URL MODE
+    # --------------------------
     elif mode == "url" or content.startswith("http"):
-        result = analyze_url(content)
+        raw = analyze_url(content)
+        response = build_response(
+            score=raw["score"],
+            category="url",
+            reasons=raw.get("reasons", []),
+            explanation="Analysis based on URL structure and risk signals."
+        )
 
+    # --------------------------
+    # FALLBACK (should never hit)
+    # --------------------------
     else:
-        result = {
-            "score": 0,
-            "verdict": "SAFE",
-            "category": "unknown",
-            "reasons": [],
-            "explanation": "Unable to classify."
-        }
+        response = build_response(
+            score=0,
+            category="unknown",
+            reasons=[],
+            explanation="Unable to classify content."
+        )
 
-    # Record result type
+    # Analytics logs
     try:
-        if result.get("score", 0) == 0:
+        if response["score"] == 0:
             record_event("safe")
         else:
             record_event("scam")
     except:
         pass
 
-    return result
+    return response
 
 
-# -----------------------------
-# ADMIN LOGIN ROUTES
-# -----------------------------
+# ---------------------------------------------------------
+# Admin Login
+# ---------------------------------------------------------
 class LoginRequest(BaseModel):
     password: str
+
 
 @app.get("/admin/login")
 def login_page():
     return FileResponse("backend/static/login.html")
+
 
 @app.post("/admin/login")
 def login(req: LoginRequest):
@@ -132,7 +178,7 @@ def login(req: LoginRequest):
         response.set_cookie(
             COOKIE_NAME,
             session,
-            max_age=86400,      # 24h
+            max_age=86400,
             httponly=True,
             samesite="strict"
         )
@@ -141,39 +187,43 @@ def login(req: LoginRequest):
     return JSONResponse({"error": "Invalid password"}, status_code=401)
 
 
-# -----------------------------
-# ADMIN DASHBOARD + API
-# -----------------------------
+# ---------------------------------------------------------
+# Admin Dashboard + API
+# ---------------------------------------------------------
 @app.get("/admin")
 def serve_admin():
     return FileResponse("backend/static/admin.html")
+
 
 @app.get("/admin/analytics")
 def analytics_admin():
     return get_analytics()
 
 
-# -----------------------------
-# FRONTEND
-# -----------------------------
+# ---------------------------------------------------------
+# Frontend Pages
+# ---------------------------------------------------------
 @app.get("/")
 def serve_frontend():
     return FileResponse("backend/static/index.html")
+
 
 @app.get("/privacy")
 def serve_privacy():
     return FileResponse("backend/static/privacy.html")
 
+
 @app.get("/terms")
 def serve_terms():
     return FileResponse("backend/static/terms.html")
+
 
 @app.get("/support")
 def serve_support():
     return FileResponse("backend/static/support.html")
 
 
-# -----------------------------
-# STATIC FILES
-# -----------------------------
+# ---------------------------------------------------------
+# Static Files
+# ---------------------------------------------------------
 app.mount("/static", StaticFiles(directory="backend/static"), name="static")
