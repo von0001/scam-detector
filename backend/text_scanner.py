@@ -1,138 +1,202 @@
+# text_scanner_v2.py — Fully Upgraded (Von Edition)
+
 import re
 from typing import Dict, List
 
+# ——————————————————————————————————————————
+# 1. SCAM PHRASE DATABASE (SMARTER TIERS)
+# ——————————————————————————————————————————
 
-# HIGH-POWER scam phrase patterns:
-PHRASE_PATTERNS = [
-    # Account / identity threats
-    ("your account is locked", 5, "Claims your account is locked."),
-    ("account suspended", 5, "Threatens account suspension."),
-    ("account deactivated", 5, "Threatens account deactivation."),
+# High-power scam signals (heavy weight)
+HIGH_SEVERITY = [
+    ("your account is locked", 6, "Claims your account is locked."),
+    ("account suspended", 6, "Threatens account suspension."),
+    ("account deactivated", 6, "Threatens account deactivation."),
+    ("verify your identity", 5, "Requests identity verification."),
+    ("final notice", 5, "Threatening 'final notice'."),
+    ("reset your password", 5, "Password reset threat."),
+    ("payment required", 5, "Demands payment."),
+    ("routing number", 5, "Requests routing number."),
+    ("wire transfer", 5, "Requests wire transfer."),
+]
+
+# Medium-power scam signals (moderate weight)
+MEDIUM_SEVERITY = [
     ("verify your account", 4, "Asks you to verify your account."),
-    ("verify your identity", 4, "Requests identity verification."),
-    ("update your information", 3, "Asks for personal info update."),
-    ("unusual activity", 3, "Mentions unusual activity for fear."),
-    ("someone tried to", 3, "Claims suspicious activity."),
+    ("update your information", 3, "Requests personal info update."),
     ("security alert", 3, "Fake security alert."),
-
-    # Urgency / fear triggers
-    ("act now", 3, "Urgency phrase: 'act now'."),
-    ("immediately", 3, "Uses immediate time pressure."),
-    ("urgent", 3, "Marks the message as urgent."),
-    ("final notice", 4, "Threatening 'final notice'."),
-    ("last chance", 3, "'Last chance' pressure."),
-    ("within 24 hours", 3, "Artificial time window."),
-
-    # Tech support/authority impersonation
-    ("support team", 2, "Mentions generic 'support team'."),
-    ("customer service", 2, "Mentions customer service generically."),
-    ("it department", 3, "Fake IT department."),
-    ("technical support", 3, "Tech support impersonation."),
-    ("we detected", 3, "Claims detection of an issue."),
-    ("official notice", 3, "Fake official notice."),
-
-    # Money/reward scams
-    ("you have won", 4, "Fake winning message."),
-    ("congratulations", 3, "Fake congratulatory reward."),
-    ("you have been selected", 4, "Fake selection scam."),
-    ("claim your reward", 4, "Reward-claim scam line."),
-    ("gift card", 3, "Mentions gift card — scam classic."),
-    ("wire transfer", 4, "Mentions wire transfer."),
-    ("crypto", 3, "Crypto in suspicious context."),
-    ("bitcoin", 3, "Bitcoin in suspicious context."),
-    ("payment required", 4, "Fake payment request."),
-    ("final payment", 4, "Pressures for final payment."),
-    ("bank account", 3, "Mentions bank account."),
-    ("routing number", 4, "Requests routing number."),
-
-    # Delivery scams
-    ("delivery attempt failed", 4, "Fake delivery failure alert."),
-    ("package is on hold", 3, "Package hold scam."),
-    ("shipping address", 2, "Requests shipping address."),
-
-    # Links
-    ("click here", 3, "Asks to click an unspecified link."),
-    ("click the link", 3, "Pushes a link click."),
-    ("open the link", 3, "Pushes link interaction."),
-    ("login here", 4, "Requests login through link."),
-    ("reset your password", 4, "Password reset scam."),
+    ("unusual activity", 3, "Scare tactic: unusual activity."),
+    ("someone tried to", 3, "Suspicious activity claim."),
+    ("urgent", 3, "Uses urgency."),
+    ("immediately", 3, "Immediate pressure."),
+    ("last chance", 3, "Last chance pressure."),
+    ("you have been selected", 4, "Prize-selection scam."),
+    ("claim your reward", 4, "Claims of reward/lottery."),
 ]
 
+# Low-level indicators that *strengthen suspicion* (light weight)
+LOW_SEVERITY = [
+    ("support team", 2, "Generic 'support team'."),
+    ("customer service", 2, "Generic customer service."),
+    ("it department", 2, "Fake IT department."),
+    ("technical support", 2, "Tech support impersonation."),
+    ("gift card", 2, "Gift card scam pattern."),
+    ("shipping address", 2, "Shipment scam."),
+    ("click here", 2, "Pushes you to click a link."),
+    ("click the link", 2, "Pushes link interaction."),
+    ("open the link", 2, "Pushes link access."),
+    ("login here", 3, "Requests login."),
+]
 
-# Sensitive data captures
+# Sensitive personal information requests
 SENSITIVE_INFO = [
-    "password", "passcode", "pin", "ssn",
-    "social security", "routing number",
-    "card number", "cvv", "verification code",
-    "banking details", "access code"
+    "password", "passcode", "pin", "ssn", 
+    "social security", "cvv", "verification code",
+    "access code", "banking details", "card number"
 ]
 
+# Emoji ranges for manipulation detection
+EMOJI_REGEX = r"[\U0001F600-\U0001F64F\U0001F300-\U0001F5FF]"
+
+# URL regex
+URL_REGEX = r"https?://\S+|www\.\S+"
+
+
+# ——————————————————————————————————————————
+# 2. SMARTER SENTENCE ANALYZER
+# ——————————————————————————————————————————
+
+def _split_sentences(text: str) -> List[str]:
+    """Split text into sentences for better analysis."""
+    return re.split(r"[.!?]+", text)
+
+
+def _detect_tone(text: str) -> int:
+    """Detect manipulative writing tone (fear, urgency, commands)."""
+    score = 0
+    lower = text.lower()
+
+    # Fear / threat tone
+    if any(word in lower for word in ["warning", "danger", "risk", "alert", "issue detected"]):
+        score += 2
+
+    # Pressure tone
+    if any(word in lower for word in ["now", "immediately", "asap", "right away"]):
+        score += 2
+
+    # Authority impersonation
+    if any(word in lower for word in ["official", "government", "irs", "administrator"]):
+        score += 3
+
+    return score
+
+
+# ——————————————————————————————————————————
+# 3. MAIN TEXT ANALYZER (V2)
+# ——————————————————————————————————————————
 
 def analyze_text(text: str) -> Dict[str, object]:
-    reasons: List[str] = []
+    reasons = []
     score = 0
 
     t = text.strip()
     lower = t.lower()
 
-    # 1. PHRASE PATTERNS
-    for phrase, weight, reason in PHRASE_PATTERNS:
+    # ————————————————————————
+    # 1. Phrase Detection (multi-tier)
+    # ————————————————————————
+
+    for phrase, weight, reason in HIGH_SEVERITY:
         if phrase in lower:
-            reasons.append(reason)
             score += weight
+            reasons.append(reason)
 
-    # 2. URL DETECTION
-    urls = re.findall(r"https?://\S+|www\.\S+", lower)
-    if urls:
-        reasons.append(f"Contains {len(urls)} link(s).")
-        score += min(3, len(urls))
+    for phrase, weight, reason in MEDIUM_SEVERITY:
+        if phrase in lower:
+            score += weight
+            reasons.append(reason)
 
-    # 3. PHONE NUMBER DETECTION
-    phone_matches = re.findall(r"\b(\+?\d{1,3})?[-.\s]??\(?\d{3}\)?[-.\s]??\d{3}[-.\s]??\d{4}\b", t)
-    if phone_matches:
-        reasons.append("Contains phone number(s). Could be bait for calling scammers.")
-        score += 2
+    for phrase, weight, reason in LOW_SEVERITY:
+        if phrase in lower:
+            score += weight
+            reasons.append(reason)
 
-    # 4. EMAIL DETECTION
-    if re.search(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+", t):
-        reasons.append("Contains email address.")
-        score += 2
-
-    # 5. OTP CODE DETECTION
-    if re.search(r"\b\d{6}\b", lower):
-        reasons.append("Contains a 6-digit OTP-like code.")
-        score += 2
-
-    # 6. ALL CAPS DETECTION
-    letters_only = re.sub(r"[^A-Za-z]", "", t)
-    if letters_only.isupper() and len(letters_only) >= 10:
-        reasons.append("Contains excessive ALL CAPS.")
-        score += 2
-
-    # 7. EXCLAMATION SPAM
-    if t.count("!") >= 3:
-        reasons.append("Uses many exclamation marks for pressure.")
-        score += 2
-
-    # 8. SENSITIVE INFO REQUESTS
+    # ————————————————————————
+    # 2. Sensitive Info
+    # ————————————————————————
     for w in SENSITIVE_INFO:
         if w in lower:
-            reasons.append(f"Mentions sensitive info: '{w}'.")
             score += 4
+            reasons.append(f"Requests sensitive info: '{w}'.")
             break
 
-    # 9. EMOJI MANIPULATION
-    emoji_count = len(re.findall(r"[\U0001F600-\U0001F64F\U0001F300-\U0001F5FF]", t))
-    if emoji_count >= 4:
-        reasons.append("Contains many emojis used manipulatively.")
-        score += 1
+    # ————————————————————————
+    # 3. Link Detection (smarter)
+    # ————————————————————————
+    urls = re.findall(URL_REGEX, lower)
+    if urls:
+        count = len(urls)
+        score += min(count * 2, 6)  # cap link penalty
+        reasons.append(f"Contains {count} link(s).")
 
-    # 10. TOO SHORT (often scammy)
-    if len(t) < 15:
-        reasons.append("Message is unusually short; scammers often send low-effort texts.")
-        score += 1
+    # ————————————————————————
+    # 4. Phone Numbers
+    # ————————————————————————
+    phone_matches = re.findall(r"\b(\+?\d{1,3})?[-.\s]??\(?\d{3}\)?[-.\s]??\d{3}[-.\s]??\d{4}\b", t)
+    if phone_matches:
+        score += 2
+        reasons.append("Contains phone number(s).")
 
-    return {
-        "score": score,
-        "reasons": reasons
-    }
+    # ————————————————————————
+    # 5. Emails
+    # ————————————————————————
+    if re.search(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[A-Za-z0-9-.]+", t):
+        score += 2
+        reasons.append("Contains email address.")
+
+    # ————————————————————————
+    # 6. OTP Code Detection
+    # ————————————————————————
+    if re.search(r"\b\d{6}\b", lower):
+        score += 3
+        reasons.append("Contains a 6-digit OTP code.")
+
+    # ————————————————————————
+    # 7. Emoji manipulation
+    # ————————————————————————
+    emojis = re.findall(EMOJI_REGEX, t)
+    if len(emojis) >= 4:
+        score += 1
+        reasons.append("Contains many emojis (manipulative style).")
+
+    # ————————————————————————
+    # 8. ALL CAPS Detection
+    # ————————————————————————
+    letters_only = re.sub(r"[^A-Za-z]", "", t)
+    if len(letters_only) >= 10 and letters_only.isupper():
+        score += 2
+        reasons.append("Uses excessive ALL CAPS.")
+
+    # ————————————————————————
+    # 9. Exclamation Spam
+    # ————————————————————————
+    if t.count("!") >= 3:
+        score += 2
+        reasons.append("Spammy exclamation marks.")
+
+    # ————————————————————————
+    # 10. Tone Analysis (NEW)
+    # ————————————————————————
+    tone_score = _detect_tone(t)
+    if tone_score > 0:
+        score += tone_score
+        reasons.append("Manipulative tone detected.")
+
+    # ————————————————————————
+    # 11. Short / Low-effort Messages (refined)
+    # ————————————————————————
+    if len(t) < 12:
+        score += 1
+        reasons.append("Message extremely short (scam-like).")
+
+    return {"score": score, "reasons": reasons}
