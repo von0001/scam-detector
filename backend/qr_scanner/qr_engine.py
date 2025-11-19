@@ -12,23 +12,39 @@ from .tamper_detect import analyze_tampering
 # ---------------------------------------------------------
 def decode_qr_opencv(img: np.ndarray) -> List[Dict[str, Any]]:
     detector = cv2.QRCodeDetector()
-    data, points, _ = detector.detectAndDecodeMulti(img)
 
     results = []
 
-    if points is None:
-        return results
+    # ---- Try Multi QR first ----
+    try:
+        data, points, _ = detector.detectAndDecodeMulti(img)
+    except:
+        data, points = None, None
 
-    for i, txt in enumerate(data):
-        if not txt:
-            continue
+    # If Multi works, use it
+    if points is not None and data:
+        for i, txt in enumerate(data):
+            if not txt:
+                continue
+            pts = points[i].astype(int).tolist()
+            results.append({
+                "data": txt.strip(),
+                "polygon": pts
+            })
+        if results:
+            return results
 
-        pts = points[i].astype(int).tolist()
-
-        results.append({
-            "data": txt.strip(),
-            "polygon": pts
-        })
+    # ---- FALLBACK: Single QR detection ----
+    try:
+        txt, pts, _ = detector.detectAndDecode(img)
+        if txt:
+            polygon = pts.astype(int).tolist() if pts is not None else []
+            results.append({
+                "data": txt.strip(),
+                "polygon": polygon
+            })
+    except:
+        pass
 
     return results
 
