@@ -95,6 +95,13 @@ async def qr(image: UploadFile = File(...)):
     record_event("qr_scan")
 
     img_bytes = await image.read()
+
+    # ---- FIX: handle base64 uploads ----
+    # If frontend sends a base64 data URL instead of raw bytes:
+    if img_bytes.startswith(b"data:image"):
+        header, b64data = img_bytes.split(b",", 1)
+        img_bytes = base64.b64decode(b64data)
+
     return process_qr_image(img_bytes)
 
 
