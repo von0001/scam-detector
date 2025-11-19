@@ -8,16 +8,20 @@ itsdangerous
 tldextract
 requests
 regex
+numpy
 
 # QR Scanner
 opencv-python-headless
 pyzbar
 
-# NLP: Sentence Embeddings (fast + light)
-sentence-transformers
+# CPU PyTorch only (IMPORTANT)
+torch==2.2.1+cpu
+torchvision==0.17.1+cpu
+torchaudio==2.2.1+cpu
+--extra-index-url https://download.pytorch.org/whl/cpu
 
-# HuggingFace API Client (tiny)
+# NLP / Transformers
+transformers
 huggingface-hub
-
-# Utils
-numpy
+sentence-transformers
+scikit-learn
