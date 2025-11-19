@@ -11,7 +11,20 @@ import os
 from groq import Groq
 import json
 
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+# ❗ DO NOT INITIALIZE AT IMPORT TIME
+_groq_client = None
+
+
+def get_client():
+    """Load the Groq client lazily (Railway-safe)."""
+    global _groq_client
+    if _groq_client is None:
+        key = os.getenv("GROQ_API_KEY")
+        if not key:
+            raise RuntimeError("GROQ_API_KEY is not set on server.")
+        _groq_client = Groq(api_key=key)
+    return _groq_client
+
 
 SYSTEM_MSG = """
 You are an AI-human text classifier.
@@ -23,6 +36,7 @@ Return:
 Respond ONLY in JSON.
 """
 
+
 def analyze_actor(text: str) -> Dict[str, Any]:
     text = text.strip()
     if not text:
@@ -32,6 +46,8 @@ def analyze_actor(text: str) -> Dict[str, Any]:
             "ai_probability": 0,
             "signals": ["No text provided."],
         }
+
+    client = get_client()  # ← LOAD CLIENT HERE, AND ONLY HERE
 
     prompt = f"""
 Classify the following text:
