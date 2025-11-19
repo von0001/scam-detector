@@ -1,29 +1,29 @@
 # backend/main.py
 
+import os
+import base64
 from fastapi import FastAPI, UploadFile, File, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-from PIL import Image
-import io
-import pytesseract
 
 # Text & URL scanners
 from .text_scanner import analyze_text
 from .url_scanner import analyze_url
 
-# New Groq-powered modules
+# Groq-powered modules
+from groq import Groq
 from .ai_detector.classify_actor import analyze_actor
 from .manipulation.profiler import analyze_manipulation
 
-# QR scanner (OpenCV version)
+# QR scanner
 from .qr_scanner.qr_engine import process_qr_image
 
-# Analytics system
+# Analytics
 from backend.analytics.analytics import record_event, get_analytics
 
-# Auth system
+# Auth
 from backend.auth import verify_password, create_session, verify_session, COOKIE_NAME
 
 
@@ -58,17 +58,33 @@ async def admin_protect(request: Request, call_next):
 
 
 # ================================================================
-# OCR Endpoint
+# OCR (Groq Vision)
 # ================================================================
 @app.post("/ocr")
 async def ocr(image: UploadFile = File(...)):
     record_event("ocr")
 
     img_bytes = await image.read()
-    img = Image.open(io.BytesIO(img_bytes))
-    text = pytesseract.image_to_string(img)
 
-    return {"text": text.strip()}
+    # Groq OCR
+    client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+    b64 = base64.b64encode(img_bytes).decode()
+
+    response = client.chat.completions.create(
+        model="llava",
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    {"type": "input_text", "text": "Extract all text from this image."},
+                    {"type": "input_image", "image_url": f"data:image/jpeg;base64,{b64}"},
+                ],
+            }
+        ],
+    )
+
+    extracted_text = response.choices[0].message["content"]
+    return {"text": extracted_text.strip()}
 
 
 # ================================================================
@@ -79,9 +95,7 @@ async def qr(image: UploadFile = File(...)):
     record_event("qr_scan")
 
     img_bytes = await image.read()
-    result = process_qr_image(img_bytes)
-
-    return result
+    return process_qr_image(img_bytes)
 
 
 # ================================================================
@@ -93,7 +107,7 @@ class AnalyzeRequest(BaseModel):
 
 
 # ================================================================
-# Utility: Verdict builder
+# Verdict Builder
 # ================================================================
 def build_response(score: int, category: str, reasons, explanation: str):
     if score >= 30:
@@ -133,18 +147,14 @@ def analyze(req: AnalyzeRequest):
     if not content:
         return JSONResponse({"error": "content is empty"}, status_code=400)
 
-    # ----------------------------
-    # QR MODE IS FILE-ONLY
-    # ----------------------------
+    # QR mode requires file upload
     if mode == "qr":
         return JSONResponse(
             {"error": "QR mode requires uploading an image to /qr"},
             status_code=400
         )
 
-    # ----------------------------
-    # AI / HUMAN DETECTOR
-    # ----------------------------
+    # AI Detector
     if mode == "chat":
         raw = analyze_actor(content)
         score = raw.get("ai_probability", 0)
@@ -158,9 +168,7 @@ def analyze(req: AnalyzeRequest):
             "details": raw
         }
 
-    # ----------------------------
-    # EMOTIONAL MANIPULATION PROFILER
-    # ----------------------------
+    # Manipulation profiler
     if mode == "manipulation":
         raw = analyze_manipulation(content)
         score = raw.get("risk_score", 0)
@@ -174,49 +182,37 @@ def analyze(req: AnalyzeRequest):
             "details": raw
         }
 
-    # ----------------------------
-    # TEXT MODE
-    # ----------------------------
+    # Text mode
     if mode == "text" or (mode == "auto" and not content.startswith("http")):
         raw = analyze_text(content)
-        response = build_response(
+        return build_response(
             score=raw["score"],
             category="text",
             reasons=raw.get("reasons", []),
             explanation="Scam text analysis."
         )
 
-    # ----------------------------
-    # URL MODE
-    # ----------------------------
-    elif mode == "url" or content.startswith("http"):
+    # URL mode
+    if mode == "url" or content.startswith("http"):
         raw = analyze_url(content)
-        response = build_response(
+        return build_response(
             score=raw["score"],
             category="url",
             reasons=raw.get("reasons", []),
             explanation="URL risk analysis."
         )
 
-    else:
-        response = build_response(
-            score=0,
-            category="unknown",
-            reasons=[],
-            explanation="Unable to classify content."
-        )
-
-    # Analytics
-    try:
-        record_event("scam" if response["score"] else "safe")
-    except:
-        pass
-
-    return response
+    # Unknown fallback
+    return build_response(
+        score=0,
+        category="unknown",
+        reasons=[],
+        explanation="Unable to classify content."
+    )
 
 
 # ================================================================
-# Admin Login + Cookies
+# Admin Login
 # ================================================================
 class LoginRequest(BaseModel):
     password: str
@@ -259,7 +255,7 @@ def analytics_admin():
 
 
 # ================================================================
-# Frontend Routes
+# Frontend Pages
 # ================================================================
 @app.get("/")
 def serve_frontend():
