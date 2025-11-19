@@ -6,3 +6,5 @@ numpy
 opencv-python-headless
 groq
 tldextract
+itsdangerous
+python-multipart
