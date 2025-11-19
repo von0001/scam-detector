@@ -2,24 +2,13 @@
 
 """
 Computer-vision heuristics to detect visually tampered QR codes.
-
-We look for:
-- Hard rectangular boundaries with sharp contrast vs surrounding region
-- Edge-density spikes around the QR border (indicates sticker edges)
-- Blur / shadow mismatch between QR patch and background
-
-Outputs:
-- tamper_score: 0–100
-- flags: list of human-readable signals
 """
 
 from __future__ import annotations
-
-from typing import Dict, List, Tuple
+from typing import Dict, List, Any
 
 import cv2
 import numpy as np
-from typing import Any
 
 
 def _clip_rect(img: np.ndarray, rect: Dict[str, int], pad: int = 6) -> np.ndarray:
@@ -43,16 +32,8 @@ def _laplacian_blur(gray: np.ndarray) -> float:
 def analyze_single_qr_tamper(
     img_bgr: np.ndarray,
     rect: Dict[str, int],
-) -> Dict[str, object]:
-    """
-    Analyze a single QR bounding box for tampering.
+) -> Dict[str, Any]:
 
-    Returns:
-    {
-        "tamper_score": int (0–100),
-        "flags": [str, ...]
-    }
-    """
     flags: List[str] = []
     score = 0
 
@@ -65,17 +46,17 @@ def analyze_single_qr_tamper(
 
     gray = cv2.cvtColor(region, cv2.COLOR_BGR2GRAY)
 
-    # --- 1. Edge-density vs immediate surround -----------------
+    # 1. Edge density
     edges = cv2.Canny(gray, 80, 200)
     inner_density = np.count_nonzero(edges) / (edges.size + 1e-9)
 
-    # Build slightly larger context window
     context_rect = {
         "x": max(rect["x"] - 20, 0),
         "y": max(rect["y"] - 20, 0),
         "w": rect["w"] + 40,
         "h": rect["h"] + 40,
     }
+
     context = _clip_rect(img_bgr, context_rect, pad=0)
     context_gray = cv2.cvtColor(context, cv2.COLOR_BGR2GRAY)
     context_edges = cv2.Canny(context_gray, 80, 200)
@@ -83,32 +64,26 @@ def analyze_single_qr_tamper(
 
     if inner_density > context_density * 2.2:
         score += 15
-        flags.append("QR edge density much higher than surroundings (sticker edge pattern).")
+        flags.append("QR edge density much higher than surroundings.")
 
-    # --- 2. Contrast / brightness jump -------------------------
-    qr_mean = float(gray.mean())
-    ctx_mean = float(context_gray.mean())
-    delta_brightness = abs(qr_mean - ctx_mean)
-
+    # 2. Brightness difference
+    delta_brightness = abs(float(gray.mean()) - float(context_gray.mean()))
     if delta_brightness > 35:
         score += 15
-        flags.append("QR brightness/contrast sharply different from background (overlay suspicion).")
+        flags.append("QR brightness differs sharply from background.")
 
-    # --- 3. Blur mismatch (printed sticker on glossy surface) --
+    # 3. Blur mismatch
     qr_blur = _laplacian_blur(gray)
     ctx_blur = _laplacian_blur(context_gray)
 
     if ctx_blur < 20 and qr_blur > 45:
-        # Background soft, QR very sharp
         score += 10
-        flags.append("QR is much sharper than background (possible sticker).")
+        flags.append("QR is much sharper than background.")
     elif ctx_blur > 45 and qr_blur < 20:
-        # Background sharp, QR soft / smudged
         score += 8
-        flags.append("QR is blurrier than environment (low-quality sticker).")
+        flags.append("QR is blurrier than environment.")
 
-    # --- 4. Hard rectangular border line detection -------------
-    # Look for strong straight lines around region perimeter
+    # 4. Border detection
     lines = cv2.HoughLinesP(
         edges,
         rho=1,
@@ -119,17 +94,13 @@ def analyze_single_qr_tamper(
     )
     if lines is not None and len(lines) >= 4:
         score += 10
-        flags.append("Strong rectangular border detected around QR (sticker border).")
+        flags.append("Rectangular border detected around QR.")
 
-    # Clamp and map to 0–100
     score = int(max(0, min(score, 100)))
     return {"tamper_score": score, "flags": flags}
 
 
-def aggregate_tamper_scores(results: List[Dict[str, object]]) -> Dict[str, object]:
-    """
-    Compute an overall tampering verdict for all QR codes in an image.
-    """
+def aggregate_tamper_scores(results: List[Dict[str, Any]]) -> Dict[str, Any]:
     if not results:
         return {"overall_tamper_score": 0, "overall_verdict": "SAFE"}
 
@@ -140,7 +111,6 @@ def aggregate_tamper_scores(results: List[Dict[str, object]]) -> Dict[str, objec
         verdict = "HIGH"
     elif avg >= 30:
         verdict = "MEDIUM"
-    else:
         verdict = "LOW"
 
     return {
@@ -148,16 +118,11 @@ def aggregate_tamper_scores(results: List[Dict[str, object]]) -> Dict[str, objec
         "overall_verdict": verdict,
     }
 
-def analyze_tampering(img_bgr: np.ndarray, qrs: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """
-    Entry point used by qr_engine.py.
 
-    Runs tamper detection on every QR bounding box and aggregates results.
-    """
+def analyze_tampering(img_bgr: np.ndarray, qrs: List[Dict[str, Any]]) -> Dict[str, Any]:
     per_qr = []
 
     for qr in qrs:
-        # qr from OpenCV has "points", NOT rect. We convert points → rect box.
         pts = qr.get("points")
         if pts and len(pts) == 4:
             xs = [p[0] for p in pts]
@@ -176,7 +141,4 @@ def analyze_tampering(img_bgr: np.ndarray, qrs: List[Dict[str, Any]]) -> Dict[st
 
     summary = aggregate_tamper_scores(per_qr)
 
-    return {
-        "per_qr": per_qr,
-        "summary": summary
-    }
+    return {"per_qr": per_qr, "summary": summary}
