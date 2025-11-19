@@ -1,72 +1,55 @@
 # backend/manipulation/emotion_classifier.py
 
-"""
-Sentence-level emotion classification wrapper.
-
-Uses a HuggingFace transformer model. You can swap `MODEL_NAME`
-to any local / downloaded emotion model you prefer.
-"""
-
 from __future__ import annotations
-
 from typing import List, Dict, Any
+import os
+from groq import Groq
+import json
 
-from transformers import pipeline
+client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
-
-_MODEL_NAME = "j-hartmann/emotion-english-distilroberta-base"
-_emotion_pipe: pipeline | None = None
-
-
-def _get_emotion_pipe() -> pipeline:
-    global _emotion_pipe
-    if _emotion_pipe is None:
-        _emotion_pipe = pipeline(
-            "text-classification",
-            model=_MODEL_NAME,
-            return_all_scores=True,
-        )
-    return _emotion_pipe
-
+SYSTEM_MSG = """
+You are an emotion classifier.
+For each sentence, return:
+- top_label: one of [joy, sadness, anger, fear, disgust, neutral]
+- top_score: 0-1
+Respond ONLY in JSON.
+"""
 
 def classify_emotions(sentences: List[str]) -> List[Dict[str, Any]]:
-    """
-    Returns list of:
-    {
-      "sentence": str,
-      "top_label": str,
-      "top_score": float,
-      "all_scores": [{"label": str, "score": float}, ...]
-    }
-    """
     if not sentences:
         return []
 
-    pipe = _get_emotion_pipe()
-    outputs = pipe(sentences)
+    joined = "\n".join(f"- {s}" for s in sentences)
 
-    results: List[Dict[str, Any]] = []
-    for sent, scores in zip(sentences, outputs):
-        if not scores:
-            results.append(
-                {
-                    "sentence": sent,
-                    "top_label": "neutral",
-                    "top_score": 0.0,
-                    "all_scores": [],
-                }
-            )
-            continue
+    prompt = f"""
+Analyze the emotion of each of the following sentences:
 
-        best = max(scores, key=lambda x: x["score"])
-        results.append(
+{joined}
+
+Return JSON list like:
+[
+  {{"sentence": "...", "top_label": "...", "top_score": 0.52}},
+  ...
+]
+"""
+
+    response = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[
+            {"role": "system", "content": SYSTEM_MSG},
+            {"role": "user", "content": prompt}
+        ],
+        temperature=0.1
+    )
+
+    try:
+        return json.loads(response.choices[0].message.content)
+    except Exception:
+        return [
             {
-                "sentence": sent,
-                "top_label": best["label"],
-                "top_score": float(best["score"]),
-                "all_scores": [
-                    {"label": s["label"], "score": float(s["score"])} for s in scores
-                ],
-            }
-        )
-    return results
+                "sentence": s,
+                "top_label": "neutral",
+                "top_score": 0.0
+            } for s in sentences
+        ]

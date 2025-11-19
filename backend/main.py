@@ -9,26 +9,30 @@ from PIL import Image
 import io
 import pytesseract
 
-# Existing Scanners
+# Text & URL scanners
 from .text_scanner import analyze_text
 from .url_scanner import analyze_url
 
-# NEW MODULES
-from .qr_scanner.qr_engine import process_qr_image
+# New Groq-powered modules
 from .ai_detector.classify_actor import analyze_actor
 from .manipulation.profiler import analyze_manipulation
 
-# Analytics
+# QR scanner (OpenCV version)
+from .qr_scanner.qr_engine import process_qr_image
+
+# Analytics system
 from backend.analytics.analytics import record_event, get_analytics
 
-# Auth
+# Auth system
 from backend.auth import verify_password, create_session, verify_session, COOKIE_NAME
+
 
 app = FastAPI()
 
-# ---------------------------------------------------------
+
+# ================================================================
 # CORS
-# ---------------------------------------------------------
+# ================================================================
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -37,9 +41,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ---------------------------------------------------------
-# Admin Protection
-# ---------------------------------------------------------
+
+# ================================================================
+# Admin Authentication Middleware
+# ================================================================
 @app.middleware("http")
 async def admin_protect(request: Request, call_next):
     path = request.url.path
@@ -51,9 +56,10 @@ async def admin_protect(request: Request, call_next):
 
     return await call_next(request)
 
-# ---------------------------------------------------------
+
+# ================================================================
 # OCR Endpoint
-# ---------------------------------------------------------
+# ================================================================
 @app.post("/ocr")
 async def ocr(image: UploadFile = File(...)):
     record_event("ocr")
@@ -64,9 +70,10 @@ async def ocr(image: UploadFile = File(...)):
 
     return {"text": text.strip()}
 
-# ---------------------------------------------------------
-# NEW — QR Scanner Endpoint
-# ---------------------------------------------------------
+
+# ================================================================
+# QR Scanner Endpoint
+# ================================================================
 @app.post("/qr")
 async def qr(image: UploadFile = File(...)):
     record_event("qr_scan")
@@ -76,16 +83,18 @@ async def qr(image: UploadFile = File(...)):
 
     return result
 
-# ---------------------------------------------------------
+
+# ================================================================
 # Analyze Request Model
-# ---------------------------------------------------------
+# ================================================================
 class AnalyzeRequest(BaseModel):
     content: str
     mode: str = "auto"
 
-# ---------------------------------------------------------
-# Utility: Normalize
-# ---------------------------------------------------------
+
+# ================================================================
+# Utility: Verdict builder
+# ================================================================
 def build_response(score: int, category: str, reasons, explanation: str):
     if score >= 30:
         verdict = "DANGEROUS"
@@ -102,16 +111,18 @@ def build_response(score: int, category: str, reasons, explanation: str):
         "reasons": reasons or []
     }
 
-# ---------------------------------------------------------
-# HEALTH
-# ---------------------------------------------------------
+
+# ================================================================
+# Health Check
+# ================================================================
 @app.get("/health")
 def health():
     return {"status": "ok"}
 
-# ---------------------------------------------------------
-# ANALYZE ENDPOINT — NOW SUPPORTS ALL MODES
-# ---------------------------------------------------------
+
+# ================================================================
+# Universal Analyzer Endpoint
+# ================================================================
 @app.post("/analyze")
 def analyze(req: AnalyzeRequest):
     record_event("request")
@@ -122,69 +133,69 @@ def analyze(req: AnalyzeRequest):
     if not content:
         return JSONResponse({"error": "content is empty"}, status_code=400)
 
-    # --------------------------
-    # QR Mode SHOULD NOT USE THIS ENDPOINT
-    # --------------------------
+    # ----------------------------
+    # QR MODE IS FILE-ONLY
+    # ----------------------------
     if mode == "qr":
         return JSONResponse(
-            {"error": "QR mode requires file upload to /qr"},
+            {"error": "QR mode requires uploading an image to /qr"},
             status_code=400
         )
 
-    # --------------------------
-    # CHAT / AI DETECTOR
-    # --------------------------
+    # ----------------------------
+    # AI / HUMAN DETECTOR
+    # ----------------------------
     if mode == "chat":
         raw = analyze_actor(content)
-
         score = raw.get("ai_probability", 0)
+
         return {
             "category": "chat",
             "score": score,
             "verdict": "DANGEROUS" if score >= 70 else "SUSPICIOUS" if score >= 30 else "SAFE",
             "explanation": f"Actor type detected: {raw.get('actor_type')}",
             "reasons": raw.get("signals", []),
-            "details": raw,   # ← full AI/human analysis
+            "details": raw
         }
 
-    # --------------------------
-    # MANIPULATION PROFILER
-    # --------------------------
+    # ----------------------------
+    # EMOTIONAL MANIPULATION PROFILER
+    # ----------------------------
     if mode == "manipulation":
         raw = analyze_manipulation(content)
-
         score = raw.get("risk_score", 0)
+
         return {
             "category": "manipulation",
             "score": score,
             "verdict": "DANGEROUS" if score >= 70 else "SUSPICIOUS" if score >= 30 else "SAFE",
             "explanation": "Emotional manipulation patterns detected.",
             "reasons": raw.get("primary_tactics", []),
-            "details": raw,   # ← full manipulation report
+            "details": raw
         }
 
-    # --------------------------
+    # ----------------------------
     # TEXT MODE
-    # --------------------------
+    # ----------------------------
     if mode == "text" or (mode == "auto" and not content.startswith("http")):
         raw = analyze_text(content)
         response = build_response(
             score=raw["score"],
             category="text",
             reasons=raw.get("reasons", []),
-            explanation="Analysis based on scam text patterns."
+            explanation="Scam text analysis."
         )
 
-    # --------------------------
+    # ----------------------------
     # URL MODE
-    # --------------------------
+    # ----------------------------
     elif mode == "url" or content.startswith("http"):
         raw = analyze_url(content)
         response = build_response(
             score=raw["score"],
             category="url",
             reasons=raw.get("reasons", []),
-            explanation="Analysis based on URL risk."
+            explanation="URL risk analysis."
         )
 
     else:
@@ -197,24 +208,24 @@ def analyze(req: AnalyzeRequest):
 
     # Analytics
     try:
-        if response["score"] == 0:
-            record_event("safe")
-        else:
-            record_event("scam")
+        record_event("scam" if response["score"] else "safe")
     except:
         pass
 
     return response
 
-# ---------------------------------------------------------
-# Admin Login
-# ---------------------------------------------------------
+
+# ================================================================
+# Admin Login + Cookies
+# ================================================================
 class LoginRequest(BaseModel):
     password: str
+
 
 @app.get("/admin/login")
 def login_page():
     return FileResponse("backend/static/login.html")
+
 
 @app.post("/admin/login")
 def login(req: LoginRequest):
@@ -233,37 +244,44 @@ def login(req: LoginRequest):
 
     return JSONResponse({"error": "Invalid password"}, status_code=401)
 
-# ---------------------------------------------------------
+
+# ================================================================
 # Admin Dashboard
-# ---------------------------------------------------------
+# ================================================================
 @app.get("/admin")
 def serve_admin():
     return FileResponse("backend/static/admin.html")
+
 
 @app.get("/admin/analytics")
 def analytics_admin():
     return get_analytics()
 
-# ---------------------------------------------------------
-# Frontend pages
-# ---------------------------------------------------------
+
+# ================================================================
+# Frontend Routes
+# ================================================================
 @app.get("/")
 def serve_frontend():
     return FileResponse("backend/static/index.html")
+
 
 @app.get("/privacy")
 def serve_privacy():
     return FileResponse("backend/static/privacy.html")
 
+
 @app.get("/terms")
 def serve_terms():
     return FileResponse("backend/static/terms.html")
+
 
 @app.get("/support")
 def serve_support():
     return FileResponse("backend/static/support.html")
 
-# ---------------------------------------------------------
-# Static Files
-# ---------------------------------------------------------
+
+# ================================================================
+# Static Folder
+# ================================================================
 app.mount("/static", StaticFiles(directory="backend/static"), name="static")

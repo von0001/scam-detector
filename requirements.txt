@@ -1,20 +1,7 @@
 fastapi
-uvicorn[standard]
-python-multipart
+uvicorn
+pydantic
 pillow
-pytesseract
-bcrypt
-itsdangerous
-tldextract
-requests
-regex
 numpy
-
-# QR Scanner (pure OpenCV)
 opencv-python-headless
-
-# NLP / Transformers / Embeddings
-transformers
-huggingface-hub
-sentence-transformers
-scikit-learn
+groq
