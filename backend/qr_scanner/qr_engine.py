@@ -1,152 +1,157 @@
-# backend/qr_scanner/qr_engine.py
-
-"""
-High-level engine for the QR Trap Scanner.
-
-Entry point:
-    analyze_qr_image(image_bytes: bytes) -> dict
-
-This will be called from your FastAPI endpoint (/qr).
-"""
-
-from __future__ import annotations
-
-from typing import Dict, Any, List
-
-import numpy as np
 import cv2
+import numpy as np
+from typing import Dict, List, Any
 
-from .qr_utils import (
-    load_image_bytes,
-    pil_to_cv2,
-    decode_qr_codes,
-    classify_qr_data,
-    analyze_qr_payload,
-)
-from .tamper_detect import analyze_single_qr_tamper, aggregate_tamper_scores
+from ..url_scanner import analyze_url
+from ..text_scanner import analyze_text
+from .tamper_detect import analyze_tampering
 
 
-def analyze_qr_image(image_bytes: bytes) -> Dict[str, Any]:
-    """
-    Full pipeline:
-    - Load bytes
-    - Detect one or multiple QR codes
-    - Decode + classify payloads
-    - Analyze content risk (URL/text engines)
-    - Analyze visual tampering
-    - Return structured JSON
+# ---------------------------------------------------------
+# QR DECODING (OpenCV ONLY)
+# ---------------------------------------------------------
+def decode_qr_opencv(img: np.ndarray) -> List[Dict[str, Any]]:
+    detector = cv2.QRCodeDetector()
+    data, points, _ = detector.detectAndDecodeMulti(img)
 
-    Returns shape:
+    results = []
 
-    {
-      "qr_found": bool,
-      "qr_count": int,
-      "items": [
-        {
-          "index": 0,
-          "raw_data": "...",
-          "qr_type": "url",
-          "normalized": "...",
-          "content_score": int,
-          "content_verdict": "...",
-          "content_reasons": [...],
-          "tamper_score": int,
-          "tamper_flags": [...],
-        },
-        ...
-      ],
-      "overall": {
-        "max_content_score": int,
-        "max_tamper_score": int,
-        "combined_risk_score": int,  # 0–100
-        "combined_verdict": "SAFE" | "SUSPICIOUS" | "DANGEROUS",
-      },
-      "tampering_summary": {
-        "overall_tamper_score": int,
-        "overall_verdict": "LOW" | "MEDIUM" | "HIGH",
-      },
-    }
-    """
-    pil_img = load_image_bytes(image_bytes)
-    img_bgr = pil_to_cv2(pil_img)
+    if points is None:
+        return results
 
-    qr_objs = decode_qr_codes(img_bgr)
+    for i, txt in enumerate(data):
+        if not txt:
+            continue
 
-    if not qr_objs:
-        return {
-            "qr_found": False,
-            "qr_count": 0,
-            "items": [],
-            "overall": {
-                "max_content_score": 0,
-                "max_tamper_score": 0,
-                "combined_risk_score": 0,
-                "combined_verdict": "SAFE",
-            },
-            "tampering_summary": {
-                "overall_tamper_score": 0,
-                "overall_verdict": "SAFE",
-            },
-        }
+        pts = points[i].astype(int).tolist()
 
-    items: List[Dict[str, Any]] = []
-    tamper_results: List[Dict[str, Any]] = []
+        results.append({
+            "data": txt.strip(),
+            "polygon": pts
+        })
 
-    for idx, obj in enumerate(qr_objs):
-        raw_data = obj["data"]
-        rect = obj["rect"]
+    return results
 
-        classified = classify_qr_data(raw_data)
-        content_analysis = analyze_qr_payload(classified)
 
-        tamper = analyze_single_qr_tamper(img_bgr, rect)
-        tamper_results.append(tamper)
+# ---------------------------------------------------------
+# CLASSIFICATION
+# ---------------------------------------------------------
+def classify_qr_content(raw: str) -> Dict[str, Any]:
+    raw_lower = raw.lower()
 
-        item = {
-            "index": idx,
-            "raw_data": raw_data,
-            "qr_type": content_analysis["qr_type"],
-            "normalized": content_analysis["normalized"],
-            "content_score": content_analysis["content_score"],
-            "content_verdict": content_analysis["content_verdict"],
-            "content_reasons": content_analysis["content_reasons"],
-            "content_category": content_analysis["content_category"],
-            "tamper_score": tamper["tamper_score"],
-            "tamper_flags": tamper["flags"],
-            "rect": rect,
-        }
-        items.append(item)
+    # ---- URL ----
+    if raw_lower.startswith(("http://", "https://", "www.")):
+        url = raw if raw.startswith("http") else "https://" + raw
+        result = analyze_url(url)
 
-    # Overall stats
-    max_content_score = max(i["content_score"] for i in items)
-    max_tamper_score = max(i["tamper_score"] for i in items)
-
-    # Combine risk: 70% content risk, 30% tamper risk
-    combined = int(
-        min(
-            100,
-            (max_content_score / 40.0) * 70 + (max_tamper_score / 100.0) * 30,
+        score = int(result.get("score", 0))
+        verdict = (
+            "DANGEROUS" if score >= 30 else
+            "SUSPICIOUS" if score >= 10 else
+            "SAFE"
         )
+
+        return {
+            "qr_type": "url",
+            "content": url,
+            "score": score,
+            "verdict": verdict,
+            "reasons": result.get("reasons", []),
+            "analysis_type": "url",
+        }
+
+    # ---- WiFi ----
+    if raw_lower.startswith("wifi:"):
+        return {
+            "qr_type": "wifi",
+            "content": raw,
+            "score": 20,
+            "verdict": "SUSPICIOUS",
+            "reasons": ["WiFi QR codes may attempt network hijacking."],
+            "analysis_type": "text",
+        }
+
+    # ---- Crypto ----
+    if any(raw_lower.startswith(prefix) for prefix in ["btc:", "eth:", "usdt:", "xmr:"]):
+        return {
+            "qr_type": "crypto",
+            "content": raw,
+            "score": 40,
+            "verdict": "DANGEROUS",
+            "reasons": ["Crypto payment QR common in scams."],
+            "analysis_type": "text",
+        }
+
+    # ---- Payment ----
+    if "$" in raw or "cash.app" in raw_lower or "paypal.me" in raw_lower:
+        return {
+            "qr_type": "payment",
+            "content": raw,
+            "score": 30,
+            "verdict": "SUSPICIOUS",
+            "reasons": ["Payment QR code could be fraudulent."],
+            "analysis_type": "text",
+        }
+
+    # ---- vCard ----
+    if raw_lower.startswith("begin:vcard"):
+        return {
+            "qr_type": "vcard",
+            "content": raw,
+            "score": 10,
+            "verdict": "SAFE",
+            "reasons": ["vCard contact QR detected."],
+            "analysis_type": "text",
+        }
+
+    # ---- Fallback = text ----
+    result = analyze_text(raw)
+    score = int(result.get("score", 0))
+    verdict = (
+        "DANGEROUS" if score >= 30 else
+        "SUSPICIOUS" if score >= 10 else
+        "SAFE"
     )
 
-    if combined >= 70:
-        combined_verdict = "DANGEROUS"
-    elif combined >= 30:
-        combined_verdict = "SUSPICIOUS"
-    else:
-        combined_verdict = "SAFE"
+    return {
+        "qr_type": "text",
+        "content": raw,
+        "score": score,
+        "verdict": verdict,
+        "reasons": result.get("reasons", []),
+        "analysis_type": "text",
+    }
 
-    tampering_summary = aggregate_tamper_scores(tamper_results)
+
+# ---------------------------------------------------------
+# MAIN ENTRY — EXACT NAME REQUIRED BY main.py
+# ---------------------------------------------------------
+def process_qr_image(image_bytes: bytes) -> Dict[str, Any]:
+    np_arr = np.frombuffer(image_bytes, np.uint8)
+    img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+
+    if img is None:
+        return {"qr_found": False, "error": "Could not decode image."}
+
+    # 1. Decode
+    qrs = decode_qr_opencv(img)
+    if not qrs:
+        return {"qr_found": False, "count": 0, "items": []}
+
+    # 2. Tampering analysis
+    tamper = analyze_tampering(img, qrs)
+
+    # 3. Analyze results
+    items = []
+    for qr in qrs:
+        raw = qr["data"]
+        classified = classify_qr_content(raw)
+        classified["polygon"] = qr["polygon"]
+        items.append(classified)
 
     return {
         "qr_found": True,
-        "qr_count": len(items),
+        "count": len(items),
         "items": items,
-        "overall": {
-            "max_content_score": max_content_score,
-            "max_tamper_score": max_tamper_score,
-            "combined_risk_score": combined,
-            "combined_verdict": combined_verdict,
-        },
-        "tampering_summary": tampering_summary,
+        "tampering": tamper,
     }
