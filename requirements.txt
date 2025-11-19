@@ -10,17 +10,10 @@ requests
 regex
 numpy
 
-# QR Scanner
+# QR Scanner (pure OpenCV)
 opencv-python-headless
-pyzbar
 
-# CPU PyTorch only (IMPORTANT)
-torch==2.2.1+cpu
-torchvision==0.17.1+cpu
-torchaudio==2.2.1+cpu
---extra-index-url https://download.pytorch.org/whl/cpu
-
-# NLP / Transformers
+# NLP / Transformers / Embeddings
 transformers
 huggingface-hub
 sentence-transformers

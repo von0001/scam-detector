@@ -19,6 +19,7 @@ from typing import Dict, List, Tuple
 
 import cv2
 import numpy as np
+from typing import Any
 
 
 def _clip_rect(img: np.ndarray, rect: Dict[str, int], pad: int = 6) -> np.ndarray:
@@ -145,4 +146,37 @@ def aggregate_tamper_scores(results: List[Dict[str, object]]) -> Dict[str, objec
     return {
         "overall_tamper_score": int(avg),
         "overall_verdict": verdict,
+    }
+
+def analyze_tampering(img_bgr: np.ndarray, qrs: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Entry point used by qr_engine.py.
+
+    Runs tamper detection on every QR bounding box and aggregates results.
+    """
+    per_qr = []
+
+    for qr in qrs:
+        # qr from OpenCV has "points", NOT rect. We convert points → rect box.
+        pts = qr.get("points")
+        if pts and len(pts) == 4:
+            xs = [p[0] for p in pts]
+            ys = [p[1] for p in pts]
+
+            rect = {
+                "x": min(xs),
+                "y": min(ys),
+                "w": max(xs) - min(xs),
+                "h": max(ys) - min(ys),
+            }
+
+            per_qr.append(analyze_single_qr_tamper(img_bgr, rect))
+        else:
+            per_qr.append({"tamper_score": 0, "flags": ["No bounding box detected."]})
+
+    summary = aggregate_tamper_scores(per_qr)
+
+    return {
+        "per_qr": per_qr,
+        "summary": summary
     }

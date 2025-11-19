@@ -14,7 +14,7 @@ from .text_scanner import analyze_text
 from .url_scanner import analyze_url
 
 # NEW MODULES
-from .qr_scanner.qr_engine import analyze_qr_image
+from .qr_scanner.qr_engine import process_qr_image
 from .ai_detector.classify_actor import analyze_actor
 from .manipulation.profiler import analyze_manipulation
 
@@ -72,7 +72,7 @@ async def qr(image: UploadFile = File(...)):
     record_event("qr_scan")
 
     img_bytes = await image.read()
-    result = analyze_qr_image(img_bytes)
+    result = process_qr_image(img_bytes)
 
     return result
 
