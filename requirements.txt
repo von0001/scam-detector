@@ -6,3 +6,21 @@ pytesseract
 bcrypt
 itsdangerous
 tldextract
+requests
+
+# QR SCANNER
+opencv-python-headless
+pyzbar
+
+# AI / NLP
+sentence-transformers
+torch
+
+# Manipulation Profiler (emotion models)
+transformers
+huggingface-hub
+
+# Utils
+numpy
+scikit-learn
+regex

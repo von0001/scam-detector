@@ -2,9 +2,9 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Scam Link & Text Detector</title>
+  <title>ScamDetector — Link, Text, Chat, QR Scanner</title>
 
-  <!-- ⭐ Google Analytics (G-5FRMK9NJM2) ⭐ -->
+  <!-- ⭐ Google Analytics ⭐ -->
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-5FRMK9NJM2"></script>
   <script>
     window.dataLayer = window.dataLayer || [];
@@ -20,64 +20,77 @@
 <body>
   <div class="app">
     <header class="app-header">
-      <h1>Scam Link & Text Detector</h1>
-      <p class="subtitle">Paste a link or message below. Get instant results.</p>
+      <h1>ScamDetector</h1>
+      <p class="subtitle">Instant scam detection for links, texts, chats, and QR codes.</p>
     </header>
 
     <main class="app-main">
       <section class="input-section">
-        <label for="content-input" class="input-label">Enter your text or URL:</label>
+
+        <label class="input-label" for="content-input">Enter text, URL, or message:</label>
 
         <textarea
           id="content-input"
-          placeholder="Paste a link or message here..."
+          placeholder="Paste a link, message, or chat transcript here..."
           rows="6"
         ></textarea>
 
+        <!-- ================= MODES ================= -->
         <div class="mode-row">
           <span>Mode:</span>
           <label><input type="radio" name="mode" value="auto" checked /> Auto</label>
           <label><input type="radio" name="mode" value="url" /> URL</label>
           <label><input type="radio" name="mode" value="text" /> Text</label>
+          <label><input type="radio" name="mode" value="chat" /> Chat AI Detector</label>
+          <label><input type="radio" name="mode" value="manipulation" /> Manipulation</label>
+          <label><input type="radio" name="mode" value="qr" /> QR Scan</label>
         </div>
 
         <button id="analyze-btn">Analyze</button>
 
-        <!-- ⭐ OCR UPLOAD (Button + Drag & Drop) ⭐ -->
+        <!-- ================= OCR + QR UPLOAD ================= -->
         <div class="ocr-container">
-          <button id="ocr-btn" class="ocr-button">📷 Upload Screenshot (OCR)</button>
+          <button id="ocr-btn" class="ocr-button">📷 Upload Screenshot</button>
           <input type="file" id="ocr-file" accept="image/*" hidden />
 
           <div id="drop-zone" class="drop-zone">
-            Drag & Drop Screenshot Here
+            Drag & Drop Screenshot or QR Image Here
           </div>
         </div>
 
         <p id="status" class="status"></p>
       </section>
 
+      <!-- ================= RESULT ================= -->
       <section class="result-section" id="result-section" hidden>
         <h2>Result</h2>
+
         <div id="verdict-badge" class="verdict-badge">–</div>
         <p id="explanation" class="explanation"></p>
+
         <ul id="reasons-list" class="reasons-list"></ul>
+
+        <!-- ADVANCED RESULT JSON -->
+        <pre id="details-json" hidden></pre>
       </section>
+
     </main>
 
     <footer class="app-footer">
-      <p>MVP v1 — For safety awareness only. Not financial advice.</p>
+      <p>Built for awareness & safety. Not financial advice.</p>
 
-    <div class="legal-links" style="margin-top: 10px; opacity: 0.8;">
-      <a href="/terms" style="color:#ccc; margin-right: 12px;">Terms</a>
-      <a href="/privacy" style="color:#ccc;">Privacy</a>
+      <div class="legal-links">
+        <a href="/terms">Terms</a>
+        <a href="/privacy">Privacy</a>
+      </div>
+    </footer>
   </div>
-</footer>
 
-
-  <!-- Load Tesseract globally -->
+  <!-- OCR -->
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 
-  <!-- Script should load LAST -->
+  <!-- APP SCRIPT -->
   <script src="/static/script.js"></script>
+
 </body>
 </html>

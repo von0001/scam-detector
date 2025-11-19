@@ -1,4 +1,5 @@
-// If your backend is hosted somewhere else later, change this:
+// SCRIPT.JS — FULL UPDATED VERSION
+
 const API_BASE_URL = "https://scamdetectorapp.com";
 
 const contentInput = document.getElementById("content-input");
@@ -9,6 +10,7 @@ const resultSection = document.getElementById("result-section");
 const verdictBadge = document.getElementById("verdict-badge");
 const explanationEl = document.getElementById("explanation");
 const reasonsList = document.getElementById("reasons-list");
+const detailsPre = document.getElementById("details-json"); // ADD THIS IN HTML
 
 const ocrBtn = document.getElementById("ocr-btn");
 const fileInput = document.getElementById("ocr-file");
@@ -27,11 +29,7 @@ function getSelectedMode() {
 // SET VERDICT COLOR
 // ----------------------
 function setVerdictStyle(verdict) {
-  verdictBadge.classList.remove(
-    "verdict-safe",
-    "verdict-suspicious",
-    "verdict-dangerous"
-  );
+  verdictBadge.classList.remove("verdict-safe", "verdict-suspicious", "verdict-dangerous");
 
   if (verdict === "SAFE") verdictBadge.classList.add("verdict-safe");
   else if (verdict === "SUSPICIOUS") verdictBadge.classList.add("verdict-suspicious");
@@ -39,14 +37,14 @@ function setVerdictStyle(verdict) {
 }
 
 // ----------------------
-// RUN ANALYSIS
+// RUN /analyze
 // ----------------------
 async function analyzeContent() {
   const content = contentInput.value.trim();
   const mode = getSelectedMode();
 
-  if (!content) {
-    statusEl.textContent = "Please enter something first.";
+  if (!content && mode !== "qr") {
+    statusEl.textContent = "Enter text or select QR mode.";
     return;
   }
 
@@ -62,124 +60,149 @@ async function analyzeContent() {
       body: JSON.stringify({ content, mode }),
     });
 
+    const result = await response.json();
     if (!response.ok) {
-      const data = await response.json().catch(() => ({}));
-      statusEl.textContent = data.detail || "Error occurred.";
+      statusEl.textContent = result.error || "Error.";
       return;
     }
 
-    const result = await response.json();
-
     verdictBadge.textContent = `Score: ${result.score}`;
-    setVerdictStyle(result.score === 0 ? "SAFE" : "SUSPICIOUS");
-
-    explanationEl.textContent =
-      result.score === 0 ? "No scam detected." : "Potential scam indicators detected.";
+    setVerdictStyle(result.verdict);
+    explanationEl.textContent = result.explanation;
 
     reasonsList.innerHTML = "";
-    result.reasons.forEach((reason) => {
+    (result.reasons || []).forEach((r) => {
       const li = document.createElement("li");
-      li.textContent = reason;
+      li.textContent = r;
       reasonsList.appendChild(li);
     });
+
+    // SHOW FULL RAW JSON DETAILS
+    if (result.details) {
+      detailsPre.textContent = JSON.stringify(result.details, null, 2);
+      detailsPre.hidden = false;
+    } else {
+      detailsPre.hidden = true;
+    }
 
     resultSection.hidden = false;
     statusEl.textContent = "";
   } catch (err) {
     console.error(err);
-    statusEl.textContent = "Network error (is backend running?).";
+    statusEl.textContent = "Network error.";
   } finally {
     analyzeBtn.disabled = false;
   }
 }
 
-// -------------------------------------------------------------------
-// OCR (Tesseract.js) — Upload + Drag/Drop + Paste
-// -------------------------------------------------------------------
-async function runOCR(imageFile) {
-  statusEl.textContent = "Reading screenshot…";
-  statusEl.classList.add("loading");
+// ----------------------
+// QR MODE — /qr ENDPOINT
+// ----------------------
+async function analyzeQR(file) {
+  statusEl.textContent = "Scanning QR…";
+  analyzeBtn.disabled = true;
+
+  const form = new FormData();
+  form.append("image", file);
 
   try {
-    const worker = await Tesseract.createWorker();
+    const response = await fetch(`${API_BASE_URL}/qr`, {
+      method: "POST",
+      body: form,
+    });
 
+    const result = await response.json();
+
+    verdictBadge.textContent = `QR: ${result.overall.combined_risk_score}`;
+    setVerdictStyle(result.overall.combined_verdict);
+
+    explanationEl.textContent = `Detected ${result.qr_count} QR code(s).`;
+
+    reasonsList.innerHTML = "";
+    (result.items || []).forEach((item) => {
+      const li = document.createElement("li");
+      li.textContent = `${item.qr_type.toUpperCase()} → ${item.content_verdict}: ${item.raw_data}`;
+      reasonsList.appendChild(li);
+    });
+
+    detailsPre.textContent = JSON.stringify(result, null, 2);
+    detailsPre.hidden = false;
+
+    resultSection.hidden = false;
+    statusEl.textContent = "";
+  } catch (err) {
+    console.error(err);
+    statusEl.textContent = "Failed to analyze QR.";
+  } finally {
+    analyzeBtn.disabled = false;
+  }
+}
+
+// ----------------------
+// OCR
+// ----------------------
+async function runOCR(imageFile) {
+  statusEl.textContent = "Reading screenshot…";
+  try {
+    const worker = await Tesseract.createWorker();
     await worker.load();
     await worker.loadLanguage("eng");
     await worker.initialize("eng");
 
     const { data } = await worker.recognize(imageFile);
-
     await worker.terminate();
 
     const extractedText = data.text.trim();
-
     if (!extractedText) {
-      statusEl.textContent = "No readable text found.";
-      statusEl.classList.remove("loading");
+      statusEl.textContent = "No text found.";
       return;
     }
 
     contentInput.value = extractedText;
     statusEl.textContent = "Text extracted — analyzing…";
-    statusEl.classList.remove("loading");
-
     analyzeContent();
   } catch (err) {
-    console.error(err);
-    statusEl.textContent = "Failed to read image.";
-    statusEl.classList.remove("loading");
+    statusEl.textContent = "OCR failed.";
   }
 }
 
-// Upload button
+// Upload
 ocrBtn.addEventListener("click", () => fileInput.click());
 
-// File upload selection
 fileInput.addEventListener("change", () => {
-  if (fileInput.files.length) {
-    runOCR(fileInput.files[0]);
-  }
+  const mode = getSelectedMode();
+  const file = fileInput.files[0];
+  if (!file) return;
+
+  if (mode === "qr") analyzeQR(file);
+  else runOCR(file);
 });
 
-// ------- Drag & Drop -------
+// Drag & Drop
 dropZone.addEventListener("dragover", (e) => {
   e.preventDefault();
   dropZone.classList.add("dragover");
 });
-
-dropZone.addEventListener("dragleave", () => {
-  dropZone.classList.remove("dragover");
-});
-
+dropZone.addEventListener("dragleave", () => dropZone.classList.remove("dragover"));
 dropZone.addEventListener("drop", (e) => {
   e.preventDefault();
   dropZone.classList.remove("dragover");
-
   const file = e.dataTransfer.files[0];
-  if (file) runOCR(file);
+  if (!file) return;
+  const mode = getSelectedMode();
+  if (mode === "qr") analyzeQR(file);
+  else runOCR(file);
 });
 
-// ------- Paste screenshot (Ctrl+V) -------
-document.addEventListener("paste", (e) => {
-  for (const item of e.clipboardData.items) {
-    if (item.type.startsWith("image/")) {
-      const file = item.getAsFile();
-      runOCR(file);
-      return;
-    }
-  }
-});
-
-// Button click
+// Submit
 analyzeBtn.addEventListener("click", (e) => {
   e.preventDefault();
   analyzeContent();
 });
 
-// Ctrl+Enter or Cmd+Enter submits
+// Ctrl+Enter
 contentInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-    e.preventDefault();
     analyzeContent();
   }
 });
