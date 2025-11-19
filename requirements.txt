@@ -7,21 +7,17 @@ bcrypt
 itsdangerous
 tldextract
 requests
+regex
 
-# QR SCANNER
+# QR Scanner
 opencv-python-headless
 pyzbar
 
-# AI / NLP
+# NLP: Sentence Embeddings (fast + light)
 sentence-transformers
-torch==2.2.2+cpu
---extra-index-url https://download.pytorch.org/whl/cpu
 
-# Manipulation Profiler (emotion models)
-transformers
+# HuggingFace API Client (tiny)
 huggingface-hub
 
 # Utils
 numpy
-scikit-learn
-regex
