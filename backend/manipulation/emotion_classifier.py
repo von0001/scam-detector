@@ -3,10 +3,25 @@
 from __future__ import annotations
 from typing import List, Dict, Any
 import os
-from groq import Groq
 import json
+from groq import Groq
 
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+
+# ==========================================================
+# Lazy Groq client loader (SAFE FOR RAILWAY)
+# ==========================================================
+_groq_client = None
+
+def get_groq():
+    """Initialize Groq client ONLY when needed (not at import)."""
+    global _groq_client
+    if _groq_client is None:
+        key = os.getenv("GROQ_API_KEY")
+        if not key:
+            raise RuntimeError("GROQ_API_KEY is not set.")
+        _groq_client = Groq(api_key=key)
+    return _groq_client
+
 
 SYSTEM_MSG = """
 You are an emotion classifier.
@@ -16,9 +31,15 @@ For each sentence, return:
 Respond ONLY in JSON.
 """
 
+
+# ==========================================================
+# Main Emotion Classifier
+# ==========================================================
 def classify_emotions(sentences: List[str]) -> List[Dict[str, Any]]:
     if not sentences:
         return []
+
+    client = get_groq()  # SAFE
 
     joined = "\n".join(f"- {s}" for s in sentences)
 
@@ -46,10 +67,12 @@ Return JSON list like:
     try:
         return json.loads(response.choices[0].message.content)
     except Exception:
+        # fallback: neutral for each
         return [
             {
                 "sentence": s,
                 "top_label": "neutral",
                 "top_score": 0.0
-            } for s in sentences
+            } 
+            for s in sentences
         ]
