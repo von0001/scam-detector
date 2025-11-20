@@ -1,4 +1,4 @@
-# url_scanner_v2.py — Fully Upgraded Engine (Von Edition)
+# url_scanner_v2.py — Fully Upgraded Engine (Von Edition + Enhanced)
 
 import re
 import math
@@ -6,11 +6,10 @@ import tldextract
 from urllib.parse import urlparse
 from typing import Dict, List
 
-# ——————————————————————————————————————————
-# 1. DOMAIN TRUST SYSTEM (NEW)
-# ——————————————————————————————————————————
+# ---------------------------------------------------------
+# TRUST LISTS
+# ---------------------------------------------------------
 
-# Hard-trusted roots (NEVER treated as scams unless extreme evidence)
 HARD_TRUSTED_DOMAINS = {
     "google.com", "youtube.com", "gmail.com", "gstatic.com",
     "microsoft.com", "live.com", "outlook.com", "office.com", "sharepoint.com",
@@ -20,7 +19,6 @@ HARD_TRUSTED_DOMAINS = {
     "linkedin.com"
 }
 
-# Soft-trusted domains (allowed to contain randomness, tokens, IDs)
 SOFT_TRUSTED_DOMAINS = {
     "safelinks.protection.outlook.com",
     "amazonaws.com",
@@ -32,26 +30,24 @@ SOFT_TRUSTED_DOMAINS = {
     "firebaseapp.com"
 }
 
-# HIGH-RISK SHORTENER DOMAINS (your ONLY blind spot)
 URL_SHORTENERS = {
     "t.co", "bit.ly", "tinyurl.com", "goo.gl", "cutt.ly",
     "buff.ly", "is.gd", "v.gd", "ow.ly", "shorturl.at"
 }
 
-# TLDs commonly abused
 SUSPICIOUS_TLDS = {
     "xyz", "top", "club", "link", "click", "info", "work",
-    "gq", "tk", "ml", "cf", "ga", "ru", "cn", "rest", "monster", "zip"
+    "gq", "tk", "ml", "cf", "ga", "ru", "cn", "rest", "monster", "zip",
+    "biz", "ws"
 }
 
-# Suspicious keywords
 SUSPICIOUS_KEYWORDS = {
     "login", "verify", "reset", "unlock", "update",
     "secure", "security", "confirm", "account",
-    "support", "recover", "validation", "auth"
+    "support", "recover", "validation", "auth",
+    "password", "credentials", "signin"
 }
 
-# Brand roots
 BRAND_KEYWORDS = {
     "paypal": {"paypal.com"},
     "google": {"google.com"},
@@ -64,9 +60,9 @@ BRAND_KEYWORDS = {
     "boa": {"bankofamerica.com"},
 }
 
-# ——————————————————————————————————————————
-# HELPER FUNCTIONS
-# ——————————————————————————————————————————
+# ---------------------------------------------------------
+# HELPERS
+# ---------------------------------------------------------
 
 def _is_ip_address(host: str) -> bool:
     if re.fullmatch(r"(?:\d{1,3}\.){3}\d{1,3}", host):
@@ -83,9 +79,9 @@ def extract_root_domain(url: str) -> str:
     ext = tldextract.extract(url)
     return f"{ext.domain}.{ext.suffix}".lower()
 
-# ——————————————————————————————————————————
-# MAIN URL ANALYSIS ENGINE (V2)
-# ——————————————————————————————————————————
+# ---------------------------------------------------------
+# MAIN ENGINE
+# ---------------------------------------------------------
 
 def analyze_url(raw_url: str) -> Dict[str, object]:
     reasons: List[str] = []
@@ -93,7 +89,7 @@ def analyze_url(raw_url: str) -> Dict[str, object]:
 
     url = raw_url.strip()
 
-    # Missing scheme check
+    # Scheme
     if not re.match(r"^[a-zA-Z][a-zA-Z0-9+\-.]*://", url):
         url = "http://" + url
         reasons.append("URL missing scheme. Assuming http://")
@@ -108,119 +104,84 @@ def analyze_url(raw_url: str) -> Dict[str, object]:
 
     host_lower = host.lower()
 
-    # ————————————————————————
-    # 1. Hard-trusted domains → ignore MOST red flags
-    # ————————————————————————
+    # Trusted domains
     if root_domain in HARD_TRUSTED_DOMAINS:
-        # Mild checks only, never heavy penalties
         path_entropy = _entropy(parsed.path + parsed.query)
         if path_entropy > 4.5:
             score += 1
             reasons.append("Contains randomness (normal for trusted service).")
         return {"score": score, "reasons": reasons}
 
-    # ————————————————————————
-    # 2. URL Shorteners (fixed your t.co weakness)
-    # ————————————————————————
+    # URL shorteners
     if root_domain in URL_SHORTENERS:
-        score += 4
+        score += 5
         reasons.append("URL shortener used (high phishing risk).")
 
-    # ————————————————————————
-    # 3. HTTPS check
-    # ————————————————————————
+    # HTTPS
     if parsed.scheme != "https":
-        score += 2
+        score += 3
         reasons.append("Not using HTTPS (unsafe).")
 
-    # ————————————————————————
-    # 4. Soft-trusted domains (AWS, GCS, Azure)
-    # ————————————————————————
+    # Soft trusted (AWS, GCS)
     if root_domain in SOFT_TRUSTED_DOMAINS:
-        # Allow randomness, but still check for extreme sketchiness
-        path_entropy = _entropy(parsed.path + parsed.query)
-        if path_entropy > 5.2:
+        ent = _entropy(parsed.path + parsed.query)
+        if ent > 5.2:
             score += 1
             reasons.append("Contains high randomness (normal for cloud).")
         return {"score": score, "reasons": reasons}
 
-    # ————————————————————————
-    # 5. IP address usage
-    # ————————————————————————
+    # IP address
     if _is_ip_address(host_lower):
-        score += 4
-        reasons.append("Uses raw IP (high phishing indicator).")
+        score += 6
+        reasons.append("Uses raw IP address (phishing indicator).")
 
-    # ————————————————————————
-    # 6. Suspicious TLD
-    # ————————————————————————
+    # Suspicious TLD
     tld = root_domain.split(".")[-1]
     if tld in SUSPICIOUS_TLDS:
-        score += 3
-        reasons.append(f"Suspicious TLD '.{tld}' used frequently in scams.")
+        score += 8
+        reasons.append(f"Suspicious TLD '.{tld}' frequently used in scams.")
 
-    # ————————————————————————
-    # 7. Subdomain overload
-    # ————————————————————————
+    # Subdomain abuse
     subparts = host_lower.split(".")[:-2]
-    if len(subparts) >= 3:  # (Made less sensitive)
-        score += 2
-        reasons.append("Unusually deep subdomain chain.")
+    if len(subparts) >= 3:
+        score += 6
+        reasons.append("Deep subdomain chain often used in phishing.")
 
-    # ————————————————————————
-    # 8. Excessive hyphens
-    # ————————————————————————
-    if host_lower.count("-") >= 3:  # Also less sensitive
-        score += 2
-        reasons.append("Domain contains many hyphens (phishing pattern).")
+    # Hyphen overload
+    if host_lower.count("-") >= 3:
+        score += 5
+        reasons.append("Excessive hyphens mimic legit domains.")
 
-    # ————————————————————————
-    # 9. Entropy detection (Smarter now)
-    #    Allows enterprise randomness without over-penalizing
-    # ————————————————————————
-    combined_path = parsed.path + parsed.query
-    if combined_path:
-        ent = _entropy(combined_path)
-        # Dynamic entropy threshold based on length
-        if len(combined_path) > 80 and ent > 4.5:
-            score += 2
-            reasons.append("High entropy in long URL segment.")
+    # Entropy
+    combined = parsed.path + parsed.query
+    if combined:
+        ent = _entropy(combined)
+        if len(combined) > 80 and ent > 4.5:
+            score += 3
+            reasons.append("High-entropy long URL segment.")
         elif ent > 5.0:
             score += 1
             reasons.append("Some randomness detected.")
 
-    # ————————————————————————
-    # 10. Suspicious keywords (weight lowered)
-    # ————————————————————————
-    lower_path = combined_path.lower()
+    # Sensitive keywords
+    lower_path = combined.lower()
     for kw in SUSPICIOUS_KEYWORDS:
-        if kw in lower_path and root_domain not in HARD_TRUSTED_DOMAINS:
-            score += 2  # reduced from +3
-            reasons.append(f"Contains sensitive keyword: '{kw}'.")
+        if kw in lower_path:
+            score += 6
+            reasons.append(f"Phishing keyword detected: '{kw}'.")
             break
 
-    # ————————————————————————
-    # 11. Brand impersonation detection (SMARTER)
-    # ————————————————————————
+    # Brand impersonation
     for brand, legit_domains in BRAND_KEYWORDS.items():
-        legit_domains = {d.lower() for d in legit_domains}
-
-        # If brand appears anywhere
         if brand in host_lower:
-            if root_domain in legit_domains:
-                # OK
-                pass
-            else:
-                # ONLY penalize heavy if domain is REALLY off
-                score += 4
-                reasons.append(f"Domain appears to impersonate brand '{brand}'.")
+            if root_domain not in legit_domains:
+                score += 10
+                reasons.append(f"Domain impersonates brand '{brand}'.")
             break
 
-    # ————————————————————————
-    # 12. Very long URL (light penalty)
-    # ————————————————————————
+    # Long URL
     if len(url) > 150:
-        score += 1
-        reasons.append("URL is unusually long.")
+        score += 2
+        reasons.append("URL unusually long.")
 
     return {"score": score, "reasons": reasons}

@@ -1,4 +1,4 @@
-// SCRIPT.JS — FULL UPDATED VERSION
+// SCRIPT.JS — FULL PATCHED VERSION (QR FIXED)
 
 const API_BASE_URL = "https://scamdetectorapp.com";
 
@@ -10,35 +10,28 @@ const resultSection = document.getElementById("result-section");
 const verdictBadge = document.getElementById("verdict-badge");
 const explanationEl = document.getElementById("explanation");
 const reasonsList = document.getElementById("reasons-list");
-const detailsPre = document.getElementById("details-json"); // ADD THIS IN HTML
+const detailsPre = document.getElementById("details-json");
 
 const ocrBtn = document.getElementById("ocr-btn");
 const fileInput = document.getElementById("ocr-file");
 const dropZone = document.getElementById("drop-zone");
 
-// ----------------------
-// GET SELECTED MODE
-// ----------------------
+// MODE
 function getSelectedMode() {
   const radios = document.querySelectorAll('input[name="mode"]');
   for (const r of radios) if (r.checked) return r.value;
   return "auto";
 }
 
-// ----------------------
-// SET VERDICT COLOR
-// ----------------------
+// Verdict color
 function setVerdictStyle(verdict) {
   verdictBadge.classList.remove("verdict-safe", "verdict-suspicious", "verdict-dangerous");
-
   if (verdict === "SAFE") verdictBadge.classList.add("verdict-safe");
   else if (verdict === "SUSPICIOUS") verdictBadge.classList.add("verdict-suspicious");
   else if (verdict === "DANGEROUS") verdictBadge.classList.add("verdict-dangerous");
 }
 
-// ----------------------
-// RUN /analyze
-// ----------------------
+// MAIN ANALYZE
 async function analyzeContent() {
   const content = contentInput.value.trim();
   const mode = getSelectedMode();
@@ -54,9 +47,7 @@ async function analyzeContent() {
   try {
     const response = await fetch(`${API_BASE_URL}/analyze`, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ content, mode }),
     });
 
@@ -77,27 +68,21 @@ async function analyzeContent() {
       reasonsList.appendChild(li);
     });
 
-    // SHOW FULL RAW JSON DETAILS
     if (result.details) {
       detailsPre.textContent = JSON.stringify(result.details, null, 2);
       detailsPre.hidden = false;
-    } else {
-      detailsPre.hidden = true;
-    }
+    } else detailsPre.hidden = true;
 
     resultSection.hidden = false;
     statusEl.textContent = "";
   } catch (err) {
-    console.error(err);
     statusEl.textContent = "Network error.";
   } finally {
     analyzeBtn.disabled = false;
   }
 }
 
-// ----------------------
-// QR MODE — /qr ENDPOINT
-// ----------------------
+// QR SCAN
 async function analyzeQR(file) {
   statusEl.textContent = "Scanning QR…";
   analyzeBtn.disabled = true;
@@ -106,41 +91,36 @@ async function analyzeQR(file) {
   form.append("image", file);
 
   try {
-    const response = await fetch(`${API_BASE_URL}/qr`, {
-      method: "POST",
-      body: form,
-    });
-
+    const response = await fetch(`${API_BASE_URL}/qr`, { method: "POST", body: form });
     const result = await response.json();
 
     verdictBadge.textContent = `QR: ${result.overall.combined_risk_score}`;
     setVerdictStyle(result.overall.combined_verdict);
 
-    explanationEl.textContent = `Detected ${result.qr_count} QR code(s).`;
+    // FIXED: result.count
+    explanationEl.textContent = `Detected ${result.count} QR code(s).`;
 
     reasonsList.innerHTML = "";
     (result.items || []).forEach((item) => {
       const li = document.createElement("li");
-      li.textContent = `${item.qr_type.toUpperCase()} → ${item.content_verdict}: ${item.raw_data}`;
+
+      // FIXED: use item.verdict + item.content
+      li.textContent = `${item.qr_type.toUpperCase()} → ${item.verdict}: ${item.content}`;
       reasonsList.appendChild(li);
     });
 
     detailsPre.textContent = JSON.stringify(result, null, 2);
     detailsPre.hidden = false;
-
     resultSection.hidden = false;
     statusEl.textContent = "";
   } catch (err) {
-    console.error(err);
     statusEl.textContent = "Failed to analyze QR.";
   } finally {
     analyzeBtn.disabled = false;
   }
 }
 
-// ----------------------
-// OCR
-// ----------------------
+// OCR (unchanged)
 async function runOCR(imageFile) {
   statusEl.textContent = "Reading screenshot…";
   try {
@@ -166,19 +146,18 @@ async function runOCR(imageFile) {
   }
 }
 
-// Upload
+// Upload select
 ocrBtn.addEventListener("click", () => fileInput.click());
 
 fileInput.addEventListener("change", () => {
-  const mode = getSelectedMode();
   const file = fileInput.files[0];
   if (!file) return;
-
+  const mode = getSelectedMode();
   if (mode === "qr") analyzeQR(file);
   else runOCR(file);
 });
 
-// Drag & Drop
+// Drag & drop
 dropZone.addEventListener("dragover", (e) => {
   e.preventDefault();
   dropZone.classList.add("dragover");
@@ -200,9 +179,7 @@ analyzeBtn.addEventListener("click", (e) => {
   analyzeContent();
 });
 
-// Ctrl+Enter
+// Ctrl+Enter submit
 contentInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-    analyzeContent();
-  }
+  if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) analyzeContent();
 });
