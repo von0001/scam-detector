@@ -1,9 +1,3 @@
-# backend/qr_scanner/tamper_detect.py
-
-"""
-Computer-vision heuristics to detect visually tampered QR codes.
-"""
-
 from __future__ import annotations
 from typing import Dict, List, Any
 
@@ -29,16 +23,9 @@ def _laplacian_blur(gray: np.ndarray) -> float:
     return float(cv2.Laplacian(gray, cv2.CV_64F).var())
 
 
-def analyze_single_qr_tamper(
-    img_bgr: np.ndarray,
-    rect: Dict[str, int],
-) -> Dict[str, Any]:
-
+def analyze_single_qr_tamper(img_bgr: np.ndarray, rect: Dict[str, int]) -> Dict[str, Any]:
     flags: List[str] = []
     score = 0
-
-    if img_bgr.size == 0:
-        return {"tamper_score": 0, "flags": ["Invalid image for tamper detection."]}
 
     region = _clip_rect(img_bgr, rect, pad=8)
     if region.size == 0:
@@ -46,7 +33,7 @@ def analyze_single_qr_tamper(
 
     gray = cv2.cvtColor(region, cv2.COLOR_BGR2GRAY)
 
-    # 1. Edge density
+    # Edge density comparison
     edges = cv2.Canny(gray, 80, 200)
     inner_density = np.count_nonzero(edges) / (edges.size + 1e-9)
 
@@ -57,7 +44,7 @@ def analyze_single_qr_tamper(
         "h": rect["h"] + 40,
     }
 
-    context = _clip_rect(img_bgr, context_rect, pad=0)
+    context = _clip_rect(img_bgr, context_rect)
     context_gray = cv2.cvtColor(context, cv2.COLOR_BGR2GRAY)
     context_edges = cv2.Canny(context_gray, 80, 200)
     context_density = np.count_nonzero(context_edges) / (context_edges.size + 1e-9)
@@ -66,13 +53,13 @@ def analyze_single_qr_tamper(
         score += 15
         flags.append("QR edge density much higher than surroundings.")
 
-    # 2. Brightness difference
+    # Brightness
     delta_brightness = abs(float(gray.mean()) - float(context_gray.mean()))
     if delta_brightness > 35:
         score += 15
         flags.append("QR brightness differs sharply from background.")
 
-    # 3. Blur mismatch
+    # Blur mismatch
     qr_blur = _laplacian_blur(gray)
     ctx_blur = _laplacian_blur(context_gray)
 
@@ -81,9 +68,9 @@ def analyze_single_qr_tamper(
         flags.append("QR is much sharper than background.")
     elif ctx_blur > 45 and qr_blur < 20:
         score += 8
-        flags.append("QR is blurrier than environment.")
+        flags.append("QR is much blurrier than background.")
 
-    # 4. Border detection
+    # Border detection
     lines = cv2.HoughLinesP(
         edges,
         rho=1,
@@ -111,6 +98,7 @@ def aggregate_tamper_scores(results: List[Dict[str, Any]]) -> Dict[str, Any]:
         verdict = "HIGH"
     elif avg >= 30:
         verdict = "MEDIUM"
+    else:
         verdict = "LOW"
 
     return {
