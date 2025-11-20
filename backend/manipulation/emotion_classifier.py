@@ -6,7 +6,6 @@ import os
 import json
 from groq import Groq
 
-
 # ==========================================================
 # Lazy Groq client loader (SAFE FOR RAILWAY)
 # ==========================================================
@@ -23,12 +22,21 @@ def get_groq():
     return _groq_client
 
 
+# ==========================================================
+# System Prompt for Emotion Classification
+# ==========================================================
 SYSTEM_MSG = """
 You are an emotion classifier.
-For each sentence, return:
-- top_label: one of [joy, sadness, anger, fear, disgust, neutral]
-- top_score: 0-1
-Respond ONLY in JSON.
+For each sentence, return ONLY a JSON list.
+
+Each item:
+{
+  "sentence": "...",
+  "top_label": "joy|sadness|anger|fear|disgust|neutral",
+  "top_score": 0-1 float
+}
+
+Be strict, deterministic, and consistent.
 """
 
 
@@ -36,43 +44,50 @@ Respond ONLY in JSON.
 # Main Emotion Classifier
 # ==========================================================
 def classify_emotions(sentences: List[str]) -> List[Dict[str, Any]]:
+    """
+    Calls Groq LLM to classify emotion per sentence.
+    Falls back to neutral if anything goes wrong.
+    """
     if not sentences:
         return []
 
-    client = get_groq()  # SAFE
+    client = get_groq()
 
     joined = "\n".join(f"- {s}" for s in sentences)
 
-    prompt = f"""
-Analyze the emotion of each of the following sentences:
+    user_prompt = f"""
+Analyze the emotion of each of the following sentences.
+Respond ONLY with a JSON list.
 
 {joined}
-
-Return JSON list like:
-[
-  {{"sentence": "...", "top_label": "...", "top_score": 0.52}},
-  ...
-]
 """
 
-    response = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        messages=[
-            {"role": "system", "content": SYSTEM_MSG},
-            {"role": "user", "content": prompt}
-        ],
-        temperature=0.1
-    )
-
     try:
-        return json.loads(response.choices[0].message.content)
-    except Exception:
-        # fallback: neutral for each
-        return [
-            {
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {"role": "system", "content": SYSTEM_MSG},
+                {"role": "user", "content": user_prompt},
+            ],
+            temperature=0.05
+        )
+
+        parsed = json.loads(response.choices[0].message.content)
+
+        # Safety: ensure ALL returned objects have the necessary keys
+        cleaned = []
+        for s, row in zip(sentences, parsed):
+            cleaned.append({
                 "sentence": s,
-                "top_label": "neutral",
-                "top_score": 0.0
-            } 
-            for s in sentences
-        ]
+                "top_label": row.get("top_label", "neutral"),
+                "top_score": float(row.get("top_score", 0.0)),
+            })
+        return cleaned
+
+    except Exception:
+        # Fallback
+        return [{
+            "sentence": s,
+            "top_label": "neutral",
+            "top_score": 0.0
+        } for s in sentences]

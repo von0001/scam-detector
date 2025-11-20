@@ -1,19 +1,11 @@
 # backend/manipulation/profiler.py
 
 """
-High-level Emotional Manipulation Profiler.
-
-Upgraded Von Edition:
-- Softer thresholds for scam profiles
-- More realistic romance scam detection
-- Better authority scam classification
-- Financial grooming triggers earlier
-- Reward scams trigger properly
-- Risk scoring slightly adjusted for new tactics
+Von Ultra Emotional Manipulation Profiler
+Massively upgraded — detects scams AND emotional abuse patterns.
 """
 
 from __future__ import annotations
-
 from typing import Dict, Any, List
 import re
 
@@ -21,65 +13,65 @@ from .emotion_classifier import classify_emotions
 from .tactic_detector import detect_tactics, sentence_risk_level
 
 
+# ==========================================================
+# Sentence splitter (robust, zero imports)
+# ==========================================================
 def _split_sentences(text: str) -> List[str]:
-    # Light-weight splitter (no NLTK dependency)
-    parts = re.split(r"(?<=[.!?])\s+", text.strip())
-    return [p.strip() for p in parts if p.strip()]
+    raw = re.split(r"(?<=[.!?])\s+", text.strip())
+    cleaned = []
+    for part in raw:
+        if part.strip():
+            cleaned.append(part.strip())
+    return cleaned
 
 
-# ===================================================================
-# 🔥 1. IMPROVED RISK SCORING — softer + smarter
-# ===================================================================
+# ==========================================================
+# RISK SCORING (ULTRA MODE)
+# ==========================================================
 def _estimate_global_risk(sentence_rows: List[Dict[str, Any]]) -> int:
-    """
-    Combine tactics + emotions into a 0–100 risk number.
-    NEW: coercion boosts risk heavier.
-    """
-
     score = 0
+
     for row in sentence_rows:
         tactics = row["tactics"]
         color = row["risk_color"]
         emotion = row["emotion"]["top_label"].lower()
 
-        # Color weighting
+        # Color weight
         if color == "red":
-            score += 14    # increased from 12
+            score += 14
         elif color == "yellow":
-            score += 8     # increased from 7
-
-        # Emotion signal
-        if emotion in ("fear", "anger", "disgust"):
-            score += 6     # slightly increased
-
-        # Freshly added tactic weights
-        if "coercion" in tactics:
-            score += 12    # coercion is HIGH severity
-
-        if "secrecy" in tactics:
-            score += 6
-
-        if "financial_grooming" in tactics:
             score += 8
 
-        if "love_bombing" in tactics:
-            score += 4
+        # Emotion weight
+        if emotion in ("fear", "anger", "disgust"):
+            score += 6
 
-        if "authority_impersonation" in tactics:
-            score += 10
+        # Tactical weights
+        weights = {
+            "coercion": 12,
+            "secrecy": 6,
+            "financial_grooming": 8,
+            "love_bombing": 4,
+            "authority_impersonation": 10,
+            "guilt_tripping": 10,
+            "gaslighting": 12,
+            "emotional_leverage": 8,
+            "conditional_affection": 7,
+            "passive_threats": 10,
+            "boundary_disrespect": 10,
+        }
+
+        for t in tactics:
+            if t in weights:
+                score += weights[t]
 
     return max(0, min(100, score))
 
 
-# ===================================================================
-# 🔥 2. IMPROVED SCAM PROFILE GUESSER — LOWERED THRESHOLDS
-# ===================================================================
+# ==========================================================
+# SCAM / MANIPULATION PROFILE GUESSER
+# ==========================================================
 def _guess_scam_profile(tactic_counts: Dict[str, int]) -> str:
-    """
-    NEW LOGIC:
-    Lower thresholds so real-world scams actually register.
-    """
-
     love = tactic_counts.get("love_bombing", 0)
     secrecy = tactic_counts.get("secrecy", 0)
     coercion = tactic_counts.get("coercion", 0)
@@ -89,15 +81,18 @@ def _guess_scam_profile(tactic_counts: Dict[str, int]) -> str:
     reward = tactic_counts.get("reward", 0)
     fear = tactic_counts.get("fear", 0)
 
-    # ---------------------------------------------------------
-    # ❤️ Romance Scam
-    # Old: needed love_bombing >= 2 AND secrecy
-    # New: ANY of these combos:
-    #  - love + money
-    #  - love + coercion
-    #  - secrecy + love
-    #  - coercion + money
-    # ---------------------------------------------------------
+    # Emotional abuse profile
+    if any([
+        tactic_counts.get("guilt_tripping", 0),
+        tactic_counts.get("gaslighting", 0),
+        tactic_counts.get("emotional_leverage", 0),
+        tactic_counts.get("conditional_affection", 0),
+        tactic_counts.get("passive_threats", 0),
+        tactic_counts.get("boundary_disrespect", 0),
+    ]):
+        return "emotional_manipulation"
+
+    # Romance scam
     if (
         (love >= 1 and money >= 1) or
         (love >= 1 and coercion >= 1) or
@@ -106,22 +101,11 @@ def _guess_scam_profile(tactic_counts: Dict[str, int]) -> str:
     ):
         return "romance_scam"
 
-    # ---------------------------------------------------------
-    # 💰 Investment / Money-Flip Scam
-    # Old: financial_grooming >= 2
-    # New: >= 1 is enough (real scammers only need ONE ask)
-    # ---------------------------------------------------------
+    # Investment scam
     if money >= 1:
         return "investment_or_money_flip"
 
-    # ---------------------------------------------------------
-    # 🛑 Authority / Government / IRS Scam
-    # Old: needed BOTH authority + urgency
-    # New: ANY of:
-    #  - authority + fear
-    #  - authority + urgency
-    #  - authority + coercion
-    # ---------------------------------------------------------
+    # Authority scams
     if (
         (authority and fear) or
         (authority and urgency) or
@@ -129,67 +113,72 @@ def _guess_scam_profile(tactic_counts: Dict[str, int]) -> str:
     ):
         return "account_or_authority_phishing"
 
-    # ---------------------------------------------------------
-    # 🎉 Lottery / Prize Scam
-    # Old: reward >= 2
-    # New: reward >= 1 + link or urgency or fear
-    # ---------------------------------------------------------
+    # Lottery
     if reward >= 1:
         return "lottery_or_prize"
 
     return "unclear"
 
 
-# ===================================================================
-# 🔥 3. SCENARIO SIMULATION (unchanged except minor edits)
-# ===================================================================
+# ==========================================================
+# SIMULATION ENGINE
+# ==========================================================
 def _simulate_next_steps(profile: str) -> List[str]:
+    if profile == "emotional_manipulation":
+        return [
+            "Manipulator escalates guilt tripping and emotional pressure.",
+            "Gaslighting increases to destabilize your confidence.",
+            "They ignore or violate boundaries to regain control.",
+            "Conditional affection becomes leverage to force compliance.",
+            "They apply subtle threats or emotional withdrawal cycles."
+        ]
+
     if profile == "romance_scam":
         return [
-            "Scammer continues emotional validation and affection.",
-            "They introduce a sudden financial crisis or emergency.",
-            "They ask for money, gift cards, crypto, or phone bill support.",
-            "If paid, they escalate requests or invent new crises.",
-            "They disappear once extraction slows down.",
+            "They increase affection to deepen emotional dependency.",
+            "They stage a sudden financial emergency.",
+            "They request money via gift cards, crypto, or urgent transfers.",
+            "If you send money, they escalate to larger requests.",
+            "They disappear after maximizing extraction."
         ]
 
     if profile == "investment_or_money_flip":
         return [
-            "Scammer pitches a 'guaranteed' investment or money flip.",
-            "Fake dashboards or profit screenshots appear.",
-            "They push you to deposit funds into a controlled wallet.",
-            "Withdrawals get blocked or require 'unlock fees'.",
-            "Eventually the scammer vanishes after maximizing extraction.",
+            "They introduce a 'guaranteed' flip opportunity.",
+            "They show fake profits or screenshots.",
+            "They push you to deposit into a controlled wallet.",
+            "Withdrawals get blocked behind new fees.",
+            "Scammer vanishes once extraction peaks."
         ]
 
     if profile == "account_or_authority_phishing":
         return [
-            "Scammer sends a 'verification' link or attachment.",
-            "They collect login info, card data, or identity documents.",
-            "Immediate login attempts or card charges may follow.",
-            "May contact again pretending to be fraud support.",
-            "Leads to identity theft or account takeover.",
+            "They send verification links or attachments.",
+            "They request credentials or identity documents.",
+            "Fraudulent login attempts happen immediately.",
+            "They may call back pretending to be fraud support.",
+            "Possible identity theft or account takeover."
         ]
 
     if profile == "lottery_or_prize":
         return [
-            "Scammer congratulates you on a prize you never entered.",
-            "They ask for delivery fees, taxes, or verification payments.",
-            "They delay payout with excuses and request more fees.",
-            "No prize is ever delivered.",
+            "They congratulate you for a prize you never entered.",
+            "They ask for delivery or verification fees.",
+            "They invent delays requiring more payments.",
+            "No prize is ever delivered."
         ]
 
     return [
-        "Scammer continues probing for personal and financial details.",
-        "They adapt their approach based on your emotional responses.",
-        "They transition into asking for money, credentials, or documents.",
-        "Once they extract enough value, they disappear.",
+        "Manipulator continues probing for vulnerability points.",
+        "They adapt based on your emotional responses.",
+        "They escalate into boundary violations or financial asks.",
+        "Interaction ends once they extract enough value."
     ]
 
 
-# ===================================================================
-# 🔥 4. MAIN ENTRY POINT — minimal but upgraded
-# ===================================================================
+# ==========================================================
+# MAIN ENTRY
+# ==========================================================
 def analyze_manipulation(text: str) -> Dict[str, Any]:
     cleaned = text.strip()
     if not cleaned:
@@ -205,40 +194,34 @@ def analyze_manipulation(text: str) -> Dict[str, Any]:
     sentences = _split_sentences(cleaned)
     emo_rows = classify_emotions(sentences)
 
-    rows: List[Dict[str, Any]] = []
-    tactic_counts: Dict[str, int] = {}
+    rows = []
+    tactic_counts = {}
 
     for emo in emo_rows:
         sent = emo["sentence"]
         tactics = detect_tactics(sent)
-
         for t in tactics:
             tactic_counts[t] = tactic_counts.get(t, 0) + 1
 
-        color = sentence_risk_level(tactics)
-
-        rows.append(
-            {
-                "sentence": sent,
-                "emotion": {
-                    "top_label": emo["top_label"],
-                    "top_score": emo["top_score"]
-                },
-                "tactics": tactics,
-                "risk_color": color,
-            }
-        )
+        rows.append({
+            "sentence": sent,
+            "emotion": {
+                "top_label": emo["top_label"],
+                "top_score": emo["top_score"],
+            },
+            "tactics": tactics,
+            "risk_color": sentence_risk_level(tactics),
+        })
 
     risk_score = _estimate_global_risk(rows)
 
     primary_tactics = sorted(
         tactic_counts.keys(),
-        key=lambda t: tactic_counts[t],
+        key=lambda x: tactic_counts[x],
         reverse=True
     )
 
     scam_profile = _guess_scam_profile(tactic_counts)
-
     scenario_simulation = _simulate_next_steps(scam_profile)
 
     return {
