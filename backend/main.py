@@ -154,6 +154,19 @@ def analyze(req: AnalyzeRequest):
         raw = analyze_manipulation(content)
         score = raw.get("risk_score", 0)
 
+        # Extract raw tactics (already strings)
+        tactics = raw.get("primary_tactics", [])
+
+        # Clean them with your cleaner (A1 rule)
+        cleaned = clean_reasons(tactics)
+
+        # If NO tactics found → show fallback reason
+        if score == 0 or not cleaned:
+            explanation = "No manipulation detected."
+            cleaned = ["No manipulation patterns detected."]
+        else:
+            explanation = "Emotional manipulation patterns detected."
+
         return {
             "category": "manipulation",
             "score": score,
@@ -161,9 +174,9 @@ def analyze(req: AnalyzeRequest):
                 "DANGEROUS" if score >= 70 else
                 "SUSPICIOUS" if score >= 30 else
                 "SAFE",
-            "explanation": "Emotional manipulation patterns detected.",
-            "reasons": clean_reasons(raw.get("primary_tactics", [])),
-            "details": raw,
+            "explanation": explanation,
+            "reasons": cleaned,
+            "details": raw
         }
 
     # Text analysis
