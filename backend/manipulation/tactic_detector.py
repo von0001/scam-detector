@@ -11,6 +11,7 @@ Tactics:
 - love_bombing / romance
 - reward / prize
 - financial_grooming
+- coercion / guilt / pressure  ← NEW (Von Edition)
 """
 
 from __future__ import annotations
@@ -19,7 +20,7 @@ from typing import List, Dict, Any
 import re
 
 # ==========================================================
-# UPGRADED TACTIC KEYWORDS (Von Edition)
+# UPGRADED TACTIC KEYWORDS (Von Ultra Edition)
 # ==========================================================
 
 TACTIC_KEYWORDS = {
@@ -46,6 +47,12 @@ TACTIC_KEYWORDS = {
         r"\bmy (?:child|daughter|son).*(hospital|sick|dying)\b",
         r"\bmy life depends on\b",
         r"\bdon't abandon me\b",
+        # NEW:
+        r"\bwarrant\b",
+        r"\barrest\b",
+        r"\blegal consequences\b",
+        r"\bwe will take action\b",
+        r"\bor else\b",
     ],
 
     "authority_impersonation": [
@@ -58,6 +65,13 @@ TACTIC_KEYWORDS = {
         r"\bfrom the government\b",
         r"\bstate department\b",
         r"\bfederal\b",
+        # NEW:
+        r"\bfbi\b",
+        r"\bssa\b",
+        r"\bsocial security\b",
+        r"\blaw enforcement\b",
+        r"\bofficer\b",
+        r"\bagent\b",
     ],
 
     "secrecy": [
@@ -68,6 +82,8 @@ TACTIC_KEYWORDS = {
         r"\bkeep this private\b",
         r"\bjust between you and me\b",
         r"\bbetween us only\b",
+        # NEW:
+        r"\bplease don't tell anyone\b",
     ],
 
     "love_bombing": [
@@ -75,9 +91,15 @@ TACTIC_KEYWORDS = {
         r"\bi can't stop thinking about you\b",
         r"\byou are the only one\b",
         r"\bwe were meant to be\b",
-        r"\bprove you love me\b",
-        r"\bif you loved me\b",
         r"\bmy soulmate\b",
+        # NEW:
+        r"\bbaby\b",
+        r"\bbabe\b",
+        r"\bi need you\b",
+        r"\bi miss you so much\b",
+        r"\bno one else understands me\b",
+        r"\bif you loved me\b",
+        r"\bprove you love me\b",
     ],
 
     "reward": [
@@ -105,6 +127,35 @@ TACTIC_KEYWORDS = {
         r"\b(zelle|cashapp|cash app|apple pay|paypal)\b",
         r"\bonboarding fee\b",
         r"\bprocessing fee\b",
+        # NEW:
+        r"\bcan you send me\b",
+        r"\bhelp me pay\b",
+        r"\bcover my (?:bill|rent|phone|medical)\b",
+        r"\bi just need\b",
+        r"\bsmall favor\b",
+    ],
+
+    # ======================================================
+    # NEW: Coercion / Guilt / Pressure (Von Ultra Upgrade)
+    # ======================================================
+    "coercion": [
+        r"\bif you don't\b",
+        r"\bif you do not\b",
+        r"\bi'll block you\b",
+        r"\bi will block you\b",
+        r"\bi'll leave\b",
+        r"\bi'll never speak to you\b",
+        r"\byou'll lose me\b",
+        r"\byou don't care about me\b",
+        r"\bi thought you cared\b",
+        r"\bi guess i mean nothing to you\b",
+        r"\bprove you care\b",
+        r"\bwhy won't you help me\b",
+        r"\bwhy aren't you helping\b",
+        r"\byou owe me\b",
+        r"\bdon't abandon me\b",
+        r"\bonly you can help me\b",
+        r"\byou promised\b",
     ],
 }
 
@@ -136,7 +187,8 @@ def sentence_risk_level(tactics: List[str]) -> str:
         "urgency",
         "fear",
         "authority_impersonation",
-        "financial_grooming"
+        "financial_grooming",
+        "coercion"            # ← NEW: coercion automatically RED
     )):
         return "red"
 

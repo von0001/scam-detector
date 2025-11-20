@@ -1,4 +1,4 @@
-# text_scanner_v2.py — Fully Upgraded (Von Edition + Output Patch)
+# text_scanner_v2.py — Fully Upgraded (Von Ultra Edition)
 
 import re
 from typing import Dict, List
@@ -8,28 +8,49 @@ from typing import Dict, List
 # ——————————————————————————————————————————
 
 HIGH_SEVERITY = [
+    # Account/login threats
     ("your account is locked", 6, "Claims your account is locked."),
     ("account suspended", 6, "Threatens account suspension."),
     ("account deactivated", 6, "Threatens account deactivation."),
     ("verify your identity", 5, "Requests identity verification."),
-    ("final notice", 5, "Threatening 'final notice'."),
     ("reset your password", 5, "Password reset threat."),
-    ("payment required", 5, "Demands payment."),
-    ("routing number", 5, "Requests routing number."),
-    ("wire transfer", 5, "Requests wire transfer."),
+    ("security alert", 5, "Fake security alert."),
+    ("legal action", 5, "Threat of legal action."),
+    ("warrant", 5, "Threat of warrant/arrest."),
+    ("arrest", 5, "Threat of arrest."),
+    ("your ssn has been suspended", 6, "Claims your Social Security number is suspended."),
+
+    # Direct money request (romance scam trigger)
+    ("can you send me", 6, "Direct money request."),
+    ("i just need", 5, "Manipulative money request."),
+    ("help me pay", 5, "Financial pressure."),
+    ("cover my", 5, "Financial emergency request."),
+    ("my phone bill", 5, "Suspicious financial request."),
+    ("my rent", 5, "Financial crisis trigger."),
+    ("emergency", 5, "Emergency pressure."),
+
+    # Job scam
+    ("onboarding fee", 6, "Job scam: asks for onboarding fee."),
+    ("training fee", 6, "Job scam: asks for training fee."),
+    ("application fee", 6, "Job scam: asks for application fee."),
+
+    # Payment/funds transfer
+    ("wire transfer", 6, "Requests wire transfer."),
+    ("routing number", 6, "Requests routing number."),
 ]
 
 MEDIUM_SEVERITY = [
     ("verify your account", 4, "Asks you to verify your account."),
     ("update your information", 3, "Requests personal info update."),
-    ("security alert", 3, "Fake security alert."),
-    ("unusual activity", 3, "Scare tactic: unusual activity."),
-    ("someone tried to", 3, "Suspicious activity claim."),
+    ("unusual activity", 3, "Claims unusual activity."),
+    ("someone tried to", 3, "Suspicious login attempt claim."),
     ("urgent", 3, "Uses urgency."),
     ("immediately", 3, "Immediate pressure."),
     ("last chance", 3, "Last chance pressure."),
     ("you have been selected", 4, "Prize-selection scam."),
-    ("claim your reward", 4, "Claims of reward/lottery."),
+    ("claim your reward", 4, "Reward/lottery scam."),
+    ("prize", 3, "Claims reward."),
+    ("congratulations", 3, "Prize/lottery scam."),
 ]
 
 LOW_SEVERITY = [
@@ -37,7 +58,7 @@ LOW_SEVERITY = [
     ("customer service", 2, "Generic customer service."),
     ("it department", 2, "Fake IT department."),
     ("technical support", 2, "Tech support impersonation."),
-    ("gift card", 2, "Gift card scam pattern."),
+    ("gift card", 2, "Gift card scam keyword."),
     ("shipping address", 2, "Shipment scam."),
     ("click here", 2, "Pushes you to click a link."),
     ("click the link", 2, "Pushes link interaction."),
@@ -49,6 +70,20 @@ SENSITIVE_INFO = [
     "password", "passcode", "pin", "ssn",
     "social security", "cvv", "verification code",
     "access code", "banking details", "card number",
+]
+
+# Romance/Manipulation indicators (not score-based — verbal cues)
+ROMANCE_INDICATORS = [
+    "baby", "babe", "my love", "my darling",
+    "i need you", "i miss you", "you mean everything to me",
+]
+
+# Threat/coercion indicators
+COERCION_PHRASES = [
+    "if you don't", "if you do not",
+    "i'll block you", "i will block you",
+    "you don't care about me", "i thought you cared",
+    "guess i mean nothing to you", "prove you care",
 ]
 
 EMOJI_REGEX = r"[\U0001F600-\U0001F64F\U0001F300-\U0001F5FF]"
@@ -79,7 +114,7 @@ def _detect_tone(text: str) -> int:
 
 
 # ——————————————————————————————————————————
-# 3. MAIN ANALYZER (WITH OUTPUT PATCH)
+# 3. MAIN ANALYZER (with ENHANCED scam detection)
 # ——————————————————————————————————————————
 
 def analyze_text(text: str) -> Dict[str, object]:
@@ -89,17 +124,19 @@ def analyze_text(text: str) -> Dict[str, object]:
     t = text.strip()
     lower = t.lower()
 
-    # — Phrase detection
+    # — HIGH severity patterns
     for phrase, weight, reason in HIGH_SEVERITY:
         if phrase in lower:
             score += weight
             reasons.append(reason)
 
+    # — MEDIUM severity patterns
     for phrase, weight, reason in MEDIUM_SEVERITY:
         if phrase in lower:
             score += weight
             reasons.append(reason)
 
+    # — LOW severity patterns
     for phrase, weight, reason in LOW_SEVERITY:
         if phrase in lower:
             score += weight
@@ -111,6 +148,18 @@ def analyze_text(text: str) -> Dict[str, object]:
             score += 4
             reasons.append(f"Requests sensitive info: '{w}'.")
             break
+
+    # — Direct coercion
+    for c in COERCION_PHRASES:
+        if c in lower:
+            score += 5
+            reasons.append("Coercive or guilt-driven pressure detected.")
+            break
+
+    # — Romance scam cues + money request combo
+    if any(r in lower for r in ROMANCE_INDICATORS) and ("$" in lower or "send" in lower):
+        score += 6
+        reasons.append("Romance-style emotional + money request pattern.")
 
     # — Links
     urls = re.findall(URL_REGEX, lower)
@@ -156,7 +205,7 @@ def analyze_text(text: str) -> Dict[str, object]:
     tone_score = _detect_tone(t)
     if tone_score > 0:
         score += tone_score
-        reasons.append("Manipulative tone detected.")
+        reasons.append("Manipulative or warning tone detected.")
 
     # — Short message
     if len(t) < 12:
@@ -164,7 +213,7 @@ def analyze_text(text: str) -> Dict[str, object]:
         reasons.append("Message extremely short (scam-like).")
 
     # ——————————————————————————
-    # FINAL PATCHED OUTPUT FORMAT
+    # FINAL OUTPUT
     # ——————————————————————————
 
     if score == 0:
@@ -175,7 +224,7 @@ def analyze_text(text: str) -> Dict[str, object]:
         explanation = "Some mild scam patterns detected."
     else:
         verdict = "DANGEROUS"
-        explanation = "Multiple scam signals detected."
+        explanation = "Multiple strong scam indicators detected."
 
     return {
         "score": score,
