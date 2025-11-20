@@ -68,10 +68,7 @@ async function analyzeContent() {
       reasonsList.appendChild(li);
     });
 
-    if (result.details) {
-      detailsPre.textContent = JSON.stringify(result.details, null, 2);
-      detailsPre.hidden = false;
-    } else detailsPre.hidden = true;
+    detailsPre.hidden = true;
 
     resultSection.hidden = false;
     statusEl.textContent = "";
@@ -109,8 +106,7 @@ async function analyzeQR(file) {
       reasonsList.appendChild(li);
     });
 
-    detailsPre.textContent = JSON.stringify(result, null, 2);
-    detailsPre.hidden = false;
+    detailsPre.hidden = true;
     resultSection.hidden = false;
     statusEl.textContent = "";
   } catch (err) {
