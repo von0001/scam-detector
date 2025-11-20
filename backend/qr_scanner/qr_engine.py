@@ -15,14 +15,14 @@ def decode_qr_opencv(img: np.ndarray) -> List[Dict[str, Any]]:
 
     results = []
 
-    # ---- Try Multi QR first ----
+    # ---- Try Multi QR (correct OpenCV unpacking) ----
     try:
-        data, points, _ = detector.detectAndDecodeMulti(img)
+        ret, data, points, _ = detector.detectAndDecodeMulti(img)
     except:
-        data, points = None, None
+        ret, data, points = False, None, None
 
-    # If Multi works, use it
-    if points is not None and data:
+# If Multi works, use it
+    if ret and data and points is not None:
         for i, txt in enumerate(data):
             if not txt:
                 continue
@@ -31,8 +31,8 @@ def decode_qr_opencv(img: np.ndarray) -> List[Dict[str, Any]]:
                 "data": txt.strip(),
                 "polygon": pts
             })
-        if results:
-            return results
+    if results:
+        return results
 
     # ---- FALLBACK: Single QR detection ----
     try:
