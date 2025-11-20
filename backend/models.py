@@ -3,9 +3,9 @@ from pydantic import BaseModel, Field
 
 class AnalyzeRequest(BaseModel):
     content: str = Field(..., min_length=1, description="Text or URL to analyze.")
-    mode: Literal["auto", "url", "text"] = Field(
+    mode: Literal["auto", "url", "text", "chat", "manipulation"] = Field(
         "auto",
-        description="Force 'url' or 'text', or let the backend auto-detect.",
+        description="Force mode manually or let backend auto-detect.",
     )
 
 class AnalyzeResponse(BaseModel):
