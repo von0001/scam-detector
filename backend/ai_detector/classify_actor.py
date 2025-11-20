@@ -10,6 +10,7 @@ from typing import Dict, Any
 import os
 from groq import Groq
 import json
+import re   # <-- allowed (already part of stdlib)
 
 # ❗ DO NOT INITIALIZE AT IMPORT TIME
 _groq_client = None
@@ -35,6 +36,15 @@ Return:
 - signals: specific reasons for classification
 Respond ONLY in JSON.
 """
+
+
+# 🔥 NEW — JSON extractor to fix "Model returned invalid format"
+def extract_json_block(text: str):
+    """Extract the FIRST JSON object from any LLM output."""
+    match = re.search(r"\{[\s\S]*\}", text)
+    if match:
+        return match.group(0)
+    return None
 
 
 def analyze_actor(text: str) -> Dict[str, Any]:
@@ -72,12 +82,22 @@ Return JSON with:
         temperature=0.2
     )
 
-    try:
-        return json.loads(response.choices[0].message.content)
-    except:
-        return {
-            "actor_type": "Unknown",
-            "confidence": 0.0,
-            "ai_probability": 0,
-            "signals": ["Model returned invalid format."]
-        }
+    # Raw model output
+    raw_output = response.choices[0].message.content
+
+    # 🔥 Extract JSON even when model replies with extra text
+    json_text = extract_json_block(raw_output)
+
+    if json_text:
+        try:
+            return json.loads(json_text)
+        except Exception:
+            pass
+
+    # ❗ FINAL FAIL-SAFE
+    return {
+        "actor_type": "Unknown",
+        "confidence": 0.0,
+        "ai_probability": 0,
+        "signals": ["Model returned invalid format."]
+    }
