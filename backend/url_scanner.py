@@ -1,10 +1,15 @@
-# url_scanner_v2.py — Fully Upgraded Engine (Von Edition + Enhanced)
+# ---------------------------------------------------------
+# URL Scanner v3 — Von Edition (Full Rewrite)
+# ---------------------------------------------------------
 
 import re
 import math
+import idna
 import tldextract
+import unicodedata
 from urllib.parse import urlparse
 from typing import Dict, List
+
 
 # ---------------------------------------------------------
 # TRUST LISTS
@@ -12,40 +17,30 @@ from typing import Dict, List
 
 HARD_TRUSTED_DOMAINS = {
     "google.com", "youtube.com", "gmail.com", "gstatic.com",
-    "microsoft.com", "live.com", "outlook.com", "office.com", "sharepoint.com",
-    "aws.amazon.com", "amazon.com", "apple.com", "icloud.com",
-    "slack.com", "zoom.us", "dropbox.com", "github.com",
-    "stripe.com", "box.com", "docusign.net", "adobesign.com",
-    "linkedin.com"
+    "microsoft.com", "live.com", "outlook.com", "office.com",
+    "amazon.com", "aws.amazon.com", "apple.com", "icloud.com",
+    "zoom.us", "slack.com", "github.com", "dropbox.com",
+    "stripe.com", "linkedin.com", "docusign.net"
 }
 
 SOFT_TRUSTED_DOMAINS = {
-    "safelinks.protection.outlook.com",
-    "amazonaws.com",
-    "azureedge.net",
-    "sharepoint.com",
-    "githubusercontent.com",
-    "googleusercontent.com",
-    "cloudfront.net",
-    "firebaseapp.com"
+    "amazonaws.com", "sharepoint.com", "googleusercontent.com",
+    "cloudfront.net", "firebaseapp.com", "githubusercontent.com"
 }
 
 URL_SHORTENERS = {
-    "t.co", "bit.ly", "tinyurl.com", "goo.gl", "cutt.ly",
-    "buff.ly", "is.gd", "v.gd", "ow.ly", "shorturl.at"
+    "bit.ly", "t.co", "tinyurl.com", "goo.gl", "cutt.ly",
+    "is.gd", "v.gd", "ow.ly", "shorturl.at"
 }
 
 SUSPICIOUS_TLDS = {
-    "xyz", "top", "club", "link", "click", "info", "work",
-    "gq", "tk", "ml", "cf", "ga", "ru", "cn", "rest", "monster", "zip",
-    "biz", "ws"
+    "xyz", "top", "club", "link", "click", "info", "work", "biz",
+    "gq", "tk", "ml", "cf", "ga", "ru", "cn", "rest", "monster", "zip"
 }
 
 SUSPICIOUS_KEYWORDS = {
-    "login", "verify", "reset", "unlock", "update",
-    "secure", "security", "confirm", "account",
-    "support", "recover", "validation", "auth",
-    "password", "credentials", "signin"
+    "login", "verify", "update", "secure", "security", "confirm",
+    "reset", "account", "unlock", "auth", "password", "credentials"
 }
 
 BRAND_KEYWORDS = {
@@ -53,135 +48,225 @@ BRAND_KEYWORDS = {
     "google": {"google.com"},
     "facebook": {"facebook.com", "fb.com"},
     "apple": {"apple.com", "icloud.com"},
-    "microsoft": {"microsoft.com", "live.com", "outlook.com"},
     "amazon": {"amazon.com"},
+    "microsoft": {"microsoft.com", "live.com", "outlook.com"},
     "chase": {"chase.com"},
     "wellsfargo": {"wellsfargo.com"},
-    "boa": {"bankofamerica.com"},
+    "boa": {"bankofamerica.com"}
 }
+
+
+# ---------------------------------------------------------
+# HOMOGLYPH NORMALIZATION
+# ---------------------------------------------------------
+
+HOMOGLYPH_MAP = str.maketrans({
+    "а": "a", "ɑ": "a", "ά": "a", "ạ": "a", "ą": "a",
+    "е": "e", "℮": "e",
+    "ο": "o", "σ": "o",
+    "р": "p", "ρ": "p",
+    "с": "c",
+    "ԁ": "d",
+    "κ": "k",
+    "һ": "h",
+    "ӏ": "l",
+    "Ꭵ": "i",
+    "ɡ": "g"
+})
+
+
+def normalize_homoglyphs(text: str) -> str:
+    text = unicodedata.normalize("NFKD", text)
+    text = "".join(c for c in text if not unicodedata.combining(c))
+    return text.translate(HOMOGLYPH_MAP)
+
 
 # ---------------------------------------------------------
 # HELPERS
 # ---------------------------------------------------------
 
-def _is_ip_address(host: str) -> bool:
-    if re.fullmatch(r"(?:\d{1,3}\.){3}\d{1,3}", host):
-        return all(0 <= int(p) <= 255 for p in host.split("."))
-    return False
-
-def _entropy(string: str) -> float:
-    if len(string) == 0:
+def _entropy(s: str) -> float:
+    if not s:
         return 0
-    probabilities = [string.count(c) / len(string) for c in set(string)]
-    return -sum(p * math.log2(p) for p in probabilities)
+    freq = [s.count(c) / len(s) for c in set(s)]
+    return -sum(p * math.log2(p) for p in freq)
 
-def extract_root_domain(url: str) -> str:
+
+def _is_ip(host: str) -> bool:
+    if not re.fullmatch(r"(?:\d{1,3}\.){3}\d{1,3}", host):
+        return False
+    return all(0 <= int(part) <= 255 for part in host.split("."))
+
+
+def extract_root(url: str) -> str:
     ext = tldextract.extract(url)
     return f"{ext.domain}.{ext.suffix}".lower()
 
+
 # ---------------------------------------------------------
-# MAIN ENGINE
+# UNICODE / HOMOGLYPH SPOOF DETECTION
 # ---------------------------------------------------------
 
-def analyze_url(raw_url: str) -> Dict[str, object]:
-    reasons: List[str] = []
+def detect_unicode_spoof(host: str, root: str) -> List[str]:
+    reasons = []
+
+    # Unicode present
+    if any(ord(c) > 127 for c in host):
+        reasons.append("Hostname contains Unicode characters.")
+
+    # Punycode check
+    try:
+        decoded = idna.decode(host)
+        if decoded != host:
+            reasons.append("Punycode detected (possible Unicode spoof).")
+    except Exception:
+        reasons.append("Invalid IDNA encoding in hostname (spoof attempt).")
+
+    # Homoglyph mimic detection
+    normalized = normalize_homoglyphs(host)
+    normalized_root = normalize_homoglyphs(root)
+
+    for brand, legit_set in BRAND_KEYWORDS.items():
+        for legit in legit_set:
+            if normalized_root == normalize_homoglyphs(legit) and root != legit:
+                reasons.append(f"Unicode/homoglyph spoof detected: mimics '{legit}'.")
+                return reasons
+
+    return reasons
+
+
+# ---------------------------------------------------------
+# MAIN SCANNER ENGINE
+# ---------------------------------------------------------
+
+def analyze_url(url_raw: str) -> Dict[str, object]:
+    reasons = []
     score = 0
 
-    url = raw_url.strip()
+    url_raw = url_raw.strip()
 
-    # Scheme
-    if not re.match(r"^[a-zA-Z][a-zA-Z0-9+\-.]*://", url):
-        url = "http://" + url
-        reasons.append("URL missing scheme. Assuming http://")
+    # Ensure scheme
+    if not re.match(r"^[a-zA-Z][a-zA-Z0-9+\-.]*://", url_raw):
+        url_raw = "http://" + url_raw
+        reasons.append("URL missing scheme — added http://")
         score += 1
 
-    parsed = urlparse(url)
+    parsed = urlparse(url_raw)
     host = parsed.hostname or ""
-    root_domain = extract_root_domain(url)
+    root = extract_root(url_raw)
 
     if not host:
-        return {"score": 10, "reasons": ["Could not parse any valid domain."]}
+        return {"score": 10, "reasons": ["Invalid or unparseable hostname."]}
 
     host_lower = host.lower()
 
-    # Trusted domains
-    if root_domain in HARD_TRUSTED_DOMAINS:
-        path_entropy = _entropy(parsed.path + parsed.query)
-        if path_entropy > 4.5:
-            score += 1
-            reasons.append("Contains randomness (normal for trusted service).")
+    # -------------------------
+    # Unicode Spoof Detection
+    # -------------------------
+    unicode_hits = detect_unicode_spoof(host_lower, root)
+    if unicode_hits:
+        score += 10
+        reasons.extend(unicode_hits)
+
+    # -------------------------
+    # Trusted Domains
+    # -------------------------
+    if root in HARD_TRUSTED_DOMAINS:
+        ent = _entropy(parsed.path + parsed.query)
+        if ent > 4.5:
+            reasons.append("High randomness in path (normal for trusted sites).")
         return {"score": score, "reasons": reasons}
 
-    # URL shorteners
-    if root_domain in URL_SHORTENERS:
+    # -------------------------
+    # Shorteners
+    # -------------------------
+    if root in URL_SHORTENERS:
         score += 5
-        reasons.append("URL shortener used (high phishing risk).")
+        reasons.append("URL shortener used — high phishing risk.")
 
+    # -------------------------
     # HTTPS
+    # -------------------------
     if parsed.scheme != "https":
         score += 3
-        reasons.append("Not using HTTPS (unsafe).")
+        reasons.append("Not using HTTPS.")
 
-    # Soft trusted (AWS, GCS)
-    if root_domain in SOFT_TRUSTED_DOMAINS:
+    # -------------------------
+    # Soft Trusted
+    # -------------------------
+    if root in SOFT_TRUSTED_DOMAINS:
         ent = _entropy(parsed.path + parsed.query)
-        if ent > 5.2:
-            score += 1
-            reasons.append("Contains high randomness (normal for cloud).")
+        if ent > 5:
+            reasons.append("High randomness (normal for cloud storage URLs).")
         return {"score": score, "reasons": reasons}
 
-    # IP address
-    if _is_ip_address(host_lower):
+    # -------------------------
+    # IP Address
+    # -------------------------
+    if _is_ip(host_lower):
         score += 6
-        reasons.append("Uses raw IP address (phishing indicator).")
+        reasons.append("Uses raw IP address — common in phishing.")
 
+    # -------------------------
     # Suspicious TLD
-    tld = root_domain.split(".")[-1]
+    # -------------------------
+    tld = root.split(".")[-1]
     if tld in SUSPICIOUS_TLDS:
         score += 8
-        reasons.append(f"Suspicious TLD '.{tld}' frequently used in scams.")
+        reasons.append(f"Suspicious TLD '.{tld}' used heavily in scams.")
 
-    # Subdomain abuse
-    subparts = host_lower.split(".")[:-2]
-    if len(subparts) >= 3:
+    # -------------------------
+    # Subdomain Abuse
+    # -------------------------
+    if host_lower.count(".") > 3:
         score += 6
-        reasons.append("Deep subdomain chain often used in phishing.")
+        reasons.append("Deep subdomain chain — common in scam hosting.")
 
+    # -------------------------
     # Hyphen overload
+    # -------------------------
     if host_lower.count("-") >= 3:
         score += 5
-        reasons.append("Excessive hyphens mimic legit domains.")
+        reasons.append("Excessive hyphens used to mimic legit domains.")
 
+    # -------------------------
     # Entropy
-    combined = parsed.path + parsed.query
-    if combined:
-        ent = _entropy(combined)
-        if len(combined) > 80 and ent > 4.5:
+    # -------------------------
+    combo = parsed.path + parsed.query
+    if combo:
+        ent = _entropy(combo)
+        if len(combo) > 80 and ent > 4.5:
             score += 3
-            reasons.append("High-entropy long URL segment.")
-        elif ent > 5.0:
+            reasons.append("Long, random-looking URL path.")
+        elif ent > 5:
             score += 1
-            reasons.append("Some randomness detected.")
+            reasons.append("Some randomness in URL.")
 
-    # Sensitive keywords
-    lower_path = combined.lower()
+    # -------------------------
+    # Suspicious Keywords
+    # -------------------------
+    lower_path = combo.lower()
     for kw in SUSPICIOUS_KEYWORDS:
         if kw in lower_path:
             score += 6
             reasons.append(f"Phishing keyword detected: '{kw}'.")
             break
 
+    # -------------------------
     # Brand impersonation
+    # -------------------------
     for brand, legit_domains in BRAND_KEYWORDS.items():
         if brand in host_lower:
-            if root_domain not in legit_domains:
+            if root not in legit_domains:
                 score += 10
-                reasons.append(f"Domain impersonates brand '{brand}'.")
+                reasons.append(f"Brand impersonation attempt: '{brand}'.")
             break
 
-    # Long URL
-    if len(url) > 150:
+    # -------------------------
+    # Length
+    # -------------------------
+    if len(url_raw) > 150:
         score += 2
-        reasons.append("URL unusually long.")
+        reasons.append("URL extremely long.")
 
     return {"score": score, "reasons": reasons}
