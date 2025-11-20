@@ -11,6 +11,7 @@ import re
 
 from .emotion_classifier import classify_emotions
 from .tactic_detector import detect_tactics, sentence_risk_level
+from .ai_manipulation_classifier import ai_detect_manipulation
 
 
 # ==========================================================
@@ -213,16 +214,38 @@ def analyze_manipulation(text: str) -> Dict[str, Any]:
             "risk_color": sentence_risk_level(tactics),
         })
 
+    # Keyword-based score
     risk_score = _estimate_global_risk(rows)
+    keyword_score = risk_score  # <- Save original for comparison
 
-    primary_tactics = sorted(
-        tactic_counts.keys(),
-        key=lambda x: tactic_counts[x],
-        reverse=True
-    )
+    # =====================================================
+    # AI SEMANTIC MANIPULATION DETECTOR (LLM-BASED)
+    # =====================================================
+    ai_row = ai_detect_manipulation(cleaned)
 
-    scam_profile = _guess_scam_profile(tactic_counts)
-    scenario_simulation = _simulate_next_steps(scam_profile)
+    # If AI finds something stronger, override
+    if ai_row["manipulation_score"] > keyword_score:
+        risk_score = ai_row["manipulation_score"]
+        primary_tactics = ai_row.get("tactics", [])
+        scam_profile = ai_row.get("manipulation_type", "none")
+        explanation = ai_row.get("explanation", "")
+        scenario_simulation = _simulate_next_steps(scam_profile)
+
+    else:
+        # Keyword fallback
+        if risk_score == 0:
+            explanation = "No manipulation detected."
+        else:
+            explanation = "Emotional manipulation patterns detected."
+
+        primary_tactics = sorted(
+            tactic_counts.keys(),
+            key=lambda x: tactic_counts[x],
+            reverse=True
+        )
+
+        scam_profile = _guess_scam_profile(tactic_counts)
+        scenario_simulation = _simulate_next_steps(scam_profile)
 
     return {
         "primary_tactics": primary_tactics,
