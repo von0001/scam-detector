@@ -28,30 +28,39 @@
 
     h1 {
       font-size: 34px;
-      margin-bottom: 10px;
+      margin-bottom: 6px;
       text-align: center;
       color: #f8fafc;
       letter-spacing: 0.04em;
     }
 
+    .subtitle {
+      text-align: center;
+      color: #60a5fa;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+      margin-bottom: 6px;
+    }
+
     .updated {
       text-align: center;
       color: #94a3b8;
-      margin-bottom: 35px;
-      font-size: 14px;
+      margin-bottom: 28px;
+      font-size: 13px;
     }
 
     h2 {
-      margin-top: 40px;
+      margin-top: 32px;
       color: #cbd5f5;
-      font-size: 22px;
+      font-size: 20px;
       border-left: 4px solid #2563eb;
       padding-left: 12px;
     }
 
     p {
       line-height: 1.7;
-      font-size: 16px;
+      font-size: 15px;
       margin-top: 10px;
       color: #d1d5db;
     }
@@ -62,9 +71,14 @@
     }
 
     li {
-      margin-bottom: 10px;
+      margin-bottom: 8px;
       line-height: 1.6;
       color: #cbd5e1;
+      font-size: 15px;
+    }
+
+    strong {
+      color: #e5e7eb;
     }
 
     a {
@@ -77,7 +91,7 @@
     }
 
     .footer-links {
-      margin-top: 50px;
+      margin-top: 40px;
       text-align: center;
       font-size: 14px;
     }
@@ -88,7 +102,7 @@
     }
 
     .badge {
-      margin-top: 35px;
+      margin-top: 30px;
       text-align: center;
       font-size: 12px;
       color: #475569;
@@ -98,50 +112,79 @@
 
 <body>
   <div class="container">
+    <p class="subtitle">Your privacy comes before the scan.</p>
     <h1>Privacy Policy</h1>
     <p class="updated">Last updated: November 2025</p>
 
+    <p>
+      ScamDetector is built to protect you from scams — not to harvest or monetize your data.
+      This page explains exactly what happens when you use the tool and what does <strong>not</strong> happen behind the scenes.
+    </p>
+
     <h2>1. Information We Collect</h2>
     <p><strong>User-submitted content</strong><br>
-      Anything you paste or upload is processed temporarily to perform scam detection. This data is never stored, logged, or shared.
+      Anything you paste or upload (text, links, screenshots, QR codes) is processed temporarily to perform scam detection.
+      It is handled in-memory only and is not permanently stored, logged, or sold.
     </p>
 
     <p><strong>Minimal usage statistics</strong><br>
-      We record anonymous usage metrics such as total requests, safe vs scam detections, and OCR usage. No IP addresses, personal identifiers, or tracking fingerprints are collected.
+      To keep the system healthy and improve detection quality, we record anonymous metrics such as:
+    </p>
+    <ul>
+      <li>Total number of scans</li>
+      <li>Counts of safe vs. suspicious/dangerous results</li>
+      <li>How often OCR and QR tools are used</li>
+    </ul>
+    <p>
+      These metrics are <strong>not</strong> tied to your name, email, or any personal identifier.
     </p>
 
     <p><strong>Browser Extension</strong><br>
-      The extension only analyzes content you explicitly submit. It does not monitor webpages, track activity, or operate without your interaction.
+      The extension only analyzes content you explicitly send to ScamDetector.
+      It does <strong>not</strong> continuously watch pages, spy on tabs, or track your browsing history.
     </p>
 
     <h2>2. How Your Data Is Used</h2>
     <p>
-      Your data is used strictly to generate real-time analysis results.
-      We do not sell, share, or monetize user data in any form.
+      Your content is used strictly to generate a real-time scam and manipulation analysis.
+      We do not:
+    </p>
+    <ul>
+      <li>Sell or rent your data</li>
+      <li>Build advertising profiles</li>
+      <li>Share your content with random third parties</li>
+    </ul>
+    <p>
+      The only goal is to give you a clear verdict and explanation so you can decide what to do next.
     </p>
 
     <h2>3. Cookies & Tracking</h2>
     <p>
-      ScamDetector does not use behavioral tracking, cross-site cookies, or advertising analytics.
-      Session cookies are only used for administrative authentication where explicitly required.
+      ScamDetector does not rely on cross-site tracking pixels or behavioral ad networks.
+      A minimal session cookie is only used where strictly necessary for
+      <strong>admin authentication</strong> — not for user profiling.
     </p>
 
     <h2>4. Security</h2>
     <p>
       All communication with ScamDetector occurs over encrypted HTTPS.
-      Content is processed in-memory and discarded immediately after analysis.
+      Content you submit is processed securely and discarded immediately after analysis.
+      We treat every scan as sensitive, even if it looks harmless.
     </p>
 
     <h2>5. Third-Party Services</h2>
     <p>
-      AI-powered analysis is performed using secure, industry-standard APIs.
-      No personal data is permanently stored or retained by these services.
+      Some detection is powered by industry-grade AI models.
+      These providers are used to process content, not to build marketing lists.
+      We do not ask them to store or sell your data.
     </p>
 
-    <h2>6. User Rights</h2>
+    <h2>6. Your Rights & Choices</h2>
     <p>
-      You retain full ownership over any content you provide.
-      You may discontinue use of the service at any time without providing personal information.
+      You remain the owner of everything you paste or upload.
+      You can stop using ScamDetector at any time without creating an account or sharing personal details.
+      If you ever have questions about how your data is handled, you can reach out through our
+      <a href="/contact">Contact page</a>.
     </p>
 
     <div class="footer-links">

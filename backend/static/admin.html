@@ -9,127 +9,326 @@
 
   <style>
     body {
-      background: radial-gradient(circle at top, #0b1020, #05060d);
-      color: #f1f5f9;
-      padding: 30px 20px;
+      margin: 0;
+      padding: 28px 16px 32px;
+      background:
+        radial-gradient(circle at top, #020617 0, #020617 45%, #020617 100%),
+        radial-gradient(circle at top left, rgba(37, 99, 235, 0.18), transparent 55%);
+      color: #f9fafb;
       font-family: system-ui, -apple-system, Segoe UI, Roboto;
+      display: flex;
+      justify-content: center;
+      min-height: 100vh;
     }
 
-    h1 {
-      text-align: center;
-      font-size: 34px;
-      margin-bottom: 30px;
-      letter-spacing: 0.04em;
+    .admin-shell {
+      width: 100%;
+      max-width: 1120px;
+      background: radial-gradient(circle at top left, #020617, #020617 40%, #020617 100%);
+      border-radius: 24px;
+      padding: 22px 22px 26px;
+      box-shadow:
+        0 24px 80px rgba(15, 23, 42, 0.92),
+        0 0 0 1px rgba(148, 163, 184, 0.12);
+      position: relative;
+      overflow: hidden;
     }
 
-    .dashboard {
-      max-width: 1100px;
-      margin: 0 auto;
+    .admin-shell::before {
+      content: "";
+      position: absolute;
+      inset: -40%;
+      background:
+        radial-gradient(circle at 10% -20%, rgba(56,189,248,0.12), transparent 50%),
+        radial-gradient(circle at 110% 0%, rgba(37,99,235,0.18), transparent 55%);
+      opacity: 0.8;
+      pointer-events: none;
+    }
+
+    .admin-shell > * {
+      position: relative;
+      z-index: 1;
+    }
+
+    /* Top bar */
+    .admin-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid rgba(30,64,175,0.6);
+    }
+
+    .admin-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .admin-badge {
+      width: 32px;
+      height: 32px;
+      border-radius: 999px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(circle at 30% 0%, #38bdf8, #1d4ed8);
+      box-shadow:
+        0 0 0 1px rgba(191, 219, 254, 0.35),
+        0 10px 30px rgba(15, 23, 42, 0.9);
+      font-size: 18px;
+    }
+
+    .admin-title-block {
       display: flex;
       flex-direction: column;
-      gap: 28px;
+      gap: 2px;
     }
 
+    .admin-title-text {
+      font-size: 1.1rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .admin-subtitle-text {
+      font-size: 0.74rem;
+      color: #9ca3af;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .admin-meta {
+      text-align: right;
+      font-size: 0.75rem;
+      color: #9ca3af;
+    }
+
+    .admin-meta strong {
+      color: #e5e7eb;
+    }
+
+    /* Main layout */
+    .dashboard {
+      margin-top: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    /* Stat cards */
     .stats-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 20px;
+      gap: 16px;
     }
 
     .stat-card {
-      background: linear-gradient(135deg, #111827, #030712);
-      border: 1px solid #1f2937;
+      background: linear-gradient(135deg, #020617, #020617 60%, #020617 100%);
       border-radius: 16px;
-      padding: 24px;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+      padding: 18px 18px 16px;
+      border: 1px solid rgba(31,41,55,0.9);
+      box-shadow: 0 14px 30px rgba(15,23,42,0.8);
       position: relative;
+      overflow: hidden;
+    }
+
+    .stat-card::before {
+      content: "";
+      position: absolute;
+      inset: -40%;
+      background: radial-gradient(circle at top left, rgba(56,189,248,0.14), transparent 60%);
+      opacity: 0.7;
+      pointer-events: none;
+    }
+
+    .stat-card > * {
+      position: relative;
+      z-index: 1;
     }
 
     .stat-card h2 {
-      font-size: 14px;
-      color: #94a3b8;
+      font-size: 0.78rem;
+      color: #9ca3af;
       text-transform: uppercase;
-      letter-spacing: 1px;
-      margin-bottom: 8px;
+      letter-spacing: 0.14em;
+      margin-bottom: 6px;
     }
 
     .stat-card p {
-      font-size: 42px;
+      font-size: 2rem;
       font-weight: 700;
       margin: 0;
       color: #38bdf8;
     }
 
+    .stat-hint {
+      margin-top: 4px;
+      font-size: 0.72rem;
+      color: #6b7280;
+    }
+
+    /* Charts */
     .chart-card {
-      background: linear-gradient(135deg, #0f172a, #020617);
-      border: 1px solid #1e293b;
+      background: radial-gradient(circle at top left, #020617, #020617 50%, #020617 100%);
       border-radius: 18px;
-      padding: 26px;
-      box-shadow: 0 16px 40px rgba(0,0,0,0.7);
+      padding: 18px 18px 20px;
+      border: 1px solid #1e293b;
+      box-shadow: 0 18px 40px rgba(0,0,0,0.8);
     }
 
     .chart-card h2 {
-      font-size: 18px;
+      font-size: 0.98rem;
       color: #cbd5f1;
-      margin-bottom: 16px;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .chart-card h2 span.icon {
+      font-size: 1.1rem;
+    }
+
+    canvas {
+      max-width: 100%;
     }
 
     footer {
+      margin-top: 20px;
       text-align: center;
-      font-size: 13px;
-      color: #64748b;
-      margin-top: 30px;
+      font-size: 0.74rem;
+      color: #6b7280;
     }
 
+    footer span {
+      color: #9ca3af;
+    }
+
+    /* Feedback section */
+    .feedback-section-title {
+      margin-top: 32px;
+      font-size: 1rem;
+      color: #e5e7eb;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    #feedbackList {
+      margin-top: 12px;
+    }
+
+    #feedbackList .stat-card h2 {
+      font-size: 0.8rem;
+      color: #a5b4fc;
+      margin-bottom: 4px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    #feedbackList .stat-card p {
+      font-size: 0.8rem;
+      line-height: 1.6;
+      color: #e5e7eb;
+      font-weight: 400;
+    }
+
+    #feedbackList strong {
+      color: #93c5fd;
+      font-weight: 600;
+    }
+
+    @media (max-width: 768px) {
+      .admin-shell {
+        border-radius: 18px;
+        padding: 18px 16px 22px;
+      }
+
+      .admin-top {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .admin-meta {
+        text-align: left;
+      }
+    }
   </style>
 </head>
 
 <body>
 
-<h1>🛡 ScamDetector Admin Intelligence Panel</h1>
+<div class="admin-shell">
 
-<div class="dashboard">
-
-  <!-- STATS -->
-  <div class="stats-grid">
-    <div class="stat-card">
-      <h2>Total Requests</h2>
-      <p id="total">0</p>
+  <header class="admin-top">
+    <div class="admin-brand">
+      <div class="admin-badge">🛡</div>
+      <div class="admin-title-block">
+        <span class="admin-title-text">ScamDetector Admin</span>
+        <span class="admin-subtitle-text">Threat Telemetry & Feedback Monitor</span>
+      </div>
     </div>
 
-    <div class="stat-card">
-      <h2>Scam Detections</h2>
-      <p id="scam">0</p>
+    <div class="admin-meta">
+      <div><strong>Visibility:</strong> Internal Only</div>
+      <div>Monitor scan traffic, scam detection rates, and user reports in real time.</div>
+    </div>
+  </header>
+
+  <div class="dashboard">
+
+    <!-- STATS -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <h2>Total Requests</h2>
+        <p id="total">0</p>
+        <div class="stat-hint">All scans across web, extension, and mobile.</div>
+      </div>
+
+      <div class="stat-card">
+        <h2>Scam Detections</h2>
+        <p id="scam">0</p>
+        <div class="stat-hint">Requests flagged as suspicious or dangerous.</div>
+      </div>
+
+      <div class="stat-card">
+        <h2>Safe Results</h2>
+        <p id="safe">0</p>
+        <div class="stat-hint">Requests cleared with no major red flags.</div>
+      </div>
+
+      <div class="stat-card">
+        <h2>OCR / Screenshot Scans</h2>
+        <p id="ocr">0</p>
+        <div class="stat-hint">Images processed for text or QR content.</div>
+      </div>
     </div>
 
-    <div class="stat-card">
-      <h2>Safe Results</h2>
-      <p id="safe">0</p>
+    <!-- TRAFFIC CHART -->
+    <div class="chart-card">
+      <h2><span class="icon">📈</span>Activity Timeline</h2>
+      <canvas id="trafficChart"></canvas>
     </div>
 
-    <div class="stat-card">
-      <h2>OCR Uses</h2>
-      <p id="ocr">0</p>
+    <!-- PIE CHART -->
+    <div class="chart-card">
+      <h2><span class="icon">📊</span>Detection Distribution</h2>
+      <canvas id="pieChart"></canvas>
     </div>
+
   </div>
 
-  <!-- TRAFFIC CHART -->
-  <div class="chart-card">
-    <h2>📈 Activity Timeline</h2>
-    <canvas id="trafficChart"></canvas>
-  </div>
+  <footer>
+    <span>Restricted Area — ScamDetector Admin Monitoring System.</span>
+    <br/>Use this panel to improve protection, not to identify individual users.
+  </footer>
 
-  <!-- PIE CHART -->
-  <div class="chart-card">
-    <h2>📊 Detection Distribution</h2>
-    <canvas id="pieChart"></canvas>
-  </div>
+  <h2 class="feedback-section-title">📩 Live User Feedback</h2>
+  <div id="feedbackList" class="stats-grid"></div>
 
 </div>
-
-<footer>
-  Restricted Area — ScamDetector Admin Monitoring System
-</footer>
 
 <script>
   async function loadData() {
@@ -152,13 +351,30 @@
       data: {
         labels,
         datasets: [{
-          label: "Requests Over Time",
+          label: "Requests over time",
           data: labels.map(() => 1),
           borderColor: "#38bdf8",
           borderWidth: 3,
           fill: false,
           tension: 0.35
         }]
+      },
+      options: {
+        plugins: {
+          legend: {
+            labels: { color: "#e5e7eb" }
+          }
+        },
+        scales: {
+          x: {
+            ticks: { color: "#9ca3af" },
+            grid: { color: "rgba(55,65,81,0.4)" }
+          },
+          y: {
+            ticks: { color: "#9ca3af" },
+            grid: { color: "rgba(55,65,81,0.3)" }
+          }
+        }
       }
     });
 
@@ -178,9 +394,6 @@
   loadData();
 </script>
 
-<h2 style="margin-top:40px;">📩 User Feedback</h2>
-<div id="feedbackList" class="stats-grid"></div>
-
 <script>
 async function loadFeedback(){
   const res = await fetch("/admin/feedback");
@@ -195,7 +408,7 @@ async function loadFeedback(){
     container.innerHTML += `
       <div class="stat-card">
         <h2>${date}</h2>
-        <p style="font-size:14px;color:#cbd5f8;margin-top:10px;">
+        <p>
           <strong>Page:</strong> ${item.page}<br>
           <strong>Email:</strong> ${item.email || "Not provided"}<br><br>
           ${item.message}

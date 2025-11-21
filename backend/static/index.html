@@ -10,94 +10,197 @@
 <body>
   <div class="app">
 
-    <header class="app-header">
-      <h1>ScamDetector</h1>
-      <p class="subtitle">Smart protection against scams, manipulation, and digital threats.</p>
-    </header>
-
-    <!-- INPUT SECTION -->
-    <section class="input-section">
-      <label for="content-input">Paste suspicious text, link, or conversation:</label>
-
-      <textarea
-        id="content-input"
-        placeholder="Paste a link, DM, email, or suspicious message here..."
-        rows="6"></textarea>
-
-      <div class="mode-row">
-        <span>Mode:</span>
-        <label><input type="radio" name="mode" value="auto" checked /> Auto</label>
-        <label><input type="radio" name="mode" value="url" /> URL</label>
-        <label><input type="radio" name="mode" value="text" /> Text</label>
-        <label><input type="radio" name="mode" value="chat" /> AI Detector</label>
-        <label><input type="radio" name="mode" value="manipulation" /> Manipulation</label>
-        <label><input type="radio" name="mode" value="qr" /> QR Code</label>
-      </div>
-
-      <button id="analyze-btn">Scan Now</button>
-
-      <div class="ocr-container">
-        <button id="ocr-btn" class="ocr-button">Upload Screenshot / QR</button>
-        <input type="file" id="ocr-file" accept="image/*" hidden />
-
-        <div id="drop-zone" class="drop-zone">
-          Drag & Drop image here
+    <!-- TOP NAV / BRAND -->
+    <header class="top-nav">
+      <div class="brand">
+        <div class="brand-mark">🛡</div>
+        <div class="brand-text">
+          <span class="brand-name">ScamDetector</span>
+          <span class="brand-tagline">Digital Safety Framework</span>
         </div>
       </div>
 
-      <p id="status" class="status"></p>
-    </section>
+      <nav class="nav-links">
+        <a href="#how-it-works">How it Works</a>
+        <a href="/support">Support</a>
+        <a href="/privacy">Privacy</a>
+        <a href="/feedback" class="nav-pill">Send Feedback</a>
+      </nav>
+    </header>
 
-    <!-- RESULT -->
-    <section class="result-section" id="result-section" hidden>
-      <h2>Results</h2>
-      <div id="verdict-badge" class="verdict-badge">–</div>
-      <p id="explanation"></p>
-      <ul id="reasons-list" class="reasons-list"></ul>
-    </section>
+    <!-- HERO: LEFT = COPY, RIGHT = CONTROL PANEL -->
+    <main class="hero-layout">
+      <!-- LEFT: PROTECTIVE COPY -->
+      <section class="hero-copy">
+        <p class="hero-eyebrow">Digital Bodyguard • Real-Time Scam Defense</p>
+
+        <h1 class="hero-headline">
+          Before you click. Before you reply.<br />
+          <span class="hero-highlight">Check it first.</span>
+        </h1>
+
+        <p class="hero-subtext">
+          Scan suspicious messages, links, screenshots, and conversations
+          <span class="hero-subtext-strong">before they touch your money, identity, or peace of mind.</span>
+        </p>
+
+        <div class="hero-trust-row">
+          <div class="trust-chip">
+            ⚡ Instant risk verdicts
+          </div>
+          <div class="trust-chip">
+            🧠 Manipulation & scam patterns
+          </div>
+          <div class="trust-chip">
+            🕵️‍♂️ Works on DMs, emails & QR
+          </div>
+        </div>
+
+        <div class="hero-footnote">
+          One scan can be the difference between <span>“glad I checked”</span> and <span>“I should’ve known.”</span>
+        </div>
+      </section>
+
+      <!-- RIGHT: CONTROL CENTER PANEL -->
+      <section class="scan-panel">
+
+        <!-- INPUT SECTION (unchanged IDs for JS) -->
+        <section class="input-section">
+          <div class="panel-header">
+            <h2 class="panel-title">Protection Console</h2>
+            <p class="panel-subtitle">Paste anything that feels off. ScamDetector does the thinking.</p>
+          </div>
+
+          <label for="content-input" class="input-label">
+            Paste the message or link you’re unsure about:
+          </label>
+
+          <textarea
+            id="content-input"
+            placeholder="Example: a weird Cash App request, a ‘delivery issue’ email, or a DM that feels off..."
+            rows="6"></textarea>
+
+          <!-- MODE SELECT – PILL TOGGLES (same radios, new UI) -->
+          <div class="mode-row">
+            <span class="mode-label">Scan mode</span>
+
+            <div class="mode-pill-group">
+              <label class="mode-pill">
+                <input type="radio" name="mode" value="auto" checked />
+                <span>Auto</span>
+              </label>
+
+              <label class="mode-pill">
+                <input type="radio" name="mode" value="url" />
+                <span>URL</span>
+              </label>
+
+              <label class="mode-pill">
+                <input type="radio" name="mode" value="text" />
+                <span>Text</span>
+              </label>
+
+              <label class="mode-pill">
+                <input type="radio" name="mode" value="chat" />
+                <span>AI Detector</span>
+              </label>
+
+              <label class="mode-pill">
+                <input type="radio" name="mode" value="manipulation" />
+                <span>Manipulation</span>
+              </label>
+
+              <label class="mode-pill">
+                <input type="radio" name="mode" value="qr" />
+                <span>QR Code</span>
+              </label>
+            </div>
+          </div>
+
+          <!-- PRIMARY CTA -->
+          <button id="analyze-btn" class="primary-btn">
+            Check Safety
+          </button>
+
+          <!-- OCR + DROP -->
+          <div class="ocr-container">
+            <button id="ocr-btn" class="ocr-button">
+              📷 Upload Screenshot or QR
+            </button>
+            <input type="file" id="ocr-file" accept="image/*" hidden />
+
+            <div id="drop-zone" class="drop-zone">
+              Drag &amp; drop an image here (screenshot, QR code, or scam photo)
+            </div>
+          </div>
+
+          <p id="status" class="status"></p>
+        </section>
+
+        <!-- RESULTS PANEL (reactive verdict) -->
+        <section class="result-section" id="result-section" hidden>
+          <div class="result-header">
+            <h2>Scan Verdict</h2>
+            <div id="verdict-badge" class="verdict-badge">–</div>
+          </div>
+
+          <p id="explanation" class="result-explanation"></p>
+
+          <div class="reason-block">
+            <h3 class="reason-title">Why we flagged it</h3>
+            <ul id="reasons-list" class="reasons-list"></ul>
+          </div>
+
+          <!-- optional JSON details hook (JS already references this ID) -->
+          <pre id="details-json" class="details-json" hidden></pre>
+
+          <p class="result-disclaimer">
+            ScamDetector gives you an instant risk read. Final judgment is always yours — when in doubt, don’t engage.
+          </p>
+        </section>
+
+      </section>
+    </main>
 
     <!-- HOW IT WORKS -->
-    <section class="how-it-works">
-      <h2>How ScamDetector Works</h2>
+    <section class="how-it-works" id="how-it-works">
+      <h2>How ScamDetector Keeps You Safe</h2>
       <div class="works-grid">
 
         <div class="work-box">
-          <h3>1. Content Analysis</h3>
+          <h3>1. Reads the situation</h3>
           <p>
-            Your message is scanned using advanced pattern recognition and AI models
-            trained to detect known scam structures, emotional manipulation, and fraud triggers.
+            We break down the message like a fraud investigator — scanning wording, structure, and patterns used in real scams.
           </p>
         </div>
 
         <div class="work-box">
-          <h3>2. Behavioral Detection</h3>
+          <h3>2. Detects manipulation</h3>
           <p>
-            We analyze emotional pressure, urgency tactics, authority impersonation, &
-            psychological manipulation commonly used by scammers.
+            Urgency, guilt, authority impersonation, romance pressure — ScamDetector spots psychological tricks instantly.
           </p>
         </div>
 
         <div class="work-box">
-          <h3>3. Risk Scoring</h3>
+          <h3>3. Scores the risk</h3>
           <p>
-            A real-time risk score is generated based on detected warning signs,
-            giving you a SAFE, SUSPICIOUS, or DANGEROUS verdict.
+            Each scan gets a risk score and a clear verdict: <strong>SAFE</strong>, <strong>SUSPICIOUS</strong>, or <strong>DANGEROUS</strong>.
           </p>
         </div>
 
         <div class="work-box">
-          <h3>4. Smart Verdict</h3>
+          <h3>4. Explains the red flags</h3>
           <p>
-            You receive a clear explanation and specific reasons so you
-            understand exactly why something may be risky.
+            You don’t just get a color — you get a breakdown of the exact red flags so you walk away smarter than before.
           </p>
         </div>
 
       </div>
     </section>
 
+    <!-- FOOTER -->
     <footer class="app-footer">
-      <p>Built for awareness & safety. Not financial or legal advice.</p>
+      <p>Built to protect awareness, not to replace your judgment. Not financial or legal advice.</p>
       <div class="legal-links">
         <a href="/terms">Terms</a>
         <a href="/privacy">Privacy</a>
@@ -108,52 +211,9 @@
 
   </div>
 
+  <!-- IMPORTS (UNCHANGED) -->
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <script src="/static/script.js"></script>
-
-  <style>
-    .how-it-works {
-      margin-top: 30px;
-      background: #0e1427;
-      padding: 20px;
-      border-radius: 14px;
-      border: 1px solid #1f2a50;
-    }
-
-    .how-it-works h2 {
-      text-align: center;
-      margin-bottom: 20px;
-    }
-
-    .works-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px,1fr));
-      gap: 16px;
-    }
-
-    .work-box {
-      background: #151c38;
-      padding: 15px;
-      border-radius: 12px;
-      border: 1px solid #2b3468;
-      transition: transform 0.2s;
-    }
-
-    .work-box:hover {
-      transform: translateY(-5px);
-    }
-
-    .work-box h3 {
-      margin-bottom: 8px;
-      color: #4c7dff;
-    }
-
-    .work-box p {
-      font-size: 0.9rem;
-      color: #c1c7ec;
-      line-height: 1.5;
-    }
-  </style>
 
 </body>
 </html>
