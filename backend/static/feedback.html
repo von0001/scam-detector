@@ -8,53 +8,115 @@
 
 <style>
 .feedback-container {
-  max-width: 700px;
-  margin: 50px auto;
-  background: #141a2c;
-  padding: 30px;
-  border-radius: 14px;
+  max-width: 720px;
+  margin: 60px auto;
+  background: linear-gradient(145deg, #141a2c, #0b1020);
+  padding: 36px;
+  border-radius: 18px;
+  box-shadow: 0 25px 60px rgba(0,0,0,0.6);
 }
 
-label { display:block;margin-top:15px;font-weight:600; }
+.feedback-container h1 {
+  font-size: 26px;
+  text-align: center;
+  margin-bottom: 6px;
+}
+
+.feedback-container p {
+  text-align:center;
+  font-size: 14px;
+  color: #94a3b8;
+}
+
+label {
+  display:block;
+  margin-top:18px;
+  font-weight:600;
+  font-size: 14px;
+}
+
 input, textarea {
   width:100%;
   margin-top:6px;
-  padding:10px;
+  padding:12px;
   background:#0f1424;
   border:1px solid #272f4f;
   color:white;
-  border-radius:8px;
+  border-radius:10px;
+  outline:none;
 }
 
+textarea { min-height:120px; }
+
 button {
-  margin-top:20px;
+  margin-top:24px;
   width:100%;
   padding:14px;
-  background:#4c7dff;
+  background:linear-gradient(135deg,#4c7dff,#2563eb);
   color:white;
   border:none;
   border-radius:999px;
   font-size:1rem;
   cursor:pointer;
+  font-weight:600;
+}
+
+button:hover {
+  opacity:0.9;
+}
+
+.status {
+  margin-top:15px;
+  text-align:center;
+  font-size:13px;
+  color:#38bdf8;
 }
 </style>
 </head>
 
 <body>
+
 <div class="feedback-container">
-<h1>Submit Feedback</h1>
-<p>Report issues, suggestions, or incorrect results.</p>
+<h1>📝 Submit Feedback</h1>
+<p>Help us improve ScamDetector by reporting bugs or suggestions.</p>
 
-<form action="mailto:scamdetectorapp@gmail.com" method="POST" enctype="text/plain">
-<label>Your Email</label>
-<input type="email" name="email" required>
+<form id="feedbackForm">
+  <label>Your Email</label>
+  <input type="email" id="email" required placeholder="you@example.com">
 
-<label>Feedback Message</label>
-<textarea rows="6" name="message" required></textarea>
+  <label>Feedback Message</label>
+  <textarea id="message" required placeholder="Describe the issue or suggestion..."></textarea>
 
-<button type="submit">Send Feedback</button>
+  <button type="submit">Send Feedback</button>
+  <div id="status" class="status"></div>
 </form>
-
 </div>
+
+<script>
+document.getElementById("feedbackForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+
+  const status = document.getElementById("status");
+  status.textContent = "Sending feedback...";
+
+  const res = await fetch("/api/feedback", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      email: document.getElementById("email").value,
+      message: document.getElementById("message").value,
+      page: window.location.pathname
+    })
+  });
+
+  if(res.ok){
+    status.textContent = "✅ Feedback submitted successfully!";
+    e.target.reset();
+  } else {
+    status.textContent = "❌ Failed to submit feedback.";
+  }
+});
+</script>
+
 </body>
 </html>

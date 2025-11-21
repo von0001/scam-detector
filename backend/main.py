@@ -7,6 +7,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from backend.analytics.feedback import add_feedback, load_feedback
+from fastapi import Request
 
 from .text_scanner import analyze_text
 from .url_scanner import analyze_url
@@ -266,6 +268,24 @@ def login(req: LoginRequest):
 
     return JSONResponse({"error": "Invalid password"}, status_code=401)
 
+@app.post("/api/feedback")
+async def submit_feedback(request: Request):
+    body = await request.json()
+    message = body.get("message", "")
+    page = body.get("page", "unknown")
+
+    if not message.strip():
+        return JSONResponse({"error": "Empty feedback"}, status_code=400)
+
+    add_feedback(
+        message=message,
+        page=page,
+        ip=request.client.host,
+        user_agent=request.headers.get("user-agent", "unknown")
+    )
+
+    return {"success": True}\
+
 
 # ======================================================================
 #                                ADMIN UI
@@ -279,6 +299,9 @@ def serve_admin():
 def analytics_admin():
     return get_analytics()
 
+@app.get("/admin/feedback")
+def get_feedback():
+    return load_feedback()
 
 # ======================================================================
 #                           FRONTEND ROUTES

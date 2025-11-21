@@ -178,5 +178,35 @@
   loadData();
 </script>
 
+<h2 style="margin-top:40px;">📩 User Feedback</h2>
+<div id="feedbackList" class="stats-grid"></div>
+
+<script>
+async function loadFeedback(){
+  const res = await fetch("/admin/feedback");
+  const data = await res.json();
+
+  const container = document.getElementById("feedbackList");
+  container.innerHTML = "";
+
+  data.reverse().forEach(item => {
+    const date = new Date(item.timestamp * 1000).toLocaleString();
+
+    container.innerHTML += `
+      <div class="stat-card">
+        <h2>${date}</h2>
+        <p style="font-size:14px;color:#cbd5f8;margin-top:10px;">
+          <strong>Page:</strong> ${item.page}<br>
+          <strong>Email:</strong> ${item.email || "Not provided"}<br><br>
+          ${item.message}
+        </p>
+      </div>
+    `;
+  })
+}
+
+loadFeedback();
+</script>
+
 </body>
 </html>
