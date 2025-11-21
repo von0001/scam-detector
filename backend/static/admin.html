@@ -1,91 +1,182 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>ScamDetector Analytics Dashboard</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1"/>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link rel="stylesheet" href="style.css"/>
-    <style>
-        body { padding: 20px; color: white; }
-        .card {
-            background:#1b1b1b;
-            padding:20px;
-            border-radius:12px;
-            margin-bottom:20px;
-        }
-        .grid {
-            display:grid;
-            grid-template-columns: repeat(auto-fit,minmax(250px,1fr));
-            gap:20px;
-        }
-        h1 { text-align:center; margin-bottom:30px; }
-    </style>
+  <title>ScamDetector — Admin Control Panel</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="stylesheet" href="style.css"/>
+
+  <style>
+    body {
+      background: radial-gradient(circle at top, #0b1020, #05060d);
+      color: #f1f5f9;
+      padding: 30px 20px;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto;
+    }
+
+    h1 {
+      text-align: center;
+      font-size: 34px;
+      margin-bottom: 30px;
+      letter-spacing: 0.04em;
+    }
+
+    .dashboard {
+      max-width: 1100px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 28px;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 20px;
+    }
+
+    .stat-card {
+      background: linear-gradient(135deg, #111827, #030712);
+      border: 1px solid #1f2937;
+      border-radius: 16px;
+      padding: 24px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.6);
+      position: relative;
+    }
+
+    .stat-card h2 {
+      font-size: 14px;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 8px;
+    }
+
+    .stat-card p {
+      font-size: 42px;
+      font-weight: 700;
+      margin: 0;
+      color: #38bdf8;
+    }
+
+    .chart-card {
+      background: linear-gradient(135deg, #0f172a, #020617);
+      border: 1px solid #1e293b;
+      border-radius: 18px;
+      padding: 26px;
+      box-shadow: 0 16px 40px rgba(0,0,0,0.7);
+    }
+
+    .chart-card h2 {
+      font-size: 18px;
+      color: #cbd5f1;
+      margin-bottom: 16px;
+    }
+
+    footer {
+      text-align: center;
+      font-size: 13px;
+      color: #64748b;
+      margin-top: 30px;
+    }
+
+  </style>
 </head>
 
 <body>
-    <h1>📊 ScamDetector Analytics Dashboard</h1>
 
-    <div class="grid">
-        <div class="card"><h2>Total Requests</h2><p id="total"></p></div>
-        <div class="card"><h2>Scam Detections</h2><p id="scam"></p></div>
-        <div class="card"><h2>Safe Detections</h2><p id="safe"></p></div>
-        <div class="card"><h2>OCR Uses</h2><p id="ocr"></p></div>
+<h1>🛡 ScamDetector Admin Intelligence Panel</h1>
+
+<div class="dashboard">
+
+  <!-- STATS -->
+  <div class="stats-grid">
+    <div class="stat-card">
+      <h2>Total Requests</h2>
+      <p id="total">0</p>
     </div>
 
-    <div class="card">
-        <h2>Traffic Over Time</h2>
-        <canvas id="trafficChart"></canvas>
+    <div class="stat-card">
+      <h2>Scam Detections</h2>
+      <p id="scam">0</p>
     </div>
 
-    <div class="card">
-        <h2>Scam vs Safe</h2>
-        <canvas id="pieChart"></canvas>
+    <div class="stat-card">
+      <h2>Safe Results</h2>
+      <p id="safe">0</p>
     </div>
 
-    <script>
-        async function loadData() {
-            const res = await fetch("/admin/analytics");
-            const data = await res.json();
+    <div class="stat-card">
+      <h2>OCR Uses</h2>
+      <p id="ocr">0</p>
+    </div>
+  </div>
 
-            document.getElementById("total").innerText = data.total_requests;
-            document.getElementById("scam").innerText = data.scam_detections;
-            document.getElementById("safe").innerText = data.safe_detections;
-            document.getElementById("ocr").innerText = data.ocr_uses;
+  <!-- TRAFFIC CHART -->
+  <div class="chart-card">
+    <h2>📈 Activity Timeline</h2>
+    <canvas id="trafficChart"></canvas>
+  </div>
 
-            // Convert timestamps → readable dates
-            const labels = data.timestamp_log.map(t => {
-                const d = new Date(t * 1000);
-                return d.toLocaleTimeString();
-            });
+  <!-- PIE CHART -->
+  <div class="chart-card">
+    <h2>📊 Detection Distribution</h2>
+    <canvas id="pieChart"></canvas>
+  </div>
 
-            const ctx1 = document.getElementById("trafficChart");
-            new Chart(ctx1, {
-                type: "line",
-                data: {
-                    labels,
-                    datasets: [{
-                        label: "Total Requests",
-                        data: labels.map(() => 1), // 1 hit per timestamp
-                        borderColor: "cyan",
-                        borderWidth: 2
-                    }]
-                }
-            });
+</div>
 
-            const ctx2 = document.getElementById("pieChart");
-            new Chart(ctx2, {
-                type: "pie",
-                data: {
-                    labels: ["Safe", "Scam"],
-                    datasets: [{
-                        data: [data.safe_detections, data.scam_detections],
-                        backgroundColor: ["#4CAF50", "#E53935"]
-                    }]
-                }
-            });
-        }
+<footer>
+  Restricted Area — ScamDetector Admin Monitoring System
+</footer>
 
-        loadData();
-    </script>
+<script>
+  async function loadData() {
+    const res = await fetch("/admin/analytics");
+    const data = await res.json();
+
+    document.getElementById("total").innerText = data.total_requests;
+    document.getElementById("scam").innerText = data.scam_detections;
+    document.getElementById("safe").innerText = data.safe_detections;
+    document.getElementById("ocr").innerText = data.ocr_uses;
+
+    const labels = data.timestamp_log.map(t => {
+      const d = new Date(t * 1000);
+      return d.toLocaleTimeString();
+    });
+
+    const ctx1 = document.getElementById("trafficChart");
+    new Chart(ctx1, {
+      type: "line",
+      data: {
+        labels,
+        datasets: [{
+          label: "Requests Over Time",
+          data: labels.map(() => 1),
+          borderColor: "#38bdf8",
+          borderWidth: 3,
+          fill: false,
+          tension: 0.35
+        }]
+      }
+    });
+
+    const ctx2 = document.getElementById("pieChart");
+    new Chart(ctx2, {
+      type: "pie",
+      data: {
+        labels: ["Safe", "Scam"],
+        datasets: [{
+          data: [data.safe_detections, data.scam_detections],
+          backgroundColor: ["#22c55e", "#ef4444"]
+        }]
+      }
+    });
+  }
+
+  loadData();
+</script>
+
 </body>
 </html>

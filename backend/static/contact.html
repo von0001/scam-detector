@@ -2,36 +2,137 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Contact – ScamDetector</title>
+  <title>Contact — ScamDetector</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <link rel="stylesheet" href="/style.css" />
+
+  <style>
+    body {
+      margin: 0;
+      padding: 40px 20px;
+      background: radial-gradient(circle at top left, #0b1020, #02040a);
+      font-family: system-ui, -apple-system, Segoe UI, Roboto;
+      display: flex;
+      justify-content: center;
+      color: #e5e7eb;
+    }
+
+    .app {
+      max-width: 820px;
+      width: 100%;
+      background: linear-gradient(145deg, #111827, #020617);
+      border-radius: 18px;
+      padding: 40px;
+      box-shadow: 0 25px 60px rgba(0,0,0,0.8);
+      border: 1px solid #1f2937;
+    }
+
+    .app-header {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+
+    .app-header h1 {
+      margin: 0;
+      font-size: 32px;
+      color: #f8fafc;
+    }
+
+    .subtitle {
+      margin-top: 6px;
+      color: #94a3b8;
+      font-size: 15px;
+    }
+
+    h2 {
+      margin-top: 30px;
+      font-size: 20px;
+      color: #cbd5f5;
+      border-left: 4px solid #2563eb;
+      padding-left: 10px;
+    }
+
+    p {
+      margin-top: 10px;
+      font-size: 16px;
+      line-height: 1.7;
+      color: #d1d5db;
+    }
+
+    .email-card {
+      margin-top: 15px;
+      background: #020617;
+      border: 1px solid #1e293b;
+      padding: 18px;
+      border-radius: 12px;
+      text-align: center;
+      font-size: 17px;
+      font-weight: 600;
+      color: #38bdf8;
+      letter-spacing: 0.03em;
+    }
+
+    .response-note {
+      margin-top: 12px;
+      font-size: 14px;
+      color: #94a3b8;
+    }
+
+    .footer {
+      margin-top: 40px;
+      text-align: center;
+      border-top: 1px solid #1e293b;
+      padding-top: 20px;
+    }
+
+    .footer a {
+      color: #94a3b8;
+      margin: 0 10px;
+      font-size: 14px;
+      text-decoration: none;
+    }
+
+    .footer a:hover {
+      text-decoration: underline;
+    }
+
+    .badge {
+      margin-top: 25px;
+      font-size: 12px;
+      color: #475569;
+    }
+  </style>
 </head>
 
 <body>
   <div class="app">
-    <header class="app-header">
-      <h1>Contact</h1>
-      <p class="subtitle">Need help or found a bug? Reach out anytime.</p>
-    </header>
+    <div class="app-header">
+      <h1>Contact Us</h1>
+      <p class="subtitle">Support, feedback, and security reports</p>
+    </div>
 
-    <main class="app-main">
-      <section class="info-section">
-        <h2>Email</h2>
-        <p>You can contact the developer at:</p>
-        <p><strong>scamdetectorapp@gmail.com</strong></p>
+    <h2>📧 Email Support</h2>
+    <p>If you need assistance, found a bug, or want to report suspicious behavior, reach us here:</p>
 
-        <h2>Response Time</h2>
-        <p>Most messages are answered within 24–48 hours.</p>
-      </section>
-    </main>
+    <div class="email-card">
+      scamdetectorapp@gmail.com
+    </div>
 
-    <footer class="app-footer">
-      <div class="legal-links">
-        <a href="/">Home</a> • 
-        <a href="/terms">Terms</a> • 
-        <a href="/privacy">Privacy</a>
-      </div>
-    </footer>
+    <p class="response-note">Typical response time: 24–48 hours</p>
+
+    <h2>🛡 Purpose</h2>
+    <p>
+      This contact portal ensures secure communication with the ScamDetector development team.
+      All messages are reviewed manually and prioritized based on urgency and severity.
+    </p>
+
+    <div class="footer">
+      <a href="/">Home</a> • 
+      <a href="/terms">Terms</a> • 
+      <a href="/privacy">Privacy</a> •
+      <a href="/support">Support</a>
+
+      <div class="badge">ScamDetector™ — Official Contact Portal</div>
+    </div>
   </div>
 </body>
 </html>

@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <title>ScamDetector — Link, Text, Chat, QR Scanner</title>
 
-  <!-- ⭐ Google Analytics ⭐ -->
+  <!-- Google Analytics -->
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-5FRMK9NJM2"></script>
   <script>
     window.dataLayer = window.dataLayer || [];
@@ -19,42 +19,51 @@
 
 <body>
   <div class="app">
+
+    <!-- ================= HEADER ================= -->
     <header class="app-header">
       <h1>ScamDetector</h1>
-      <p class="subtitle">Instant scam detection for links, texts, chats, and QR codes.</p>
+      <p class="subtitle">
+        Advanced protection for links, messages, screenshots & emotional manipulation.
+      </p>
     </header>
 
+    <!-- ================= MAIN ================= -->
     <main class="app-main">
-      <section class="input-section">
 
-        <label class="input-label" for="content-input">Enter text, URL, or message:</label>
+      <section class="input-section">
+        <label class="input-label" for="content-input">
+          Paste suspicious content below:
+        </label>
 
         <textarea
           id="content-input"
-          placeholder="Paste a link, message, or chat transcript here..."
+          placeholder="Paste a link, message, chat transcript, or suspicious text here..."
           rows="6"
         ></textarea>
 
-        <!-- ================= MODES ================= -->
+        <!-- ===== MODES ===== -->
         <div class="mode-row">
-          <span>Mode:</span>
+          <span>Detection Mode:</span>
           <label><input type="radio" name="mode" value="auto" checked /> Auto</label>
           <label><input type="radio" name="mode" value="url" /> URL</label>
           <label><input type="radio" name="mode" value="text" /> Text</label>
-          <label><input type="radio" name="mode" value="chat" /> Chat AI Detector</label>
+          <label><input type="radio" name="mode" value="chat" /> AI Chat</label>
           <label><input type="radio" name="mode" value="manipulation" /> Manipulation</label>
           <label><input type="radio" name="mode" value="qr" /> QR Scan</label>
         </div>
 
-        <button id="analyze-btn">Analyze</button>
+        <button id="analyze-btn">Run Full Analysis</button>
 
-        <!-- ================= OCR + QR UPLOAD ================= -->
+        <!-- ===== OCR + QR INPUT ===== -->
         <div class="ocr-container">
-          <button id="ocr-btn" class="ocr-button">Upload Screenshot</button>
+          <button id="ocr-btn" class="ocr-button">
+            Upload Screenshot / QR Image
+          </button>
           <input type="file" id="ocr-file" accept="image/*" hidden />
 
           <div id="drop-zone" class="drop-zone">
-            Drag & Drop Screenshot or QR Image Here
+            Drag & Drop Screenshot or QR Code Here
           </div>
         </div>
 
@@ -63,9 +72,10 @@
 
       <!-- ================= RESULT ================= -->
       <section class="result-section" id="result-section" hidden>
-        <h2>Result</h2>
+        <h2>Analysis Result</h2>
 
         <div id="verdict-badge" class="verdict-badge">–</div>
+
         <p id="explanation" class="explanation"></p>
 
         <ul id="reasons-list" class="reasons-list"></ul>
@@ -73,20 +83,23 @@
 
     </main>
 
+    <!-- ================= FOOTER ================= -->
     <footer class="app-footer">
-      <p>Built for awareness & safety. Not financial advice.</p>
+      <p>Built for awareness & digital safety. Not financial or legal advice.</p>
 
       <div class="legal-links">
         <a href="/terms">Terms</a>
         <a href="/privacy">Privacy</a>
+        <a href="/support">Support</a>
       </div>
     </footer>
+
   </div>
 
-  <!-- OCR -->
+  <!-- OCR ENGINE -->
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 
-  <!-- APP SCRIPT -->
+  <!-- MAIN SCRIPT -->
   <script src="/static/script.js"></script>
 
 </body>
