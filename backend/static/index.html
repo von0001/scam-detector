@@ -2,105 +2,112 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>ScamDetector — Link, Text, Chat, QR Scanner</title>
-
-  <!-- Google Analytics -->
-  <script async src="https://www.googletagmanager.com/gtag/js?id=G-5FRMK9NJM2"></script>
-  <script>
-    window.dataLayer = window.dataLayer || [];
-    function gtag(){dataLayer.push(arguments);}
-    gtag('js', new Date());
-    gtag('config', 'G-5FRMK9NJM2');
-  </script>
-
+  <title>ScamDetector — Smart Scam & Manipulation Shield</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="stylesheet" href="/static/style.css" />
+
+  <style>
+    .how-it-works {
+      margin-top: 50px;
+      background: #0f172a;
+      border: 1px solid #1e293b;
+      padding: 30px;
+      border-radius: 16px;
+    }
+
+    .how-it-works h2 {
+      color: #38bdf8;
+      margin-bottom: 15px;
+    }
+
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 20px;
+      margin-top: 20px;
+    }
+
+    .step-card {
+      background: #020617;
+      border: 1px solid #1e293b;
+      padding: 20px;
+      border-radius: 12px;
+    }
+
+    .step-card h3 {
+      color: #c7d2fe;
+      margin-bottom: 8px;
+    }
+
+    .step-card p {
+      font-size: 14px;
+      color: #94a3b8;
+    }
+  </style>
 </head>
 
 <body>
-  <div class="app">
+<div class="app">
+  <header class="app-header">
+    <h1>ScamDetector</h1>
+    <p class="subtitle">Intelligent protection from scams, manipulation & digital deception.</p>
+  </header>
 
-    <!-- ================= HEADER ================= -->
-    <header class="app-header">
-      <h1>ScamDetector</h1>
-      <p class="subtitle">
-        Advanced protection for links, messages, screenshots & emotional manipulation.
-      </p>
-    </header>
+  <main class="app-main">
+    <section class="input-section">
+      <label class="input-label">Paste suspicious content below:</label>
+      <textarea id="content-input" placeholder="Links, messages, chats, screenshots..." rows="6"></textarea>
 
-    <!-- ================= MAIN ================= -->
-    <main class="app-main">
-
-      <section class="input-section">
-        <label class="input-label" for="content-input">
-          Paste suspicious content below:
-        </label>
-
-        <textarea
-          id="content-input"
-          placeholder="Paste a link, message, chat transcript, or suspicious text here..."
-          rows="6"
-        ></textarea>
-
-        <!-- ===== MODES ===== -->
-        <div class="mode-row">
-          <span>Detection Mode:</span>
-          <label><input type="radio" name="mode" value="auto" checked /> Auto</label>
-          <label><input type="radio" name="mode" value="url" /> URL</label>
-          <label><input type="radio" name="mode" value="text" /> Text</label>
-          <label><input type="radio" name="mode" value="chat" /> AI Chat</label>
-          <label><input type="radio" name="mode" value="manipulation" /> Manipulation</label>
-          <label><input type="radio" name="mode" value="qr" /> QR Scan</label>
-        </div>
-
-        <button id="analyze-btn">Run Full Analysis</button>
-
-        <!-- ===== OCR + QR INPUT ===== -->
-        <div class="ocr-container">
-          <button id="ocr-btn" class="ocr-button">
-            Upload Screenshot / QR Image
-          </button>
-          <input type="file" id="ocr-file" accept="image/*" hidden />
-
-          <div id="drop-zone" class="drop-zone">
-            Drag & Drop Screenshot or QR Code Here
-          </div>
-        </div>
-
-        <p id="status" class="status"></p>
-      </section>
-
-      <!-- ================= RESULT ================= -->
-      <section class="result-section" id="result-section" hidden>
-        <h2>Analysis Result</h2>
-
-        <div id="verdict-badge" class="verdict-badge">–</div>
-
-        <p id="explanation" class="explanation"></p>
-
-        <ul id="reasons-list" class="reasons-list"></ul>
-      </section>
-
-    </main>
-
-    <!-- ================= FOOTER ================= -->
-    <footer class="app-footer">
-      <p>Built for awareness & digital safety. Not financial or legal advice.</p>
-
-      <div class="legal-links">
-        <a href="/terms">Terms</a>
-        <a href="/privacy">Privacy</a>
-        <a href="/support">Support</a>
+      <div class="mode-row">
+        <span>Mode:</span>
+        <label><input type="radio" name="mode" value="auto" checked /> Auto</label>
+        <label><input type="radio" name="mode" value="url" /> URL</label>
+        <label><input type="radio" name="mode" value="text" /> Text</label>
+        <label><input type="radio" name="mode" value="chat" /> AI Chat</label>
+        <label><input type="radio" name="mode" value="manipulation" /> Manipulation</label>
+        <label><input type="radio" name="mode" value="qr" /> QR</label>
       </div>
-    </footer>
 
-  </div>
+      <button id="analyze-btn">Analyze</button>
+    </section>
 
-  <!-- OCR ENGINE -->
-  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <section class="how-it-works">
+      <h2>🔍 How ScamDetector Works</h2>
+      <p>Every scan goes through multiple intelligence layers for maximum accuracy.</p>
 
-  <!-- MAIN SCRIPT -->
-  <script src="/static/script.js"></script>
+      <div class="steps">
+        <div class="step-card">
+          <h3>1. Input Analysis</h3>
+          <p>Text, links, or QR images are broken down into structured components.</p>
+        </div>
 
+        <div class="step-card">
+          <h3>2. AI Threat Detection</h3>
+          <p>Advanced models analyze manipulation tactics and psychological threats.</p>
+        </div>
+
+        <div class="step-card">
+          <h3>3. Pattern Matching</h3>
+          <p>Compares against known scam behaviors & live logic filters.</p>
+        </div>
+
+        <div class="step-card">
+          <h3>4. Final Verdict</h3>
+          <p>Combines all signals into SAFE / SUSPICIOUS / DANGEROUS status.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="app-footer">
+    <div class="legal-links">
+      <a href="/">Home</a>
+      <a href="/terms">Terms</a>
+      <a href="/privacy">Privacy</a>
+      <a href="/contact">Contact</a>
+      <a href="/feedback">Feedback</a>
+    </div>
+  </footer>
+</div>
 </body>
 </html>
