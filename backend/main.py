@@ -27,7 +27,6 @@ from backend.utils.reason_cleaner import clean_reasons
 
 app = FastAPI()
 
-
 # ======================================================================
 #                                CORS
 # ======================================================================
@@ -127,6 +126,17 @@ def build_response(score: int, category: str, reasons, explanation: str):
         "explanation": explanation,
         "reasons": clean_reasons(reasons or []),
     }
+
+# ======================================================================
+#                        GOOGLE SEARCH CONSOLE VERIFY
+# ======================================================================
+from fastapi.responses import FileResponse
+import os
+
+@app.get("/google01a58a8eec834058.html")
+def google_verification():
+    file_path = os.path.join(os.path.dirname(__file__), "google01a58a8eec834058.html")
+    return FileResponse(file_path)
 
 
 # ======================================================================
