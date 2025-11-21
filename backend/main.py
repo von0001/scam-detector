@@ -302,6 +302,9 @@ def serve_terms():
 def serve_support():
     return FileResponse("backend/static/support.html")
 
+@app.get("/feedback")
+def feedback_page():
+    return FileResponse("backend/static/feedback.html")
 
 # ======================================================================
 #                                STATIC

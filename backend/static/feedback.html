@@ -1,66 +1,60 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>Feedback — ScamDetector</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta charset="UTF-8">
+<title>Feedback – ScamDetector</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="/static/style.css"/>
 
-  <style>
-    body {
-      background:#020617;
-      color:#e5e7eb;
-      font-family: system-ui;
-      display:flex;
-      justify-content:center;
-      padding:40px;
-    }
+<style>
+.feedback-container {
+  max-width: 700px;
+  margin: 50px auto;
+  background: #141a2c;
+  padding: 30px;
+  border-radius: 14px;
+}
 
-    .box {
-      background:#0f172a;
-      padding:30px;
-      border-radius:16px;
-      max-width:600px;
-      width:100%;
-      border:1px solid #1e293b;
-    }
+label { display:block;margin-top:15px;font-weight:600; }
+input, textarea {
+  width:100%;
+  margin-top:6px;
+  padding:10px;
+  background:#0f1424;
+  border:1px solid #272f4f;
+  color:white;
+  border-radius:8px;
+}
 
-    textarea, input {
-      width:100%;
-      margin-top:10px;
-      padding:12px;
-      background:#020617;
-      border:1px solid #1e293b;
-      border-radius:8px;
-      color:white;
-    }
-
-    button {
-      margin-top:15px;
-      padding:12px;
-      width:100%;
-      background:#2563eb;
-      color:white;
-      border:none;
-      border-radius:8px;
-      cursor:pointer;
-    }
-
-    button:hover {
-      background:#1d4ed8;
-    }
-  </style>
+button {
+  margin-top:20px;
+  width:100%;
+  padding:14px;
+  background:#4c7dff;
+  color:white;
+  border:none;
+  border-radius:999px;
+  font-size:1rem;
+  cursor:pointer;
+}
+</style>
 </head>
 
 <body>
-<div class="box">
-  <h2>Feedback Portal</h2>
-  <p>Submit ideas, bug reports, or feature suggestions.</p>
+<div class="feedback-container">
+<h1>Submit Feedback</h1>
+<p>Report issues, suggestions, or incorrect results.</p>
 
-  <form action="mailto:scamdetectorapp@gmail.com" method="POST" enctype="text/plain">
-    <input name="email" placeholder="Your Email (optional)" />
-    <textarea name="message" rows="6" placeholder="Your feedback..."></textarea>
-    <button type="submit">Send Feedback</button>
-  </form>
+<form action="mailto:scamdetectorapp@gmail.com" method="POST" enctype="text/plain">
+<label>Your Email</label>
+<input type="email" name="email" required>
+
+<label>Feedback Message</label>
+<textarea rows="6" name="message" required></textarea>
+
+<button type="submit">Send Feedback</button>
+</form>
+
 </div>
 </body>
 </html>
