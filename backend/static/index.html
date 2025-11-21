@@ -2,112 +2,158 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>ScamDetector — Smart Scam & Manipulation Shield</title>
+  <title>ScamDetector — Advanced Scam & Manipulation Scanner</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="stylesheet" href="/static/style.css" />
-
-  <style>
-    .how-it-works {
-      margin-top: 50px;
-      background: #0f172a;
-      border: 1px solid #1e293b;
-      padding: 30px;
-      border-radius: 16px;
-    }
-
-    .how-it-works h2 {
-      color: #38bdf8;
-      margin-bottom: 15px;
-    }
-
-    .steps {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 20px;
-      margin-top: 20px;
-    }
-
-    .step-card {
-      background: #020617;
-      border: 1px solid #1e293b;
-      padding: 20px;
-      border-radius: 12px;
-    }
-
-    .step-card h3 {
-      color: #c7d2fe;
-      margin-bottom: 8px;
-    }
-
-    .step-card p {
-      font-size: 14px;
-      color: #94a3b8;
-    }
-  </style>
 </head>
 
 <body>
-<div class="app">
-  <header class="app-header">
-    <h1>ScamDetector</h1>
-    <p class="subtitle">Intelligent protection from scams, manipulation & digital deception.</p>
-  </header>
+  <div class="app">
 
-  <main class="app-main">
+    <header class="app-header">
+      <h1>ScamDetector</h1>
+      <p class="subtitle">Smart protection against scams, manipulation, and digital threats.</p>
+    </header>
+
+    <!-- INPUT SECTION -->
     <section class="input-section">
-      <label class="input-label">Paste suspicious content below:</label>
-      <textarea id="content-input" placeholder="Links, messages, chats, screenshots..." rows="6"></textarea>
+      <label for="content-input">Paste suspicious text, link, or conversation:</label>
+
+      <textarea
+        id="content-input"
+        placeholder="Paste a link, DM, email, or suspicious message here..."
+        rows="6"></textarea>
 
       <div class="mode-row">
         <span>Mode:</span>
         <label><input type="radio" name="mode" value="auto" checked /> Auto</label>
         <label><input type="radio" name="mode" value="url" /> URL</label>
         <label><input type="radio" name="mode" value="text" /> Text</label>
-        <label><input type="radio" name="mode" value="chat" /> AI Chat</label>
+        <label><input type="radio" name="mode" value="chat" /> AI Detector</label>
         <label><input type="radio" name="mode" value="manipulation" /> Manipulation</label>
-        <label><input type="radio" name="mode" value="qr" /> QR</label>
+        <label><input type="radio" name="mode" value="qr" /> QR Code</label>
       </div>
 
-      <button id="analyze-btn">Analyze</button>
+      <button id="analyze-btn">Scan Now</button>
+
+      <div class="ocr-container">
+        <button id="ocr-btn" class="ocr-button">Upload Screenshot / QR</button>
+        <input type="file" id="ocr-file" accept="image/*" hidden />
+
+        <div id="drop-zone" class="drop-zone">
+          Drag & Drop image here
+        </div>
+      </div>
+
+      <p id="status" class="status"></p>
     </section>
 
+    <!-- RESULT -->
+    <section class="result-section" id="result-section" hidden>
+      <h2>Results</h2>
+      <div id="verdict-badge" class="verdict-badge">–</div>
+      <p id="explanation"></p>
+      <ul id="reasons-list" class="reasons-list"></ul>
+    </section>
+
+    <!-- HOW IT WORKS -->
     <section class="how-it-works">
-      <h2>🔍 How ScamDetector Works</h2>
-      <p>Every scan goes through multiple intelligence layers for maximum accuracy.</p>
+      <h2>How ScamDetector Works</h2>
+      <div class="works-grid">
 
-      <div class="steps">
-        <div class="step-card">
-          <h3>1. Input Analysis</h3>
-          <p>Text, links, or QR images are broken down into structured components.</p>
+        <div class="work-box">
+          <h3>1. Content Analysis</h3>
+          <p>
+            Your message is scanned using advanced pattern recognition and AI models
+            trained to detect known scam structures, emotional manipulation, and fraud triggers.
+          </p>
         </div>
 
-        <div class="step-card">
-          <h3>2. AI Threat Detection</h3>
-          <p>Advanced models analyze manipulation tactics and psychological threats.</p>
+        <div class="work-box">
+          <h3>2. Behavioral Detection</h3>
+          <p>
+            We analyze emotional pressure, urgency tactics, authority impersonation, &
+            psychological manipulation commonly used by scammers.
+          </p>
         </div>
 
-        <div class="step-card">
-          <h3>3. Pattern Matching</h3>
-          <p>Compares against known scam behaviors & live logic filters.</p>
+        <div class="work-box">
+          <h3>3. Risk Scoring</h3>
+          <p>
+            A real-time risk score is generated based on detected warning signs,
+            giving you a SAFE, SUSPICIOUS, or DANGEROUS verdict.
+          </p>
         </div>
 
-        <div class="step-card">
-          <h3>4. Final Verdict</h3>
-          <p>Combines all signals into SAFE / SUSPICIOUS / DANGEROUS status.</p>
+        <div class="work-box">
+          <h3>4. Smart Verdict</h3>
+          <p>
+            You receive a clear explanation and specific reasons so you
+            understand exactly why something may be risky.
+          </p>
         </div>
+
       </div>
     </section>
-  </main>
 
-  <footer class="app-footer">
-    <div class="legal-links">
-      <a href="/">Home</a>
-      <a href="/terms">Terms</a>
-      <a href="/privacy">Privacy</a>
-      <a href="/contact">Contact</a>
-      <a href="/feedback">Feedback</a>
-    </div>
-  </footer>
-</div>
+    <footer class="app-footer">
+      <p>Built for awareness & safety. Not financial or legal advice.</p>
+      <div class="legal-links">
+        <a href="/terms">Terms</a>
+        <a href="/privacy">Privacy</a>
+        <a href="/support">Support</a>
+        <a href="/feedback">Feedback</a>
+      </div>
+    </footer>
+
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <script src="/static/script.js"></script>
+
+  <style>
+    .how-it-works {
+      margin-top: 30px;
+      background: #0e1427;
+      padding: 20px;
+      border-radius: 14px;
+      border: 1px solid #1f2a50;
+    }
+
+    .how-it-works h2 {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    .works-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px,1fr));
+      gap: 16px;
+    }
+
+    .work-box {
+      background: #151c38;
+      padding: 15px;
+      border-radius: 12px;
+      border: 1px solid #2b3468;
+      transition: transform 0.2s;
+    }
+
+    .work-box:hover {
+      transform: translateY(-5px);
+    }
+
+    .work-box h3 {
+      margin-bottom: 8px;
+      color: #4c7dff;
+    }
+
+    .work-box p {
+      font-size: 0.9rem;
+      color: #c1c7ec;
+      line-height: 1.5;
+    }
+  </style>
+
 </body>
 </html>
