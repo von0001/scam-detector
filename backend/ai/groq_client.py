@@ -3,17 +3,23 @@
 from groq import Groq
 import os
 
-# Read key from env
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+_client = None
 
-client = Groq(api_key=GROQ_API_KEY)
+def get_client():
+    global _client
+    if _client is None:
+        key = os.getenv("GROQ_API_KEY")
+        if not key:
+            raise RuntimeError("GROQ_API_KEY is not set.")
+        _client = Groq(api_key=key)
+    return _client
 
 
 def groq_chat(messages, model="llama-3.1-70b-versatile"):
     """
-    Lightweight helper to call Groq chat completions.
-    Returns the text output only.
+    Safe Groq chat helper with lazy init.
     """
+    client = get_client()
     resp = client.chat.completions.create(
         model=model,
         messages=messages,
