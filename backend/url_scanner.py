@@ -1,5 +1,6 @@
+# backend/url_scanner.py
 # ---------------------------------------------------------
-# URL Scanner v4 — Von Hybrid Edition (Rules + AI)
+# URL Scanner v4 — Von Hybrid Edition (Rules + AI, Simple Language)
 # ---------------------------------------------------------
 
 import re
@@ -115,15 +116,15 @@ def detect_unicode_spoof(host: str, root: str) -> List[str]:
 
     # Unicode present
     if any(ord(c) > 127 for c in host):
-        reasons.append("Hostname contains Unicode characters.")
+        reasons.append("Website address uses unusual characters.")
 
     # Punycode check
     try:
         decoded = idna.decode(host)
         if decoded != host:
-            reasons.append("Punycode detected (possible Unicode spoof).")
+            reasons.append("Website address is written in a tricky encoded way.")
     except Exception:
-        reasons.append("Invalid IDNA encoding in hostname (spoof attempt).")
+        reasons.append("Website address looks broken or fake.")
 
     # Homoglyph mimic detection
     normalized = normalize_homoglyphs(host)
@@ -132,7 +133,9 @@ def detect_unicode_spoof(host: str, root: str) -> List[str]:
     for brand, legit_set in BRAND_KEYWORDS.items():
         for legit in legit_set:
             if normalized_root == normalize_homoglyphs(legit) and root != legit:
-                reasons.append(f"Unicode/homoglyph spoof detected: mimics '{legit}'.")
+                reasons.append(
+                    f"Website address tries to look like '{legit}' but is not the real one."
+                )
                 return reasons
 
     return reasons
@@ -143,17 +146,31 @@ def detect_unicode_spoof(host: str, root: str) -> List[str]:
 # ---------------------------------------------------------
 
 AI_SYSTEM = """
-You are a URL scam/phishing risk classifier.
+You are a link scam/scam-website risk classifier.
+
 You will receive:
-- The URL
-- Hostname and root domain
+- The link
+- The hostname and root website address
 - A numeric score from a rule-based engine (higher = more risky)
 - A list of rule-based reasons
 
 Your job:
-- Sanity-check the rule-based evaluation
-- Consider typical phishing patterns, brand impersonation, TLD risk, etc.
-- Output a verdict and a short explanation a regular user can understand.
+- Double-check the rule-based evaluation.
+- Decide if the link looks SAFE, SUSPICIOUS, or DANGEROUS.
+- Explain everything in VERY SIMPLE everyday words.
+
+Style rules:
+- Imagine you are talking to someone's grandma.
+- Use ONLY simple words.
+- Do NOT use technical terms like: "phishing", "domain", "TLD", "IP address",
+  "infrastructure", "vector", "credentials", "spoof", "URL".
+- Instead, say things like:
+  - "link" or "website address"
+  - "password or bank info"
+  - "scam message" or "scam link"
+  - "link that looks like a real company but is not"
+- Keep "explanation" as 1–2 short sentences.
+- In "extra_reasons", each item must be a short phrase that is easy to read.
 
 Respond ONLY with valid JSON in this EXACT shape:
 
@@ -191,16 +208,16 @@ def _ai_assess_url(
         reasons_bullets = "\n".join(f"- {r}" for r in reasons) or "- (no reasons)"
 
         user_prompt = f"""
-URL: {url}
+Link: {url}
 Hostname: {host}
-Root domain: {root}
+Root website: {root}
 Rule-based score: {score}
 Rule-based reasons:
 {reasons_bullets}
 
-Using this information, classify the URL risk.
+Using this information, classify the link risk.
 
-Remember: respond ONLY with JSON in the required shape.
+Remember: explain it in very simple words and respond ONLY with JSON.
 """
 
         raw = groq_chat(
@@ -258,7 +275,7 @@ def analyze_url(url_raw: str) -> Dict[str, object]:
     # Ensure scheme
     if not re.match(r"^[a-zA-Z][a-zA-Z0-9+\-.]*://", url_raw):
         url_raw = "http://" + url_raw
-        reasons.append("URL missing scheme — added http://")
+        reasons.append("Link was missing http/https, so we added it to check it.")
         score += 1
 
     parsed = urlparse(url_raw)
@@ -271,8 +288,8 @@ def analyze_url(url_raw: str) -> Dict[str, object]:
             "verdict": "DANGEROUS",
             "rule_verdict": "DANGEROUS",
             "ai_verdict": "Unknown",
-            "explanation": "The URL could not be parsed as a valid hostname.",
-            "reasons": ["Invalid or unparseable hostname."],
+            "explanation": "We could not read this link as a normal website address.",
+            "reasons": ["The website address looks invalid or broken."],
             "details": {
                 "url": url_raw,
                 "host": host,
@@ -296,16 +313,15 @@ def analyze_url(url_raw: str) -> Dict[str, object]:
     if root in HARD_TRUSTED_DOMAINS:
         ent = _entropy(parsed.path + parsed.query)
         if ent > 4.5:
-            reasons.append("High randomness in path (normal for trusted sites).")
+            reasons.append("The link path looks random, which is common on big trusted sites.")
 
-        # Even for trusted, we still compute verdict below (will be SAFE)
         rule_verdict = "SAFE"
         final = {
             "score": score,
             "verdict": rule_verdict,
             "rule_verdict": rule_verdict,
             "ai_verdict": "Unknown",
-            "explanation": "Recognized as a well-known trusted domain.",
+            "explanation": "This is a well-known trusted website.",
             "reasons": reasons,
             "details": {
                 "url": url_raw,
@@ -320,14 +336,14 @@ def analyze_url(url_raw: str) -> Dict[str, object]:
     # -------------------------
     if root in URL_SHORTENERS:
         score += 5
-        reasons.append("URL shortener used — high phishing risk.")
+        reasons.append("The link is shortened, which scammers often use to hide the real website.")
 
     # -------------------------
     # HTTPS
     # -------------------------
     if parsed.scheme != "https":
         score += 3
-        reasons.append("Not using HTTPS.")
+        reasons.append("The link does not use https, so it is less secure.")
 
     # -------------------------
     # Soft Trusted
@@ -335,16 +351,15 @@ def analyze_url(url_raw: str) -> Dict[str, object]:
     if root in SOFT_TRUSTED_DOMAINS:
         ent = _entropy(parsed.path + parsed.query)
         if ent > 5:
-            reasons.append("High randomness (normal for cloud storage URLs).")
+            reasons.append("The link path looks random, which is normal for stored files.")
 
-        # Cloud buckets = usually safe but opaque paths
         rule_verdict = "SUSPICIOUS" if score > 0 else "SAFE"
         return {
             "score": score,
             "verdict": rule_verdict,
             "rule_verdict": rule_verdict,
             "ai_verdict": "Unknown",
-            "explanation": "Cloud / storage provider URL; content depends on owner.",
+            "explanation": "This looks like a storage or cloud link. Safety depends on who sent it.",
             "reasons": reasons,
             "details": {
                 "url": url_raw,
@@ -358,7 +373,7 @@ def analyze_url(url_raw: str) -> Dict[str, object]:
     # -------------------------
     if _is_ip(host_lower):
         score += 6
-        reasons.append("Uses raw IP address — common in phishing.")
+        reasons.append("The link uses only numbers instead of a normal website name, which scammers often do.")
 
     # -------------------------
     # Suspicious TLD
@@ -366,21 +381,21 @@ def analyze_url(url_raw: str) -> Dict[str, object]:
     tld = root.split(".")[-1]
     if tld in SUSPICIOUS_TLDS:
         score += 8
-        reasons.append(f"Suspicious TLD '.{tld}' used heavily in scams.")
+        reasons.append(f"The website ends with '.{tld}', which is often used in scams.")
 
     # -------------------------
     # Subdomain Abuse
     # -------------------------
     if host_lower.count(".") > 3:
         score += 6
-        reasons.append("Deep subdomain chain — common in scam hosting.")
+        reasons.append("The website name has many dots, which is common on scam sites.")
 
     # -------------------------
     # Hyphen overload
     # -------------------------
     if host_lower.count("-") >= 3:
         score += 5
-        reasons.append("Excessive hyphens used to mimic legit domains.")
+        reasons.append("The website name has many dashes, often used to copy real brands.")
 
     # -------------------------
     # Entropy
@@ -390,10 +405,10 @@ def analyze_url(url_raw: str) -> Dict[str, object]:
         ent = _entropy(combo)
         if len(combo) > 80 and ent > 4.5:
             score += 3
-            reasons.append("Long, random-looking URL path.")
+            reasons.append("The link after the main website is very long and looks random.")
         elif ent > 5:
             score += 1
-            reasons.append("Some randomness in URL.")
+            reasons.append("The link includes random-looking characters.")
 
     # -------------------------
     # Suspicious Keywords
@@ -402,7 +417,9 @@ def analyze_url(url_raw: str) -> Dict[str, object]:
     for kw in SUSPICIOUS_KEYWORDS:
         if kw in lower_path:
             score += 6
-            reasons.append(f"Phishing keyword detected: '{kw}'.")
+            reasons.append(
+                f"The link talks about '{kw}', which scammers often use to steal accounts."
+            )
             break
 
     # -------------------------
@@ -412,7 +429,9 @@ def analyze_url(url_raw: str) -> Dict[str, object]:
         if brand in host_lower:
             if root not in legit_domains:
                 score += 10
-                reasons.append(f"Brand impersonation attempt: '{brand}'.")
+                reasons.append(
+                    f"The website name tries to look like {brand} but is not the real site."
+                )
             break
 
     # -------------------------
@@ -420,11 +439,10 @@ def analyze_url(url_raw: str) -> Dict[str, object]:
     # -------------------------
     if len(url_raw) > 150:
         score += 2
-        reasons.append("URL extremely long.")
+        reasons.append("The link is extremely long, which is common in scam links.")
 
     # -------------------------
     # RULE-BASED VERDICT
-    # (same style as your text scanner: 0 = SAFE, 1–5 = SUSPICIOUS, 6+ = DANGEROUS)
     # -------------------------
     if score == 0:
         rule_verdict = "SAFE"
@@ -443,7 +461,7 @@ def analyze_url(url_raw: str) -> Dict[str, object]:
         ai_explanation = ai_data.get("explanation", "").strip()
         extra_reasons = ai_data.get("extra_reasons", [])
 
-        # Merge reasons (tag AI reasons so it's clear)
+        # Merge reasons (tag AI reasons so it's clear if you ever inspect raw JSON)
         for r in extra_reasons:
             reasons.append(f"AI: {r}")
 
@@ -459,11 +477,11 @@ def analyze_url(url_raw: str) -> Dict[str, object]:
             explanation = ai_explanation
         else:
             if final_verdict == "SAFE":
-                explanation = "No major phishing or scam patterns detected."
+                explanation = "We did not see clear signs that this link is a scam."
             elif final_verdict == "SUSPICIOUS":
-                explanation = "Some potential scam indicators are present in this URL."
+                explanation = "This link has some warning signs and could be a scam."
             else:
-                explanation = "Strong indicators of phishing or scam activity in this URL."
+                explanation = "This link has strong signs of being a scam or fake website."
 
         return {
             "score": score,
@@ -483,11 +501,11 @@ def analyze_url(url_raw: str) -> Dict[str, object]:
     # NO AI (fallback to rules only)
     # -------------------------
     if rule_verdict == "SAFE":
-        explanation = "No major phishing or scam patterns detected."
+        explanation = "We did not see clear signs that this link is a scam."
     elif rule_verdict == "SUSPICIOUS":
-        explanation = "Some potential scam indicators are present in this URL."
+        explanation = "This link has some warning signs and could be a scam."
     else:
-        explanation = "Strong indicators of phishing or scam activity in this URL."
+        explanation = "This link has strong signs of being a scam or fake website."
 
     return {
         "score": score,
