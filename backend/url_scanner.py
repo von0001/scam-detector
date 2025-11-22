@@ -1,14 +1,17 @@
 # ---------------------------------------------------------
-# URL Scanner v3 — Von Edition (Full Rewrite)
+# URL Scanner v4 — Von Hybrid Edition (Rules + AI)
 # ---------------------------------------------------------
 
 import re
 import math
+import json
 import idna
 import tldextract
 import unicodedata
 from urllib.parse import urlparse
-from typing import Dict, List
+from typing import Dict, List, Any
+
+from .ai.groq_client import groq_chat  # uses your existing Groq helper
 
 
 # ---------------------------------------------------------
@@ -87,7 +90,7 @@ def normalize_homoglyphs(text: str) -> str:
 
 def _entropy(s: str) -> float:
     if not s:
-        return 0
+        return 0.0
     freq = [s.count(c) / len(s) for c in set(s)]
     return -sum(p * math.log2(p) for p in freq)
 
@@ -108,7 +111,7 @@ def extract_root(url: str) -> str:
 # ---------------------------------------------------------
 
 def detect_unicode_spoof(host: str, root: str) -> List[str]:
-    reasons = []
+    reasons: List[str] = []
 
     # Unicode present
     if any(ord(c) > 127 for c in host):
@@ -136,11 +139,118 @@ def detect_unicode_spoof(host: str, root: str) -> List[str]:
 
 
 # ---------------------------------------------------------
-# MAIN SCANNER ENGINE
+# AI HELPER (HYBRID LAYER)
+# ---------------------------------------------------------
+
+AI_SYSTEM = """
+You are a URL scam/phishing risk classifier.
+You will receive:
+- The URL
+- Hostname and root domain
+- A numeric score from a rule-based engine (higher = more risky)
+- A list of rule-based reasons
+
+Your job:
+- Sanity-check the rule-based evaluation
+- Consider typical phishing patterns, brand impersonation, TLD risk, etc.
+- Output a verdict and a short explanation a regular user can understand.
+
+Respond ONLY with valid JSON in this EXACT shape:
+
+{
+  "ai_verdict": "SAFE" | "SUSPICIOUS" | "DANGEROUS",
+  "explanation": "short human explanation",
+  "extra_reasons": ["reason 1", "reason 2"]
+}
+"""
+
+
+def _extract_json_block(text: str) -> str | None:
+    """Extract the first JSON object from any AI output."""
+    match = re.search(r"\{[\s\S]*\}", text)
+    if match:
+        return match.group(0)
+    return None
+
+
+def _ai_assess_url(
+    url: str,
+    host: str,
+    root: str,
+    score: int,
+    reasons: List[str]
+) -> Dict[str, Any] | None:
+    """
+    Call Groq to get an AI verdict for the URL.
+
+    Returns:
+        dict with keys: ai_verdict, explanation, extra_reasons
+        or None if anything fails.
+    """
+    try:
+        reasons_bullets = "\n".join(f"- {r}" for r in reasons) or "- (no reasons)"
+
+        user_prompt = f"""
+URL: {url}
+Hostname: {host}
+Root domain: {root}
+Rule-based score: {score}
+Rule-based reasons:
+{reasons_bullets}
+
+Using this information, classify the URL risk.
+
+Remember: respond ONLY with JSON in the required shape.
+"""
+
+        raw = groq_chat(
+            [
+                {"role": "system", "content": AI_SYSTEM},
+                {"role": "user", "content": user_prompt},
+            ],
+            model="llama-3.3-70b-versatile",
+        )
+
+        json_text = _extract_json_block(raw)
+        if not json_text:
+            return None
+
+        data = json.loads(json_text)
+
+        if not isinstance(data, dict):
+            return None
+
+        # Basic normalization
+        ai_verdict = str(data.get("ai_verdict", "")).upper()
+        if ai_verdict not in {"SAFE", "SUSPICIOUS", "DANGEROUS"}:
+            ai_verdict = "UNKNOWN"
+
+        explanation = data.get("explanation") or ""
+        if not isinstance(explanation, str):
+            explanation = str(explanation)
+
+        extra_reasons = data.get("extra_reasons") or []
+        if not isinstance(extra_reasons, list):
+            extra_reasons = [str(extra_reasons)]
+        extra_reasons = [str(r).strip() for r in extra_reasons if str(r).strip()]
+
+        return {
+            "ai_verdict": ai_verdict,
+            "explanation": explanation.strip(),
+            "extra_reasons": extra_reasons,
+        }
+
+    except Exception:
+        # Fail silently; hybrid still works with rules only
+        return None
+
+
+# ---------------------------------------------------------
+# MAIN SCANNER ENGINE (RULES + AI HYBRID)
 # ---------------------------------------------------------
 
 def analyze_url(url_raw: str) -> Dict[str, object]:
-    reasons = []
+    reasons: List[str] = []
     score = 0
 
     url_raw = url_raw.strip()
@@ -156,7 +266,19 @@ def analyze_url(url_raw: str) -> Dict[str, object]:
     root = extract_root(url_raw)
 
     if not host:
-        return {"score": 10, "reasons": ["Invalid or unparseable hostname."]}
+        return {
+            "score": 10,
+            "verdict": "DANGEROUS",
+            "rule_verdict": "DANGEROUS",
+            "ai_verdict": "Unknown",
+            "explanation": "The URL could not be parsed as a valid hostname.",
+            "reasons": ["Invalid or unparseable hostname."],
+            "details": {
+                "url": url_raw,
+                "host": host,
+                "root": root,
+            },
+        }
 
     host_lower = host.lower()
 
@@ -169,13 +291,29 @@ def analyze_url(url_raw: str) -> Dict[str, object]:
         reasons.extend(unicode_hits)
 
     # -------------------------
-    # Trusted Domains
+    # Trusted Domains (hard)
     # -------------------------
     if root in HARD_TRUSTED_DOMAINS:
         ent = _entropy(parsed.path + parsed.query)
         if ent > 4.5:
             reasons.append("High randomness in path (normal for trusted sites).")
-        return {"score": score, "reasons": reasons}
+
+        # Even for trusted, we still compute verdict below (will be SAFE)
+        rule_verdict = "SAFE"
+        final = {
+            "score": score,
+            "verdict": rule_verdict,
+            "rule_verdict": rule_verdict,
+            "ai_verdict": "Unknown",
+            "explanation": "Recognized as a well-known trusted domain.",
+            "reasons": reasons,
+            "details": {
+                "url": url_raw,
+                "host": host,
+                "root": root,
+            },
+        }
+        return final
 
     # -------------------------
     # Shorteners
@@ -198,7 +336,22 @@ def analyze_url(url_raw: str) -> Dict[str, object]:
         ent = _entropy(parsed.path + parsed.query)
         if ent > 5:
             reasons.append("High randomness (normal for cloud storage URLs).")
-        return {"score": score, "reasons": reasons}
+
+        # Cloud buckets = usually safe but opaque paths
+        rule_verdict = "SUSPICIOUS" if score > 0 else "SAFE"
+        return {
+            "score": score,
+            "verdict": rule_verdict,
+            "rule_verdict": rule_verdict,
+            "ai_verdict": "Unknown",
+            "explanation": "Cloud / storage provider URL; content depends on owner.",
+            "reasons": reasons,
+            "details": {
+                "url": url_raw,
+                "host": host,
+                "root": root,
+            },
+        }
 
     # -------------------------
     # IP Address
@@ -269,4 +422,83 @@ def analyze_url(url_raw: str) -> Dict[str, object]:
         score += 2
         reasons.append("URL extremely long.")
 
-    return {"score": score, "reasons": reasons}
+    # -------------------------
+    # RULE-BASED VERDICT
+    # (same style as your text scanner: 0 = SAFE, 1–5 = SUSPICIOUS, 6+ = DANGEROUS)
+    # -------------------------
+    if score == 0:
+        rule_verdict = "SAFE"
+    elif score <= 5:
+        rule_verdict = "SUSPICIOUS"
+    else:
+        rule_verdict = "DANGEROUS"
+
+    # -------------------------
+    # AI HYBRID LAYER
+    # -------------------------
+    ai_data = _ai_assess_url(url_raw, host, root, score, reasons)
+
+    if ai_data is not None:
+        ai_verdict = ai_data.get("ai_verdict", "UNKNOWN")
+        ai_explanation = ai_data.get("explanation", "").strip()
+        extra_reasons = ai_data.get("extra_reasons", [])
+
+        # Merge reasons (tag AI reasons so it's clear)
+        for r in extra_reasons:
+            reasons.append(f"AI: {r}")
+
+        # Combine verdicts — choose the more severe of rule vs AI
+        severity_rank = {"SAFE": 0, "SUSPICIOUS": 1, "DANGEROUS": 2}
+        rule_lvl = severity_rank.get(rule_verdict, 0)
+        ai_lvl = severity_rank.get(ai_verdict, rule_lvl)
+        final_lvl = max(rule_lvl, ai_lvl)
+
+        final_verdict = {v: k for k, v in severity_rank.items()}[final_lvl]
+
+        if ai_explanation:
+            explanation = ai_explanation
+        else:
+            if final_verdict == "SAFE":
+                explanation = "No major phishing or scam patterns detected."
+            elif final_verdict == "SUSPICIOUS":
+                explanation = "Some potential scam indicators are present in this URL."
+            else:
+                explanation = "Strong indicators of phishing or scam activity in this URL."
+
+        return {
+            "score": score,
+            "verdict": final_verdict,
+            "rule_verdict": rule_verdict,
+            "ai_verdict": ai_verdict,
+            "explanation": explanation,
+            "reasons": reasons,
+            "details": {
+                "url": url_raw,
+                "host": host,
+                "root": root,
+            },
+        }
+
+    # -------------------------
+    # NO AI (fallback to rules only)
+    # -------------------------
+    if rule_verdict == "SAFE":
+        explanation = "No major phishing or scam patterns detected."
+    elif rule_verdict == "SUSPICIOUS":
+        explanation = "Some potential scam indicators are present in this URL."
+    else:
+        explanation = "Strong indicators of phishing or scam activity in this URL."
+
+    return {
+        "score": score,
+        "verdict": rule_verdict,
+        "rule_verdict": rule_verdict,
+        "ai_verdict": "Unknown",
+        "explanation": explanation,
+        "reasons": reasons,
+        "details": {
+            "url": url_raw,
+            "host": host,
+            "root": root,
+        },
+    }

@@ -2,13 +2,14 @@
 
 import os
 import base64
+import re
 from fastapi import FastAPI, UploadFile, File, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+
 from backend.analytics.feedback import add_feedback, load_feedback
-from fastapi import Request
 
 from .text_scanner import analyze_text
 from .url_scanner import analyze_url
@@ -23,6 +24,7 @@ from backend.analytics.analytics import record_event, get_analytics
 from backend.auth import verify_password, create_session, verify_session, COOKIE_NAME
 
 from backend.utils.reason_cleaner import clean_reasons
+from backend.models import AnalyzeRequest  # use shared model
 
 
 app = FastAPI()
@@ -101,38 +103,75 @@ async def qr(image: UploadFile = File(...)):
 
 
 # ======================================================================
-#                          UNIFIED ANALYZE REQUEST
-# ======================================================================
-class AnalyzeRequest(BaseModel):
-    content: str
-    mode: str = "auto"
-
-
-# ======================================================================
 #                         STANDARDIZED RESPONSE BUILDER
 # ======================================================================
-def build_response(score: int, category: str, reasons, explanation: str):
-    if score >= 70:
-        verdict = "DANGEROUS"
-    elif score >= 30:
-        verdict = "SUSPICIOUS"
-    else:
-        verdict = "SAFE"
 
-    return {
-        "score": score,
+def _normalize_score(raw_score) -> int:
+    """
+    Normalize scores so UI stays consistent.
+
+    - If score <= 10, treat it as a 0–10 risk index and scale to 0–100.
+    - If score > 10, assume it's already on a larger scale (URL rules),
+      just clamp to [0, 100].
+    """
+    try:
+        s = float(raw_score)
+    except (TypeError, ValueError):
+        return 0
+
+    if s <= 10:
+        s = s * 10.0
+
+    if s < 0:
+        s = 0.0
+    if s > 100:
+        s = 100.0
+
+    return int(round(s))
+
+
+def build_response(
+    score: int,
+    category: str,
+    reasons,
+    explanation: str | None = None,
+    verdict: str | None = None,
+    details: dict | None = None,
+):
+    """
+    Shared response builder.
+
+    - Uses AI/model verdict if provided.
+    - Otherwise, falls back to 30/70 score thresholds.
+    """
+    if verdict is None:
+        if score >= 70:
+            verdict = "DANGEROUS"
+        elif score >= 30:
+            verdict = "SUSPICIOUS"
+        else:
+            verdict = "SAFE"
+
+    if explanation is None:
+        explanation = "Scam analysis."
+
+    resp = {
+        "score": int(score),
         "verdict": verdict,
         "category": category,
         "explanation": explanation,
         "reasons": clean_reasons(reasons or []),
     }
 
+    if details is not None:
+        resp["details"] = details
+
+    return resp
+
+
 # ======================================================================
 #                        GOOGLE SEARCH CONSOLE VERIFY
 # ======================================================================
-from fastapi.responses import FileResponse
-import os
-
 @app.get("/google01a58a8eec834058.html")
 def google_verification():
     file_path = os.path.join(os.path.dirname(__file__), "google01a58a8eec834058.html")
@@ -145,6 +184,10 @@ def google_verification():
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+# URL-like detector for AUTO mode
+URL_LIKE_RE = re.compile(r"^(https?://|www\.)\S+$", re.IGNORECASE)
 
 
 # ======================================================================
@@ -163,7 +206,7 @@ def analyze(req: AnalyzeRequest):
     if mode == "qr":
         return JSONResponse(
             {"error": "QR mode requires uploading an image to /qr"},
-            status_code=400
+            status_code=400,
         )
 
     # ===============================================================
@@ -214,29 +257,54 @@ def analyze(req: AnalyzeRequest):
         }
 
     # ===============================================================
-    #              TEXT ANALYSIS (AUTO if not URL)
+    #            AUTO DETECTION: URL vs TEXT (SMARTER)
     # ===============================================================
-    is_url = content.startswith("http")
+    # "URL-like" if the whole content looks like a URL.
+    is_url_like = bool(URL_LIKE_RE.match(content))
 
-    if mode == "text" or (mode == "auto" and not is_url):
-        raw = analyze_text(content)
+    # ===============================================================
+    #              TEXT ANALYSIS (AUTO if not URL-like)
+    # ===============================================================
+    if mode == "text" or (mode == "auto" and not is_url_like):
+        raw = analyze_text(content) or {}
+        base_score = raw.get("score", 0)
+        score = _normalize_score(base_score)
+
+        verdict = raw.get("verdict")
+        explanation = raw.get("explanation") or "Scam text analysis."
+        reasons = raw.get("reasons", [])
+        details = raw.get("details", {})
+
         return build_response(
-            score=raw["score"],
+            score=score,
             category="text",
-            reasons=raw.get("reasons", []),
-            explanation="Scam text analysis.",
+            reasons=reasons,
+            explanation=explanation,
+            verdict=verdict,
+            details=details,
         )
 
     # ===============================================================
-    #                 URL ANALYSIS (AUTO if URL)
+    #                 URL ANALYSIS (AUTO if URL-like)
     # ===============================================================
-    if mode == "url" or is_url:
-        raw = analyze_url(content)
+    if mode == "url" or (mode == "auto" and is_url_like):
+        raw = analyze_url(content) or {}
+        base_score = raw.get("score", 0)
+        score = _normalize_score(base_score)
+
+        verdict = raw.get("verdict")
+        explanation = raw.get("explanation") or "URL risk analysis."
+        reasons = raw.get("reasons", [])
+        # Hybrid URL scanner usually returns structured details
+        details = raw.get("details", raw)
+
         return build_response(
-            score=raw["score"],
+            score=score,
             category="url",
-            reasons=raw.get("reasons", []),
-            explanation="URL risk analysis.",
+            reasons=reasons,
+            explanation=explanation,
+            verdict=verdict,
+            details=details,
         )
 
     # ===============================================================
@@ -278,6 +346,7 @@ def login(req: LoginRequest):
 
     return JSONResponse({"error": "Invalid password"}, status_code=401)
 
+
 @app.post("/api/feedback")
 async def submit_feedback(request: Request):
     body = await request.json()
@@ -291,10 +360,10 @@ async def submit_feedback(request: Request):
         message=message,
         page=page,
         ip=request.client.host,
-        user_agent=request.headers.get("user-agent", "unknown")
+        user_agent=request.headers.get("user-agent", "unknown"),
     )
 
-    return {"success": True}\
+    return {"success": True}
 
 
 # ======================================================================
@@ -309,9 +378,11 @@ def serve_admin():
 def analytics_admin():
     return get_analytics()
 
+
 @app.get("/admin/feedback")
 def get_feedback():
     return load_feedback()
+
 
 # ======================================================================
 #                           FRONTEND ROUTES
@@ -335,9 +406,11 @@ def serve_terms():
 def serve_support():
     return FileResponse("backend/static/support.html")
 
+
 @app.get("/feedback")
 def feedback_page():
     return FileResponse("backend/static/feedback.html")
+
 
 # ======================================================================
 #                                STATIC
