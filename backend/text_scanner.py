@@ -68,7 +68,7 @@ Very important style rules:
   - "website address" instead of "domain" or "URL"
   - "password or bank info" instead of "credentials"
   - "link that looks like the real bank but is not" instead of "spoofed domain"
-- Keep the explanation 1–2 SHORT sentences.
+- Keep the explanation 1-2 SHORT sentences.
 - In "reasons", each item must:
   - be one short phrase,
   - use simple language,
@@ -80,8 +80,8 @@ You MUST respond ONLY with a valid JSON object using this EXACT schema:
 {
   "score": number,              // 0 to 10, higher = more dangerous
   "verdict": "SAFE" | "SUSPICIOUS" | "DANGEROUS",
-  "explanation": string,        // 1–2 sentence summary in simple words
-  "reasons": [string]           // bullet-point style reasons (3–8 items ideal)
+  "explanation": string,        // 1-2 sentence summary in simple words
+  "reasons": [string]           // bullet-point style reasons (3-8 items ideal)
 }
 
 Guidelines:
@@ -115,6 +115,72 @@ def _extract_json_block(text: str) -> str | None:
 
 
 # ---------------------------------------------------------------------
+# 2b. RULE-BASED FALLBACK (no network)
+# ---------------------------------------------------------------------
+
+_PATTERNS = [
+    (r"\burgent\b|\burgently\b|\bimmediately\b", "Creates urgency or pressure.", 2),
+    (r"\bverify\b|\bconfirm\b|\breset\b", "Asks you to verify or reset something.", 2),
+    (r"\bpassword\b|\blogin\b|\bcredential", "Requests your password or login info.", 3),
+    (r"\bwire\b|\btransfer\b|\bgift card\b", "Pushes money transfer or gift cards.", 3),
+    (r"\bbank\b|\baccount\b|\bsecurity\b", "Mentions bank or account security.", 1),
+    (r"\bprize\b|\blottery\b|\bwinner\b", "Promises a prize or winnings.", 2),
+    (r"\bcrypto\b|\bbitcoin\b|\beth\b", "References crypto for payment.", 2),
+    (r"click\s+here|tinyurl|bit\.ly|shorturl", "Uses shortened or vague links.", 2),
+]
+
+
+def _rule_based(text: str, urls: List[str], emojis: List[str]) -> Dict[str, Any]:
+    """
+    Offline heuristic fallback so scans keep working if AI is unavailable.
+    """
+    score = 0
+    reasons: List[str] = []
+    lowered = text.lower()
+
+    if urls:
+        score += 1
+        reasons.append("Includes a link that should be treated carefully.")
+
+    if len(emojis) > 3:
+        score += 1
+        reasons.append("Uses a lot of emojis to get attention.")
+
+    for pattern, reason, weight in _PATTERNS:
+        if re.search(pattern, lowered):
+            score += weight
+            if reason not in reasons:
+                reasons.append(reason)
+
+    score = min(max(score, 0), 10)
+    if score >= 7:
+        verdict = "DANGEROUS"
+        explanation = "This message has strong signs of a scam."
+    elif score >= 3:
+        verdict = "SUSPICIOUS"
+        explanation = "This message shows some warning signs. Be careful."
+    else:
+        verdict = "SAFE"
+        explanation = "No clear scam signs found by our offline checks."
+
+    if not reasons:
+        reasons.append("No major red flags detected by offline checks.")
+
+    return {
+        "score": score,
+        "verdict": verdict,
+        "explanation": explanation,
+        "reasons": reasons,
+        "details": {
+            "text_length": len(text),
+            "links_detected": urls,
+            "emoji_count": len(emojis),
+            "mode": "fallback",
+        },
+    }
+
+
+# ---------------------------------------------------------------------
 # 3. MAIN PUBLIC FUNCTION
 # ---------------------------------------------------------------------
 
@@ -123,7 +189,7 @@ def analyze_text(text: str) -> Dict[str, Any]:
     Main AI-based text scanner.
 
     Returns a dict with:
-      - score (0–10 by design, but kept generic)
+      - score (0-10 by design, but kept generic)
       - verdict ("SAFE" | "SUSPICIOUS" | "DANGEROUS")
       - explanation (short, user-facing)
       - reasons (list of strings)
@@ -196,7 +262,7 @@ Remember: respond ONLY with JSON matching the schema described earlier.
         except (TypeError, ValueError):
             score = 0.0
 
-        # Clamp to 0–10 just to keep it sane
+        # Clamp to 0-10 just to keep it sane
         if score < 0:
             score = 0.0
         if score > 10:
@@ -244,20 +310,6 @@ Remember: respond ONLY with JSON matching the schema described earlier.
             },
         }
 
-    except Exception as e:
-        # 🚨 Fail-safe: never crash the app – fall back to conservative "SUSPICIOUS"
-        # but explain it's a system issue, not the user's fault.
-        return {
-            "score": 0,
-            "verdict": "SUSPICIOUS",
-            "explanation": "We could not finish the scan because of a system problem.",
-            "reasons": [
-                "The AI engine hit an error (network, key, or model issue).",
-                f"Internal error: {type(e).__name__}.",
-            ],
-            "details": {
-                "text_length": len(t),
-                "links_detected": urls,
-                "emoji_count": len(emojis),
-            },
-        }
+    except Exception:
+        # Offline fallback: never expose internal errors to the user.
+        return _rule_based(t, urls, emojis)
