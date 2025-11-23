@@ -28,7 +28,8 @@ def _ensure_files():
 
 def _load_users() -> List[Dict[str, Any]]:
     _ensure_files()
-    return json.loads(USERS_FILE.read_text() or "[]")
+    raw = USERS_FILE.read_text() or "[]"
+    return json.loads(raw)
 
 
 def _save_users(users: List[Dict[str, Any]]) -> None:
@@ -37,7 +38,8 @@ def _save_users(users: List[Dict[str, Any]]) -> None:
 
 def _load_logs() -> List[Dict[str, Any]]:
     _ensure_files()
-    return json.loads(SCAN_LOG_FILE.read_text() or "[]")
+    raw = SCAN_LOG_FILE.read_text() or "[]"
+    return json.loads(raw)
 
 
 def _save_logs(logs: List[Dict[str, Any]]) -> None:
@@ -48,7 +50,6 @@ def _save_logs(logs: List[Dict[str, Any]]) -> None:
 # Password hashing (PBKDF2-SHA256)
 # -------------------------------------------------------------------
 def _hash_password(password: str, salt: str) -> str:
-    # PBKDF2 with per-user salt; only the hash is stored
     dk = hashlib.pbkdf2_hmac(
         "sha256",
         password.encode("utf-8"),
@@ -59,24 +60,33 @@ def _hash_password(password: str, salt: str) -> str:
 
 
 def _strip_sensitive(user: Dict[str, Any]) -> Dict[str, Any]:
-    """Return user data safe to send to the frontend."""
     return {
         "id": user["id"],
         "email": user["email"],
         "plan": user.get("plan", "free"),
+        "auth_method": user.get("auth_method", "password"),
         "created_at": user.get("created_at"),
         "last_login": user.get("last_login"),
         "daily_scan_date": user.get("daily_scan_date", ""),
         "daily_scan_count": user.get("daily_scan_count", 0),
         "daily_limit": user.get("daily_limit", DEFAULT_FREE_DAILY_LIMIT),
-        "auth_method": user.get("auth_method", "password"),
     }
 
 
 # -------------------------------------------------------------------
-# User lookup helpers
+# User lookups
 # -------------------------------------------------------------------
-def _find_raw_by_email(users: List[Dict[str, Any]], email: str) -> Optional[Dict[str, Any]]:
+def find_user_by_email(email: str) -> Optional[Dict[str, Any]]:
+    users = _load_users()
+    email_lower = email.lower()
+    for u in users:
+        if u["email"].lower() == email_lower:
+            return _strip_sensitive(u)
+    return None
+
+
+def _find_user_record_by_email(email: str) -> Optional[Dict[str, Any]]:
+    users = _load_users()
     email_lower = email.lower()
     for u in users:
         if u["email"].lower() == email_lower:
@@ -84,30 +94,16 @@ def _find_raw_by_email(users: List[Dict[str, Any]], email: str) -> Optional[Dict
     return None
 
 
-def _find_raw_by_id(users: List[Dict[str, Any]], user_id: str) -> Optional[Dict[str, Any]]:
+def get_user_by_id(user_id: str) -> Optional[Dict[str, Any]]:
+    users = _load_users()
     for u in users:
         if u["id"] == user_id:
-            return u
+            return _strip_sensitive(u)
     return None
 
 
 # -------------------------------------------------------------------
-# Public lookup APIs
-# -------------------------------------------------------------------
-def find_user_by_email(email: str) -> Optional[Dict[str, Any]]:
-    users = _load_users()
-    u = _find_raw_by_email(users, email)
-    return _strip_sensitive(u) if u else None
-
-
-def get_user_by_id(user_id: str) -> Optional[Dict[str, Any]]:
-    users = _load_users()
-    u = _find_raw_by_id(users, user_id)
-    return _strip_sensitive(u) if u else None
-
-
-# -------------------------------------------------------------------
-# User creation (password)
+# User creation
 # -------------------------------------------------------------------
 def create_user(email: str, password: str) -> Dict[str, Any]:
     users = _load_users()
@@ -127,8 +123,7 @@ def create_user(email: str, password: str) -> Dict[str, Any]:
         "password_hash": pw_hash,
         "salt": salt,
         "plan": "free",
-        "auth_method": "password",
-        "google_sub": "",
+        "auth_method": "password",  # password | google | mixed
         "created_at": now,
         "last_login": now,
         "daily_scan_date": "",
@@ -141,44 +136,52 @@ def create_user(email: str, password: str) -> Dict[str, Any]:
     return _strip_sensitive(user)
 
 
-# -------------------------------------------------------------------
-# Google account support
-# -------------------------------------------------------------------
 def get_or_create_google_user(email: str, google_sub: str) -> Dict[str, Any]:
     """
-    Called when a verified Google ID token is received.
-    - If there's already a user with this email, attach Google as an auth method.
-    - Otherwise create a new free-plan account with Google login only.
+    Used by Google Sign-In.
+    If a user with this email exists:
+      - if they were password-only, mark as 'mixed'
+      - if they were google-only, reuse
+    Otherwise create a new google-only account.
     """
     users = _load_users()
-    now = int(time.time())
     email_lower = email.lower()
+    now = int(time.time())
 
-    existing = _find_raw_by_email(users, email_lower)
+    # First try to match by google_sub
+    for u in users:
+        if u.get("google_sub") == google_sub:
+            u["last_login"] = now
+            if not u.get("plan"):
+                u["plan"] = "free"
+            if not u.get("auth_method"):
+                u["auth_method"] = "google"
+            _save_users(users)
+            return _strip_sensitive(u)
 
-    if existing:
-        existing["last_login"] = now
-        existing["google_sub"] = google_sub
-        # Merge auth methods
-        prev = existing.get("auth_method", "password")
-        if prev != "google":
-            existing["auth_method"] = "mixed"
-        else:
-            existing["auth_method"] = "google"
-        if not existing.get("created_at"):
-            existing["created_at"] = now
-        if "daily_limit" not in existing:
-            existing["daily_limit"] = DEFAULT_FREE_DAILY_LIMIT
-        _save_users(users)
-        return _strip_sensitive(existing)
+    # Then by email
+    for u in users:
+        if u["email"].lower() == email_lower:
+            # Existing account: upgrade auth_method
+            method = u.get("auth_method") or "password"
+            if method == "password":
+                u["auth_method"] = "mixed"
+            else:
+                u["auth_method"] = method
+            u["google_sub"] = google_sub
+            u["last_login"] = now
+            if not u.get("plan"):
+                u["plan"] = "free"
+            if "daily_limit" not in u:
+                u["daily_limit"] = DEFAULT_FREE_DAILY_LIMIT
+            _save_users(users)
+            return _strip_sensitive(u)
 
-    # Brand new Google-only user
+    # Brand new google-only account
     user_id = secrets.token_hex(12)
     user = {
         "id": user_id,
         "email": email_lower,
-        "password_hash": "",
-        "salt": "",
         "plan": "free",
         "auth_method": "google",
         "google_sub": google_sub,
@@ -194,7 +197,7 @@ def get_or_create_google_user(email: str, google_sub: str) -> Dict[str, Any]:
 
 
 # -------------------------------------------------------------------
-# Password login
+# Credentials
 # -------------------------------------------------------------------
 def verify_user_credentials(email: str, password: str) -> Optional[Dict[str, Any]]:
     users = _load_users()
@@ -203,19 +206,23 @@ def verify_user_credentials(email: str, password: str) -> Optional[Dict[str, Any
     user_out: Optional[Dict[str, Any]] = None
 
     for u in users:
-        if u["email"].lower() == email_lower:
-            # If this is a Google-only account, reject password login
-            if u.get("auth_method") == "google" and not u.get("password_hash"):
-                return None
+        if u["email"].lower() != email_lower:
+            continue
 
-            candidate_hash = _hash_password(password, u.get("salt", ""))
-            if candidate_hash != u.get("password_hash", ""):
-                return None
+        salt = u.get("salt")
+        pw_hash = u.get("password_hash")
+        if not salt or not pw_hash:
+            # Google-only account has no local password
+            return None
 
-            u["last_login"] = int(time.time())
-            changed = True
-            user_out = _strip_sensitive(u)
-            break
+        candidate_hash = _hash_password(password, salt)
+        if candidate_hash != pw_hash:
+            return None
+
+        u["last_login"] = int(time.time())
+        changed = True
+        user_out = _strip_sensitive(u)
+        break
 
     if changed:
         _save_users(users)
@@ -223,9 +230,6 @@ def verify_user_credentials(email: str, password: str) -> Optional[Dict[str, Any
     return user_out
 
 
-# -------------------------------------------------------------------
-# Subscription / plan updates
-# -------------------------------------------------------------------
 def update_user_plan_by_email(email: str, plan: str) -> Optional[Dict[str, Any]]:
     users = _load_users()
     email_lower = email.lower()
@@ -254,7 +258,7 @@ def update_user_plan_by_email(email: str, plan: str) -> Optional[Dict[str, Any]]
 # -------------------------------------------------------------------
 def register_scan_attempt(user_id: str) -> Tuple[bool, int, int]:
     """
-    Increment today's scan counter for a logged-in user.
+    Increment today's scan counter.
 
     Returns (allowed, remaining, limit).
     For premium: remaining/limit = -1.
@@ -339,3 +343,67 @@ def get_scan_history_for_user(user_id: str, limit: int = 100) -> List[Dict[str, 
     user_logs = [l for l in logs if l.get("user_id") == user_id]
     user_logs.sort(key=lambda x: x["timestamp"], reverse=True)
     return user_logs[:limit]
+
+
+# -------------------------------------------------------------------
+# Account management (security / deletion)
+# -------------------------------------------------------------------
+def change_password(user_id: str, current_password: str, new_password: str) -> bool:
+    """
+    Change password for a user if current_password is correct.
+    Returns True on success, False on failure.
+    """
+    users = _load_users()
+    changed = False
+
+    for u in users:
+        if u["id"] != user_id:
+            continue
+
+        # google-only account has no password_hash
+        method = u.get("auth_method", "password")
+        if method == "google" and not u.get("password_hash"):
+            return False
+
+        salt = u.get("salt")
+        pw_hash = u.get("password_hash")
+        if not salt or not pw_hash:
+            return False
+
+        candidate_hash = _hash_password(current_password, salt)
+        if candidate_hash != pw_hash:
+            return False
+
+        new_salt = secrets.token_hex(16)
+        u["salt"] = new_salt
+        u["password_hash"] = _hash_password(new_password, new_salt)
+        u["auth_method"] = "password" if method == "password" else "mixed"
+        changed = True
+        break
+
+    if changed:
+        _save_users(users)
+    return changed
+
+
+def delete_user(user_id: str) -> bool:
+    """
+    Hard-delete user record and anonymize their scan logs.
+    """
+    users = _load_users()
+    new_users = [u for u in users if u["id"] != user_id]
+    if len(new_users) == len(users):
+        return False
+
+    _save_users(new_users)
+
+    logs = _load_logs()
+    touched = False
+    for log in logs:
+        if log.get("user_id") == user_id:
+            log["user_id"] = None
+            touched = True
+    if touched:
+        _save_logs(logs)
+
+    return True

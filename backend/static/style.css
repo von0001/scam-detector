@@ -128,6 +128,57 @@ body {
   color: #f9fafb;
 }
 
+/* Account dropdown */
+
+.account-menu {
+  position: absolute;
+  top: 56px;
+  right: 18px;
+  min-width: 220px;
+  border-radius: 16px;
+  background: rgba(15, 23, 42, 0.98);
+  border: 1px solid rgba(30, 64, 175, 0.9);
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.95),
+    0 0 0 1px rgba(15, 23, 42, 0.96);
+  padding: 8px 8px 10px;
+  z-index: 30;
+}
+
+.account-menu[hidden] {
+  display: none;
+}
+
+.account-menu-email {
+  padding: 8px 10px;
+  font-size: 0.8rem;
+  color: #e5e7eb;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.9);
+  border: 1px solid rgba(30, 64, 175, 0.75);
+  margin-bottom: 6px;
+}
+
+.account-menu-item {
+  width: 100%;
+  text-align: left;
+  padding: 7px 10px;
+  border-radius: 10px;
+  border: none;
+  background: transparent;
+  font-size: 0.8rem;
+  color: #cbd5f5;
+  cursor: pointer;
+}
+
+.account-menu-item:hover {
+  background: rgba(15, 23, 42, 0.9);
+}
+
+.account-menu-item-danger {
+  color: #fecaca;
+}
+
 /* =================== HERO LAYOUT =================== */
 
 .hero-layout {
@@ -401,6 +452,27 @@ body {
   opacity: 0.6;
   cursor: default;
   transform: none;
+}
+
+/* Secondary btn (account page) */
+
+.secondary-btn {
+  width: 100%;
+  margin-top: 10px;
+  padding: 9px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.5);
+  cursor: pointer;
+  background: rgba(15, 23, 42, 0.96);
+  color: #e5e7eb;
+  font-size: 0.8rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.secondary-btn:hover {
+  border-color: #60a5fa;
 }
 
 /* OCR */
@@ -706,6 +778,39 @@ body {
   color: #f9fafb;
 }
 
+.google-btn-container {
+  margin-bottom: 10px;
+}
+
+.auth-divider {
+  margin: 8px 0 10px;
+  font-size: 0.75rem;
+  text-align: center;
+  color: #64748b;
+}
+
+.auth-divider span {
+  position: relative;
+}
+
+.auth-divider span::before,
+.auth-divider span::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: 80px;
+  height: 1px;
+  background: rgba(51, 65, 85, 0.9);
+}
+
+.auth-divider span::before {
+  right: 110%;
+}
+
+.auth-divider span::after {
+  left: 110%;
+}
+
 .auth-form label {
   display: block;
   margin-top: 10px;
@@ -758,6 +863,129 @@ body {
   color: #bbf7d0;
 }
 
+/* =================== ACCOUNT PAGE =================== */
+
+.account-main {
+  margin-top: 34px;
+}
+
+.account-heading {
+  font-size: clamp(1.8rem, 3vw, 2.2rem);
+  margin-bottom: 6px;
+}
+
+.account-subtitle {
+  font-size: 0.96rem;
+  color: #9ca3af;
+  margin-bottom: 18px;
+  max-width: 540px;
+}
+
+.account-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1.4fr);
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.account-grid-bottom {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.6fr);
+  gap: 16px;
+  margin-top: 10px;
+}
+
+.account-card {
+  border-radius: 20px;
+  padding: 16px 16px 18px;
+  background: radial-gradient(circle at top left, #020617, #020617 60%, #020617);
+  border: 1px solid rgba(31, 41, 55, 0.95);
+  box-shadow: 0 22px 55px rgba(0, 0, 0, 0.9);
+}
+
+.account-card h2 {
+  margin-top: 0;
+  margin-bottom: 8px;
+  font-size: 1rem;
+}
+
+.account-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.84rem;
+  margin: 2px 0;
+}
+
+.account-label {
+  color: #9ca3af;
+}
+
+.account-value {
+  color: #e5e7eb;
+  font-weight: 500;
+  margin-left: 8px;
+}
+
+.account-hint {
+  margin-top: 8px;
+  font-size: 0.78rem;
+  color: #9ca3af;
+}
+
+.account-form label {
+  display: block;
+  margin-top: 8px;
+  font-size: 0.8rem;
+  color: #cbd5f5;
+}
+
+.account-form input {
+  width: 100%;
+  margin-top: 4px;
+  padding: 9px 10px;
+  border-radius: 10px;
+  border: 1px solid #1e293b;
+  background: #020617;
+  color: #e5e7eb;
+  font-size: 0.84rem;
+}
+
+.account-form input:focus {
+  border-color: #60a5fa;
+  outline: none;
+  box-shadow:
+    0 0 0 1px rgba(96, 165, 250, 0.6),
+    0 10px 30px rgba(15, 23, 42, 0.9);
+}
+
+.account-btn {
+  margin-top: 12px;
+  justify-content: center;
+}
+
+.account-card-danger {
+  border-color: rgba(248, 113, 113, 0.8);
+}
+
+.account-btn-danger {
+  border-color: rgba(248, 113, 113, 0.9);
+  color: #fecaca;
+}
+
+.account-status {
+  margin-top: 8px;
+  font-size: 0.78rem;
+  min-height: 16px;
+}
+
+.account-status-success {
+  color: #bbf7d0;
+}
+
+.account-status-danger {
+  color: #fecaca;
+}
+
 /* =================== RESPONSIVE =================== */
 
 @media (max-width: 900px) {
@@ -767,6 +995,11 @@ body {
 
   .scan-panel {
     margin-top: 16px;
+  }
+
+  .account-grid,
+  .account-grid-bottom {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
@@ -788,434 +1021,8 @@ body {
     margin: 0 14px;
     padding: 20px 18px 18px;
   }
-}
 
-/* =================== PRICING PAGE =================== */
-
-.pricing-page {
-  margin-top: 10px;
-}
-
-.pricing-header {
-  margin-bottom: 22px;
-}
-
-.pricing-status {
-  margin-top: 10px;
-  font-size: 0.8rem;
-  color: #93c5fd;
-  min-height: 18px;
-}
-
-.pricing-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 18px;
-}
-
-.pricing-card {
-  border-radius: 20px;
-  padding: 18px 16px 18px;
-  background: radial-gradient(circle at top left, #020617, #020617 60%, #020617);
-  border: 1px solid rgba(31, 41, 55, 0.9);
-  box-shadow: 0 24px 50px rgba(15, 23, 42, 0.9);
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-}
-
-.pricing-card-free {
-  opacity: 0.96;
-}
-
-.pricing-card-premium {
-  border-color: rgba(250, 204, 21, 0.8);
-  box-shadow:
-    0 0 0 1px rgba(250, 204, 21, 0.4),
-    0 26px 70px rgba(0, 0, 0, 1);
-}
-
-.pricing-card h2 {
-  margin: 6px 0 6px;
-  font-size: 1.02rem;
-}
-
-.pricing-subtitle {
-  font-size: 0.84rem;
-  color: #cbd5f5;
-  margin-bottom: 10px;
-}
-
-.pricing-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 4px 10px;
-  border-radius: 999px;
-  font-size: 0.72rem;
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-  border: 1px solid rgba(148, 163, 184, 0.8);
-  color: #e5e7eb;
-}
-
-.pricing-badge-premium {
-  border-color: rgba(250, 204, 21, 0.9);
-  color: #fef9c3;
-}
-
-.pricing-list {
-  list-style: none;
-  padding-left: 0;
-  margin: 10px 0 14px;
-  font-size: 0.8rem;
-  color: #cbd5f5;
-}
-
-.pricing-list li + li {
-  margin-top: 4px;
-}
-
-.pricing-footer {
-  border-top: 1px solid rgba(31, 41, 55, 0.9);
-  padding-top: 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.pricing-price {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-}
-
-.pricing-price-main {
-  font-size: 1.5rem;
-  font-weight: 600;
-}
-
-.pricing-price-main-small {
-  font-size: 1rem;
-  font-weight: 600;
-}
-
-.pricing-price-note {
-  font-size: 0.8rem;
-  color: #9ca3af;
-}
-
-.pricing-btn {
-  margin-top: 4px;
-}
-
-.pricing-alt {
-  margin-top: 4px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 0.8rem;
-  color: #e5e7eb;
-}
-
-.secondary-btn {
-  width: 100%;
-  padding: 9px 12px;
-  border-radius: 999px;
-  border: 1px solid rgba(148, 163, 184, 0.9);
-  background: rgba(15, 23, 42, 0.96);
-  color: #e5e7eb;
-  font-size: 0.8rem;
-  cursor: pointer;
-}
-
-.secondary-btn:hover {
-  background: rgba(30, 64, 175, 0.9);
-}
-
-/* =================== GOOGLE BUTTON & DIVIDER =================== */
-
-.google-btn {
-  width: 100%;
-  margin-bottom: 10px;
-  padding: 9px 12px;
-  border-radius: 999px;
-  border: 1px solid rgba(59, 130, 246, 0.7);
-  background: rgba(15, 23, 42, 0.96);
-  color: #e5e7eb;
-  font-size: 0.82rem;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-}
-
-.google-btn:hover {
-  background: linear-gradient(135deg, #1d4ed8, #38bdf8);
-  color: #f9fafb;
-}
-
-.auth-divider {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 0.78rem;
-  color: #6b7280;
-  margin: 8px 0 10px;
-}
-
-.auth-divider::before,
-.auth-divider::after {
-  content: "";
-  flex: 1;
-  height: 1px;
-  background: rgba(31, 41, 55, 0.9);
-}
-
-body {
-  min-height: 100vh;
-  background:
-    radial-gradient(circle at top left, #0b1020, #02040a 55%, #020617 100%);
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-    sans-serif;
-  color: #e5e7eb;
-  overflow-x: hidden; /* helps stop layout from stretching weirdly */
-}
-
-/* ===== Account dropdown ===== */
-
-.top-nav {
-  position: relative;
-}
-
-.account-menu {
-  position: absolute;
-  right: 0;
-  top: 38px;
-  min-width: 220px;
-  padding: 10px 10px 8px;
-  border-radius: 14px;
-  background: rgba(15, 23, 42, 0.98);
-  border: 1px solid rgba(31, 41, 55, 0.95);
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.9);
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  z-index: 35;
-}
-
-.account-menu[hidden] {
-  display: none;
-}
-
-.account-menu-email {
-  font-size: 0.78rem;
-  color: #9ca3af;
-  padding: 4px 6px 6px;
-  border-bottom: 1px solid rgba(31, 41, 55, 0.9);
-  word-break: break-all;
-}
-
-.account-menu-item {
-  background: rgba(15, 23, 42, 0.96);
-  border-radius: 999px;
-  border: 1px solid rgba(31, 41, 55, 0.9);
-  padding: 7px 10px;
-  font-size: 0.8rem;
-  text-align: left;
-  cursor: pointer;
-  color: #e5e7eb;
-}
-
-.account-menu-item:hover {
-  border-color: #60a5fa;
-}
-
-.account-menu-item-danger {
-  border-color: rgba(248, 113, 113, 0.8);
-  color: #fecaca;
-}
-
-/* ===== Premium mode pills visual lock ===== */
-
-.mode-pill[data-premium="true"] {
-  position: relative;
-}
-
-.mode-pill[data-premium="true"]::after {
-  content: "Premium";
-  font-size: 0.64rem;
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-  padding: 2px 6px;
-  border-radius: 999px;
-  background: rgba(15, 23, 42, 0.98);
-  border: 1px solid rgba(148, 163, 184, 0.6);
-  margin-left: 4px;
-}
-
-/* ===== Google button container ===== */
-
-.google-btn-container {
-  margin-top: 10px;
-  margin-bottom: 8px;
-}
-
-/* Divider in auth modal */
-.auth-divider {
-  margin: 8px 0 6px;
-  text-align: center;
-  font-size: 0.76rem;
-  color: #6b7280;
-  position: relative;
-}
-
-.auth-divider::before,
-.auth-divider::after {
-  content: "";
-  position: absolute;
-  top: 50%;
-  width: 40%;
-  height: 1px;
-  background: rgba(31, 41, 55, 0.9);
-}
-
-.auth-divider::before {
-  left: 0;
-}
-
-.auth-divider::after {
-  right: 0;
-}
-
-.auth-divider span {
-  padding: 0 8px;
-  background: radial-gradient(circle at top left, #020617, #020617 60%, #020617);
-}
-
-/* ===== Pricing page ===== */
-
-.pricing-main {
-  margin-top: 34px;
-}
-
-.pricing-heading {
-  font-size: clamp(1.8rem, 3vw, 2.2rem);
-  margin-bottom: 6px;
-}
-
-.pricing-subtitle {
-  font-size: 0.96rem;
-  color: #9ca3af;
-  margin-bottom: 20px;
-  max-width: 540px;
-}
-
-.pricing-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 16px;
-}
-
-.pricing-card {
-  border-radius: 20px;
-  padding: 16px 16px 18px;
-  background: radial-gradient(circle at top left, #020617, #020617 60%, #020617);
-  border: 1px solid rgba(31, 41, 55, 0.95);
-  box-shadow: 0 22px 55px rgba(0, 0, 0, 0.9);
-}
-
-.pricing-card-highlight {
-  border-color: rgba(37, 99, 235, 0.9);
-  box-shadow:
-    0 26px 70px rgba(37, 99, 235, 0.55),
-    0 0 0 1px rgba(59, 130, 246, 0.4);
-}
-
-.pricing-pill {
-  display: inline-block;
-  padding: 4px 10px;
-  border-radius: 999px;
-  font-size: 0.7rem;
-  text-transform: uppercase;
-  letter-spacing: 0.16em;
-  background: rgba(22, 101, 252, 0.18);
-  border: 1px solid rgba(59, 130, 246, 0.7);
-  color: #bfdbfe;
-  margin-bottom: 8px;
-}
-
-.pricing-tagline {
-  font-size: 0.86rem;
-  color: #9ca3af;
-  margin: 2px 0 8px;
-}
-
-.pricing-price {
-  font-size: 1.4rem;
-  font-weight: 600;
-  margin: 6px 0 4px;
-}
-
-.pricing-price span {
-  font-size: 0.86rem;
-  font-weight: 400;
-  color: #9ca3af;
-}
-
-.pricing-price-alt {
-  font-size: 0.86rem;
-  color: #93c5fd;
-  margin: 0 0 10px;
-}
-
-.pricing-list {
-  list-style: none;
-  padding-left: 0;
-  font-size: 0.8rem;
-  color: #cbd5f5;
-  margin: 0 0 12px;
-}
-
-.pricing-list li + li {
-  margin-top: 4px;
-}
-
-.pricing-primary-btn {
-  width: 100%;
-  justify-content: center;
-}
-
-.secondary-btn {
-  width: 100%;
-  margin-top: 8px;
-  padding: 10px 14px;
-  border-radius: 999px;
-  border: 1px solid rgba(148, 163, 184, 0.9);
-  background: rgba(15, 23, 42, 0.96);
-  color: #e5e7eb;
-  font-size: 0.8rem;
-  cursor: pointer;
-}
-
-.secondary-btn:hover {
-  border-color: #60a5fa;
-}
-
-.pricing-secondary-btn {
-  margin-bottom: 6px;
-}
-
-.pricing-note {
-  font-size: 0.76rem;
-  color: #9ca3af;
-  margin-top: 4px;
-}
-
-@media (max-width: 640px) {
   .account-menu {
-    right: 10px;
+    right: 14px;
   }
 }
-
-/* (keep your existing @media rules below) */

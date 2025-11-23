@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Account — ScamDetector</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="top-nav">
+      <div class="brand">
+        <div class="brand-mark">🛡</div>
+        <div class="brand-text">
+          <span class="brand-name">ScamDetector</span>
+          <span class="brand-tagline">Digital Safety Framework</span>
+        </div>
+      </div>
+
+      <nav class="nav-links" style="position: relative;">
+        <a href="/">Home</a>
+        <a href="/support">Support</a>
+        <a href="/privacy">Privacy</a>
+        <a href="/feedback">Feedback</a>
+        <button id="account-button" class="nav-pill nav-account">Sign In</button>
+
+        <div id="account-menu" class="account-menu" hidden>
+          <div class="account-menu-email" id="account-menu-email"></div>
+          <button type="button" id="account-manage-btn" class="account-menu-item">
+            Manage account
+          </button>
+          <button type="button" id="account-logout-btn" class="account-menu-item account-menu-item-danger">
+            Sign out
+          </button>
+        </div>
+      </nav>
+    </header>
+
+    <main class="account-main">
+      <h1 class="account-heading">Manage your account</h1>
+      <p class="account-subtitle">
+        Email, plan, security, data — everything in one place.
+      </p>
+
+      <div class="account-grid">
+        <!-- Overview -->
+        <section class="account-card">
+          <h2>Overview</h2>
+          <p class="account-meta">
+            <span class="account-label">Email</span>
+            <span id="overview-email" class="account-value">–</span>
+          </p>
+          <p class="account-meta">
+            <span class="account-label">Plan</span>
+            <span id="overview-plan" class="account-value">–</span>
+          </p>
+          <p class="account-meta">
+            <span class="account-label">Today’s usage</span>
+            <span id="overview-usage" class="account-value">–</span>
+          </p>
+          <p class="account-meta">
+            <span class="account-label">Sign-in method</span>
+            <span id="overview-auth" class="account-value">–</span>
+          </p>
+          <p class="account-hint">
+            Upgrade, downgrade, or cancel anytime from the billing section.
+          </p>
+          <button class="secondary-btn account-btn" id="account-billing-btn">
+            Manage billing / subscription
+          </button>
+        </section>
+
+        <!-- Security -->
+        <section class="account-card">
+          <h2>Security</h2>
+          <p class="account-hint" id="password-hint">
+            Change your password for email sign-in.
+          </p>
+
+          <form id="password-form" class="account-form">
+            <label for="password-current">Current password</label>
+            <input type="password" id="password-current" autocomplete="current-password" />
+
+            <label for="password-new">New password</label>
+            <input type="password" id="password-new" autocomplete="new-password" />
+
+            <label for="password-confirm">Confirm new password</label>
+            <input type="password" id="password-confirm" autocomplete="new-password" />
+
+            <button type="submit" class="primary-btn account-btn">
+              Update password
+            </button>
+          </form>
+          <p id="password-status" class="account-status"></p>
+        </section>
+      </div>
+
+      <div class="account-grid account-grid-bottom">
+        <!-- Data & history -->
+        <section class="account-card">
+          <h2>Data & history</h2>
+          <p class="account-hint">
+            Download a copy of your recent scan history as JSON.
+          </p>
+          <button class="secondary-btn account-btn" id="download-history-btn">
+            Download scan history
+          </button>
+          <p id="history-status" class="account-status"></p>
+        </section>
+
+        <!-- Danger zone -->
+        <section class="account-card account-card-danger">
+          <h2>Danger zone</h2>
+          <p class="account-hint">
+            Permanently delete your ScamDetector account. This logs you out and anonymizes your scan logs. This cannot be undone.
+          </p>
+
+          <form id="delete-form" class="account-form">
+            <label for="delete-password">Password (required for email accounts)</label>
+            <input type="password" id="delete-password" autocomplete="current-password" />
+
+            <label for="delete-confirm-text">Type <strong>DELETE</strong> to confirm</label>
+            <input type="text" id="delete-confirm-text" placeholder="DELETE" />
+
+            <button type="submit" class="secondary-btn account-btn account-btn-danger">
+              Delete my account
+            </button>
+          </form>
+          <p id="delete-status" class="account-status account-status-danger"></p>
+        </section>
+      </div>
+    </main>
+
+    <footer class="app-footer">
+      <p>Built to protect awareness, not to replace your judgment. Not financial or legal advice.</p>
+      <div class="legal-links">
+        <a href="/terms">Terms</a>
+        <a href="/privacy">Privacy</a>
+        <a href="/support">Support</a>
+        <a href="/feedback">Feedback</a>
+      </div>
+    </footer>
+
+    <!-- AUTH MODAL (same as home, reused so people can sign in) -->
+    <div id="auth-modal" class="auth-modal" hidden>
+      <div class="auth-card">
+        <button id="auth-close" class="auth-close" aria-label="Close">✕</button>
+
+        <div class="auth-header-pill">
+          <span>🛡</span>
+          <span>Account & Sync</span>
+        </div>
+
+        <h2 class="auth-title">Sign in to manage your account.</h2>
+        <p class="auth-subtitle">
+          One account across web, extension, and iOS. Manage your settings and subscription here.
+        </p>
+
+        <div class="auth-tabs">
+          <button type="button" id="auth-tab-login" class="auth-tab auth-tab-active" data-mode="login">
+            Sign In
+          </button>
+          <button type="button" id="auth-tab-signup" class="auth-tab" data-mode="signup">
+            Create Account
+          </button>
+        </div>
+
+        <div id="google-btn" class="google-btn-container" data-google-client-id="YOUR_GOOGLE_CLIENT_ID_HERE"></div>
+
+        <div class="auth-divider">
+          <span>or continue with email</span>
+        </div>
+
+        <form id="auth-form" class="auth-form">
+          <label for="auth-email">Email</label>
+          <input type="email" id="auth-email" required placeholder="you@example.com" />
+
+          <label for="auth-password">Password</label>
+          <input type="password" id="auth-password" required minlength="8" placeholder="Minimum 8 characters" />
+
+          <button type="submit" id="auth-submit" class="primary-btn auth-submit">
+            Continue
+          </button>
+        </form>
+
+        <p id="auth-hint" class="auth-hint">
+          No account yet? Switch to <strong>Create Account</strong> to start with the free tier.
+        </p>
+        <p id="auth-status" class="auth-status"></p>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script src="/static/script.js"></script>
+</body>
+</html>

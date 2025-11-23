@@ -1,8 +1,8 @@
-// SCRIPT.JS — AUTH + BILLING + QR + GOOGLE
+// SCRIPT.JS — FULL VERSION WITH AUTH + ACCOUNT + QR + GOOGLE
 
 const API_BASE_URL = "https://scamdetectorapp.com";
 
-// Core scan elements
+// Core scan elements (home page)
 const contentInput = document.getElementById("content-input");
 const analyzeBtn = document.getElementById("analyze-btn");
 const statusEl = document.getElementById("status");
@@ -17,14 +17,9 @@ const ocrBtn = document.getElementById("ocr-btn");
 const fileInput = document.getElementById("ocr-file");
 const dropZone = document.getElementById("drop-zone");
 
-// Auth / account elements
+// Auth / account elements (shared)
 const accountBtn = document.getElementById("account-button");
 const planPill = document.getElementById("plan-pill");
-
-const accountMenu = document.getElementById("account-menu");
-const accountMenuEmail = document.getElementById("account-menu-email");
-const accountLogoutBtn = document.getElementById("account-logout-btn");
-const accountManageBtn = document.getElementById("account-manage-btn");
 
 const authModal = document.getElementById("auth-modal");
 const authClose = document.getElementById("auth-close");
@@ -37,9 +32,34 @@ const authTabLogin = document.getElementById("auth-tab-login");
 const authTabSignup = document.getElementById("auth-tab-signup");
 const googleBtnContainer = document.getElementById("google-btn");
 
-const startFreeBtn = document.getElementById("start-free-btn");
-const upgradeMonthlyBtn = document.getElementById("upgrade-monthly");
-const upgradeYearlyBtn = document.getElementById("upgrade-yearly");
+// account dropdown
+const accountMenu = document.getElementById("account-menu");
+const accountMenuEmail = document.getElementById("account-menu-email");
+const accountManageBtn = document.getElementById("account-manage-btn");
+const accountLogoutBtn = document.getElementById("account-logout-btn");
+
+// Account page elements
+const overviewEmail = document.getElementById("overview-email");
+const overviewPlan = document.getElementById("overview-plan");
+const overviewUsage = document.getElementById("overview-usage");
+const overviewAuth = document.getElementById("overview-auth");
+
+const passwordForm = document.getElementById("password-form");
+const passwordCurrent = document.getElementById("password-current");
+const passwordNew = document.getElementById("password-new");
+const passwordConfirm = document.getElementById("password-confirm");
+const passwordStatus = document.getElementById("password-status");
+const passwordHint = document.getElementById("password-hint");
+
+const historyBtn = document.getElementById("download-history-btn");
+const historyStatus = document.getElementById("history-status");
+
+const deleteForm = document.getElementById("delete-form");
+const deletePassword = document.getElementById("delete-password");
+const deleteConfirmText = document.getElementById("delete-confirm-text");
+const deleteStatus = document.getElementById("delete-status");
+
+const accountBillingBtn = document.getElementById("account-billing-btn");
 
 let authMode = "login";
 let currentUser = null;
@@ -53,6 +73,7 @@ function getSelectedMode() {
 
 // Verdict color + label
 function setVerdictStyle(verdict) {
+  if (!verdictBadge) return;
   verdictBadge.classList.remove(
     "verdict-safe",
     "verdict-suspicious",
@@ -104,8 +125,14 @@ function closeAuthModal() {
   if (authModal) authModal.hidden = true;
 }
 
+function openAccountMenu() {
+  if (!accountMenu) return;
+  accountMenu.hidden = false;
+}
+
 function closeAccountMenu() {
-  if (accountMenu) accountMenu.hidden = true;
+  if (!accountMenu) return;
+  accountMenu.hidden = true;
 }
 
 function toggleAccountMenu() {
@@ -131,45 +158,76 @@ if (authClose) {
   });
 }
 
-// Close account menu when clicking outside
 document.addEventListener("click", (e) => {
-  if (!accountMenu || accountMenu.hidden) return;
+  if (!accountMenu || !accountBtn) return;
+  if (accountMenu.hidden) return;
   if (
-    accountBtn &&
-    (e.target === accountBtn || accountBtn.contains(e.target))
+    accountMenu.contains(e.target) ||
+    accountBtn.contains(e.target)
   ) {
     return;
   }
-  if (accountMenu.contains(e.target)) return;
   closeAccountMenu();
 });
 
-function updatePremiumModeLock() {
-  const premiumPills = document.querySelectorAll('.mode-pill[data-premium="true"]');
-  const plan = currentUser?.user?.plan ?? "guest";
+// ===================== OVERVIEW ======================
 
-  premiumPills.forEach((pill) => {
-    const input = pill.querySelector('input[type="radio"]');
-    if (!input) return;
-    if (plan === "premium") {
-      pill.classList.remove("mode-pill-locked");
-      input.disabled = false;
+function updateAccountOverview() {
+  if (!currentUser || !overviewEmail) return;
+
+  const u = currentUser.user;
+  overviewEmail.textContent = u.email;
+  overviewPlan.textContent = u.plan === "premium" ? "Premium" : "Free";
+
+  const used = u.daily_scan_count ?? 0;
+  const limit = u.daily_limit ?? 0;
+  overviewUsage.textContent =
+    u.plan === "premium" ? "Unlimited today" : `${used} / ${limit} scans today`;
+
+  const method = u.auth_method || "password";
+  if (overviewAuth) {
+    if (method === "google") {
+      overviewAuth.textContent = "Google only";
+    } else if (method === "mixed") {
+      overviewAuth.textContent = "Email + Google";
     } else {
-      pill.classList.add("mode-pill-locked");
-      // still let them select; backend will refuse, but UX shows lock
+      overviewAuth.textContent = "Email + password";
     }
-  });
+  }
+
+  if (passwordForm && passwordHint && passwordCurrent && passwordNew && passwordConfirm) {
+    if (method === "google") {
+      passwordHint.textContent =
+        "This account uses Google Sign-In only. Password change is disabled for now.";
+      passwordCurrent.disabled = true;
+      passwordNew.disabled = true;
+      passwordConfirm.disabled = true;
+      const btn = passwordForm.querySelector("button[type='submit']");
+      if (btn) btn.disabled = true;
+    } else {
+      passwordHint.textContent =
+        "Change your password for email sign-in.";
+      passwordCurrent.disabled = false;
+      passwordNew.disabled = false;
+      passwordConfirm.disabled = false;
+      const btn = passwordForm.querySelector("button[type='submit']");
+      if (btn) btn.disabled = false;
+    }
+  }
 }
 
 function updatePlanPill() {
-  if (!planPill) return;
+  if (!planPill) {
+    updateAccountOverview();
+    return;
+  }
 
   if (!currentUser) {
     planPill.innerHTML =
       "Guest mode · Limited free scans. <span>Sign in</span> to sync and unlock more.";
     if (accountBtn) accountBtn.textContent = "Sign In";
     if (accountMenuEmail) accountMenuEmail.textContent = "";
-    updatePremiumModeLock();
+    updateAccountOverview();
     return;
   }
 
@@ -188,8 +246,80 @@ function updatePlanPill() {
 
   if (accountBtn) accountBtn.textContent = user.email;
   if (accountMenuEmail) accountMenuEmail.textContent = user.email;
-  updatePremiumModeLock();
+
+  updateAccountOverview();
 }
+
+// ===================== GOOGLE SIGN-IN ======================
+
+function handleGoogleCredential(response) {
+  if (!response || !response.credential) return;
+  if (!authStatus) return;
+
+  authStatus.textContent = "Signing you in with Google…";
+  authStatus.classList.remove("auth-status--error", "auth-status--success");
+
+  fetch(`${API_BASE_URL}/auth/google`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ credential: response.credential }),
+  })
+    .then((res) => res.json().then((data) => ({ ok: res.ok, data })))
+    .then(({ ok, data }) => {
+      if (!ok) {
+        authStatus.textContent = data.error || "Google sign-in failed.";
+        authStatus.classList.add("auth-status--error");
+        return;
+      }
+
+      currentUser = data;
+      authStatus.textContent = "You’re in. Syncing your protection…";
+      authStatus.classList.add("auth-status--success");
+      updatePlanPill();
+
+      setTimeout(() => {
+        closeAuthModal();
+        if (authForm) authForm.reset();
+      }, 600);
+    })
+    .catch(() => {
+      authStatus.textContent = "Google sign-in failed. Try again.";
+      authStatus.classList.add("auth-status--error");
+    });
+}
+
+function initGoogleButton() {
+  if (!googleBtnContainer) return;
+  const clientId = googleBtnContainer.dataset.googleClientId;
+  if (!clientId || clientId === "YOUR_GOOGLE_CLIENT_ID_HERE") return;
+  if (!window.google || !window.google.accounts || !window.google.accounts.id)
+    return;
+
+  window.google.accounts.id.initialize({
+    client_id: clientId,
+    callback: handleGoogleCredential,
+  });
+  window.google.accounts.id.renderButton(googleBtnContainer, {
+    theme: "outline",
+    size: "large",
+    shape: "pill",
+    width: 320,
+  });
+}
+
+window.addEventListener("load", () => {
+  // small delay so GSI script loads
+  setTimeout(() => {
+    try {
+      initGoogleButton();
+    } catch (e) {
+      // ignore
+    }
+  }, 400);
+});
+
+// ===================== SESSION LOAD ======================
 
 async function loadSession() {
   try {
@@ -217,10 +347,11 @@ async function loadSession() {
   }
 }
 
-// Call on load
 loadSession();
 
-if (authForm) {
+// ===================== EMAIL AUTH SUBMIT ======================
+
+if (authForm && authEmail && authPassword && authStatus) {
   authForm.addEventListener("submit", async (e) => {
     e.preventDefault();
     if (!authEmail.value || !authPassword.value) return;
@@ -268,126 +399,21 @@ if (authForm) {
   });
 }
 
-// Logout
-if (accountLogoutBtn) {
-  accountLogoutBtn.addEventListener("click", async (e) => {
-    e.preventDefault();
-    try {
-      await fetch(`${API_BASE_URL}/logout`, {
-        method: "POST",
-        credentials: "include",
-      });
-    } catch (_) {}
-    currentUser = null;
-    closeAccountMenu();
-    updatePlanPill();
-  });
-}
-
-// Manage subscription → jump to pricing or start checkout if already there
-if (accountManageBtn) {
-  accountManageBtn.addEventListener("click", (e) => {
-    e.preventDefault();
-    closeAccountMenu();
-    if (window.location.pathname === "/pricing") {
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    } else {
-      window.location.href = "/pricing";
-    }
-  });
-}
-
-// ===================== GOOGLE SIGN-IN ======================
-
-function initGoogleButton() {
-  if (!googleBtnContainer) return;
-  const clientId = googleBtnContainer.dataset.googleClientId || "";
-  if (!clientId) return;
-  if (!(window.google && window.google.accounts && window.google.accounts.id)) {
-    return;
-  }
-
-  window.google.accounts.id.initialize({
-    client_id: clientId,
-    callback: handleGoogleCredential,
-  });
-
-  window.google.accounts.id.renderButton(googleBtnContainer, {
-    type: "standard",
-    theme: "outline",
-    size: "large",
-    width: "100",
-  });
-}
-
-async function handleGoogleCredential(response) {
-  if (!response || !response.credential) return;
-  if (authStatus) {
-    authStatus.textContent = "Signing in with Google…";
-    authStatus.classList.remove("auth-status--error", "auth-status--success");
-  }
-
-  try {
-    const res = await fetch(`${API_BASE_URL}/auth/google`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ id_token: response.credential }),
-    });
-    const data = await res.json();
-
-    if (!res.ok) {
-      if (authStatus) {
-        authStatus.textContent = data.error || "Google sign-in failed.";
-        authStatus.classList.add("auth-status--error");
-      }
-      return;
-    }
-
-    currentUser = data;
-    if (authStatus) {
-      authStatus.textContent = "You’re in with Google.";
-      authStatus.classList.add("auth-status--success");
-    }
-    updatePlanPill();
-
-    setTimeout(() => {
-      closeAuthModal();
-      if (authForm) authForm.reset();
-    }, 600);
-  } catch (err) {
-    if (authStatus) {
-      authStatus.textContent = "Network error during Google sign-in.";
-      authStatus.classList.add("auth-status--error");
-    }
-  }
-}
-
-window.addEventListener("load", () => {
-  try {
-    initGoogleButton();
-  } catch (e) {
-    // ignore
-  }
-});
-
 // ===================== MAIN ANALYZE ======================
 
 async function analyzeContent() {
-  const content = contentInput ? contentInput.value.trim() : "";
+  if (!contentInput || !analyzeBtn || !statusEl) return;
+
+  const content = contentInput.value.trim();
   const mode = getSelectedMode();
 
   if (!content && mode !== "qr") {
-    if (statusEl) {
-      statusEl.textContent = "Paste a message, link, or conversation first.";
-    }
+    statusEl.textContent = "Paste a message, link, or conversation first.";
     return;
   }
 
-  if (statusEl) {
-    statusEl.textContent = "Running scam + manipulation checks…";
-  }
-  if (analyzeBtn) analyzeBtn.disabled = true;
+  statusEl.textContent = "Running scam + manipulation checks…";
+  analyzeBtn.disabled = true;
 
   try {
     const response = await fetch(`${API_BASE_URL}/analyze`, {
@@ -399,12 +425,12 @@ async function analyzeContent() {
 
     const result = await response.json();
     if (!response.ok) {
-      if (statusEl) {
-        statusEl.textContent =
-          result.error || "Something went wrong during analysis.";
-      }
+      statusEl.textContent =
+        result.error || "Something went wrong during analysis.";
       return;
     }
+
+    if (!verdictBadge || !explanationEl || !reasonsList) return;
 
     let label = "";
     if (result.verdict === "SAFE") {
@@ -432,26 +458,23 @@ async function analyzeContent() {
       detailsPre.hidden = true;
     }
 
-    resultSection.hidden = false;
-    if (statusEl) statusEl.textContent = "";
-    // Refresh session counts if logged in
+    if (resultSection) resultSection.hidden = false;
+    statusEl.textContent = "";
     loadSession();
   } catch (err) {
-    if (statusEl) {
-      statusEl.textContent = "Network error. Try again in a moment.";
-    }
+    statusEl.textContent = "Network error. Try again in a moment.";
   } finally {
-    if (analyzeBtn) analyzeBtn.disabled = false;
+    analyzeBtn.disabled = false;
   }
 }
 
 // ===================== QR SCAN ======================
 
 async function analyzeQR(file) {
-  if (statusEl) {
-    statusEl.textContent = "Scanning QR code and checking destination safety…";
-  }
-  if (analyzeBtn) analyzeBtn.disabled = true;
+  if (!statusEl || !analyzeBtn) return;
+
+  statusEl.textContent = "Scanning QR code and checking destination safety…";
+  analyzeBtn.disabled = true;
 
   const form = new FormData();
   form.append("image", file);
@@ -465,12 +488,12 @@ async function analyzeQR(file) {
     const result = await response.json();
 
     if (!response.ok) {
-      if (statusEl) {
-        statusEl.textContent =
-          result.error || "Failed to analyze QR. Try a clearer image.";
-      }
+      statusEl.textContent =
+        result.error || "Failed to analyze QR. Try a clearer image.";
       return;
     }
+
+    if (!verdictBadge || !explanationEl || !reasonsList) return;
 
     const verdict = result.overall?.combined_verdict || "SAFE";
     const score = result.overall?.combined_risk_score ?? 0;
@@ -502,24 +525,21 @@ async function analyzeQR(file) {
       detailsPre.hidden = true;
     }
 
-    resultSection.hidden = false;
-    if (statusEl) statusEl.textContent = "";
+    if (resultSection) resultSection.hidden = false;
+    statusEl.textContent = "";
     loadSession();
   } catch (err) {
-    if (statusEl) {
-      statusEl.textContent = "Failed to analyze QR. Try a clearer image.";
-    }
+    statusEl.textContent = "Failed to analyze QR. Try a clearer image.";
   } finally {
-    if (analyzeBtn) analyzeBtn.disabled = false;
+    analyzeBtn.disabled = false;
   }
 }
 
 // ===================== OCR ======================
 
 async function runOCR(imageFile) {
-  if (statusEl) {
-    statusEl.textContent = "Reading text from your screenshot…";
-  }
+  if (!statusEl || !contentInput) return;
+  statusEl.textContent = "Reading text from your screenshot…";
   try {
     const worker = await Tesseract.createWorker();
     await worker.load();
@@ -531,21 +551,15 @@ async function runOCR(imageFile) {
 
     const extractedText = data.text.trim();
     if (!extractedText) {
-      if (statusEl) {
-        statusEl.textContent = "No readable text found in the image.";
-      }
+      statusEl.textContent = "No readable text found in the image.";
       return;
     }
 
-    if (contentInput) contentInput.value = extractedText;
-    if (statusEl) {
-      statusEl.textContent = "Text extracted — running safety check…";
-    }
+    contentInput.value = extractedText;
+    statusEl.textContent = "Text extracted — running safety check…";
     analyzeContent();
   } catch (err) {
-    if (statusEl) {
-      statusEl.textContent = "OCR failed. Try a clearer or closer screenshot.";
-    }
+    statusEl.textContent = "OCR failed. Try a clearer or closer screenshot.";
   }
 }
 
@@ -597,60 +611,209 @@ if (contentInput) {
   });
 }
 
-// ===================== BILLING (Stripe) ======================
+// ===================== ACCOUNT DROPDOWN ACTIONS ======================
 
-async function startCheckout(period) {
-  if (!currentUser) {
-    openAuthModal();
-    return;
-  }
+if (accountManageBtn) {
+  accountManageBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    closeAccountMenu();
+    if (!currentUser) {
+      openAuthModal();
+      return;
+    }
+    if (window.location.pathname === "/account") {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } else {
+      window.location.href = "/account";
+    }
+  });
+}
 
-  const btn =
-    period === "year" ? upgradeYearlyBtn : upgradeMonthlyBtn;
+if (accountLogoutBtn) {
+  accountLogoutBtn.addEventListener("click", async (e) => {
+    e.preventDefault();
+    closeAccountMenu();
+    try {
+      await fetch(`${API_BASE_URL}/logout`, {
+        method: "POST",
+        credentials: "include",
+      });
+    } catch (e) {
+      // ignore
+    } finally {
+      currentUser = null;
+      updatePlanPill();
+      if (window.location.pathname === "/account") {
+        window.location.href = "/";
+      }
+    }
+  });
+}
 
-  if (btn) btn.disabled = true;
+// ===================== ACCOUNT PAGE ACTIONS ======================
 
-  try {
-    const res = await fetch(`${API_BASE_URL}/billing/create-checkout-session`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ billing_period: period }),
-    });
-
-    const data = await res.json();
-    if (!res.ok || !data.url) {
-      const msg = data.error || "Unable to start checkout.";
-      // keeping it simple here
-      alert(msg);
+if (passwordForm && passwordStatus) {
+  passwordForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (!currentUser) {
+      openAuthModal();
       return;
     }
 
-    window.location.href = data.url;
-  } catch (err) {
-    alert("Network error starting checkout.");
-  } finally {
-    if (btn) btn.disabled = false;
-  }
-}
+    if (
+      !passwordCurrent.value ||
+      !passwordNew.value ||
+      !passwordConfirm.value
+    ) {
+      passwordStatus.textContent = "Fill in all fields.";
+      passwordStatus.classList.add("account-status-danger");
+      return;
+    }
 
-if (startFreeBtn) {
-  startFreeBtn.addEventListener("click", (e) => {
-    e.preventDefault();
-    openAuthModal();
+    if (passwordNew.value !== passwordConfirm.value) {
+      passwordStatus.textContent = "New passwords do not match.";
+      passwordStatus.classList.add("account-status-danger");
+      return;
+    }
+
+    passwordStatus.textContent = "Updating password…";
+    passwordStatus.classList.remove("account-status-danger");
+    passwordStatus.classList.remove("account-status-success");
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/account/change-password`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          current_password: passwordCurrent.value,
+          new_password: passwordNew.value,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        passwordStatus.textContent = data.error || "Password change failed.";
+        passwordStatus.classList.add("account-status-danger");
+        return;
+      }
+
+      passwordStatus.textContent = "Password updated.";
+      passwordStatus.classList.add("account-status-success");
+      passwordCurrent.value = "";
+      passwordNew.value = "";
+      passwordConfirm.value = "";
+    } catch (err) {
+      passwordStatus.textContent = "Network error. Try again.";
+      passwordStatus.classList.add("account-status-danger");
+    }
   });
 }
 
-if (upgradeMonthlyBtn) {
-  upgradeMonthlyBtn.addEventListener("click", (e) => {
+if (historyBtn && historyStatus) {
+  historyBtn.addEventListener("click", async (e) => {
     e.preventDefault();
-    startCheckout("month");
+    if (!currentUser) {
+      openAuthModal();
+      return;
+    }
+
+    historyStatus.textContent = "Preparing download…";
+    try {
+      const res = await fetch(
+        `${API_BASE_URL}/scan-history?limit=500`,
+        {
+          method: "GET",
+          credentials: "include",
+        }
+      );
+      const data = await res.json();
+      if (!res.ok) {
+        historyStatus.textContent =
+          data.error || "Could not download history.";
+        return;
+      }
+
+      const blob = new Blob([JSON.stringify(data, null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "scamdetector-history.json";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      historyStatus.textContent = "History downloaded.";
+    } catch (err) {
+      historyStatus.textContent = "Network error. Try again.";
+    }
   });
 }
 
-if (upgradeYearlyBtn) {
-  upgradeYearlyBtn.addEventListener("click", (e) => {
+if (deleteForm && deleteStatus) {
+  deleteForm.addEventListener("submit", async (e) => {
     e.preventDefault();
-    startCheckout("year");
+    if (!currentUser) {
+      openAuthModal();
+      return;
+    }
+
+    const confirmText = (deleteConfirmText.value || "").trim();
+    if (!confirmText) {
+      deleteStatus.textContent = "Type DELETE to confirm.";
+      deleteStatus.classList.add("account-status-danger");
+      return;
+    }
+
+    if (confirmText !== "DELETE") {
+      deleteStatus.textContent = "Confirmation must be exactly DELETE.";
+      deleteStatus.classList.add("account-status-danger");
+      return;
+    }
+
+    deleteStatus.textContent = "Deleting account…";
+    deleteStatus.classList.remove("account-status-danger");
+    deleteStatus.classList.remove("account-status-success");
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/account/delete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          password: deletePassword.value || null,
+          confirm: confirmText,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        deleteStatus.textContent = data.error || "Could not delete account.";
+        deleteStatus.classList.add("account-status-danger");
+        return;
+      }
+
+      deleteStatus.textContent = "Account deleted. Redirecting…";
+      deleteStatus.classList.add("account-status-success");
+      currentUser = null;
+      setTimeout(() => {
+        window.location.href = "/";
+      }, 900);
+    } catch (err) {
+      deleteStatus.textContent = "Network error. Try again.";
+      deleteStatus.classList.add("account-status-danger");
+    }
+  });
+}
+
+if (accountBillingBtn) {
+  accountBillingBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    if (!currentUser) {
+      openAuthModal();
+      return;
+    }
+    window.location.href = "/pricing";
   });
 }

@@ -3,21 +3,15 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Optional, Literal, List, Tuple
+from typing import Optional, Literal, List
 
 import os
-import time
 
-import stripe
 from fastapi import FastAPI, UploadFile, File, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from itsdangerous import URLSafeSerializer, BadSignature
 from pydantic import BaseModel, EmailStr, Field
-
-from google.oauth2 import id_token as google_id_token
-from google.auth.transport import requests as google_requests
 
 from backend.text_scanner import analyze_text
 from backend.url_scanner import analyze_url
@@ -36,6 +30,8 @@ from backend.users import (
     get_scan_history_for_user,
     update_user_plan_by_email,
     get_or_create_google_user,
+    change_password,
+    delete_user,
 )
 from backend.user_auth import (
     create_access_token,
@@ -52,8 +48,16 @@ from backend.auth import (
     ADMIN_COOKIE_NAME,
     create_admin_token,
     verify_admin_token,
-    SECRET_KEY,
 )
+
+# Optional: Google ID token verification
+try:
+    import google.auth.transport.requests
+    import google.oauth2.id_token
+except ImportError:  # pragma: no cover
+    google = None  # type: ignore
+
+GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 
 # ---------------------------------------------------------
 # FastAPI + static
@@ -72,32 +76,6 @@ app.add_middleware(
 )
 
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
-
-# ---------------------------------------------------------
-# Billing / Google / guest config
-# ---------------------------------------------------------
-SUBSCRIPTION_WEBHOOK_SECRET = os.getenv("SUBSCRIPTION_WEBHOOK_SECRET", "change-this")
-
-STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "")
-STRIPE_PRICE_ID_MONTHLY = os.getenv("STRIPE_PRICE_ID_MONTHLY", "")
-STRIPE_PRICE_ID_YEARLY = os.getenv("STRIPE_PRICE_ID_YEARLY", "")
-STRIPE_SUCCESS_URL = os.getenv(
-    "STRIPE_SUCCESS_URL", "https://scamdetectorapp.com/pricing?status=success"
-)
-STRIPE_CANCEL_URL = os.getenv(
-    "STRIPE_CANCEL_URL", "https://scamdetectorapp.com/pricing?status=cancelled"
-)
-STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")
-
-if STRIPE_SECRET_KEY:
-    stripe.api_key = STRIPE_SECRET_KEY
-
-GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
-
-GUEST_DAILY_LIMIT = 2
-GUEST_SCAN_COOKIE = "sd_guest_scans"
-_guest_serializer = URLSafeSerializer(SECRET_KEY, salt="guest-scans-v1")
-
 
 # ---------------------------------------------------------
 # Models
@@ -138,11 +116,20 @@ class AdminLoginRequest(BaseModel):
 
 
 class GoogleAuthRequest(BaseModel):
-    id_token: str
+    credential: str
 
 
-class CheckoutSessionRequest(BaseModel):
-    billing_period: Literal["month", "year"] = "month"
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str = Field(..., min_length=8)
+
+
+class DeleteAccountRequest(BaseModel):
+    password: Optional[str] = None
+    confirm: str
+
+
+SUBSCRIPTION_WEBHOOK_SECRET = os.getenv("SUBSCRIPTION_WEBHOOK_SECRET", "change-this")
 
 
 # ---------------------------------------------------------
@@ -219,98 +206,14 @@ def _user_response(user: dict) -> dict:
             "id": user["id"],
             "email": user["email"],
             "plan": user.get("plan", "free"),
+            "auth_method": user.get("auth_method", "password"),
             "created_at": user.get("created_at"),
             "last_login": user.get("last_login"),
             "daily_scan_date": user.get("daily_scan_date", ""),
             "daily_scan_count": user.get("daily_scan_count", 0),
             "daily_limit": user.get("daily_limit"),
-            "auth_method": user.get("auth_method", "password"),
         }
     }
-
-
-# -------- Guest scan helpers --------
-def _get_guest_state(request: Request) -> dict:
-    raw = request.cookies.get(GUEST_SCAN_COOKIE)
-    if not raw:
-        return {"date": "", "count": 0}
-    try:
-        data = _guest_serializer.loads(raw)
-        if not isinstance(data, dict):
-            return {"date": "", "count": 0}
-        return {
-            "date": str(data.get("date", "")),
-            "count": int(data.get("count", 0)),
-        }
-    except BadSignature:
-        return {"date": "", "count": 0}
-
-
-def _set_guest_state_cookie(resp: JSONResponse, state: dict) -> None:
-    try:
-        token = _guest_serializer.dumps(
-            {
-                "date": state.get("date", ""),
-                "count": int(state.get("count", 0)),
-            }
-        )
-    except Exception:
-        return
-    resp.set_cookie(
-        GUEST_SCAN_COOKIE,
-        token,
-        max_age=60 * 60 * 24 * 7,
-        httponly=True,
-        samesite="lax",
-    )
-
-
-def check_scan_limit(
-    request: Request, user: Optional[dict]
-) -> Tuple[bool, Optional[JSONResponse], Optional[dict]]:
-    """
-    Unified scan limit checker for logged-in and guest users.
-    Returns (allowed, error_response_if_any, guest_state_if_guest).
-    """
-    if user:
-        allowed, _remaining, limit = register_scan_attempt(user["id"])
-        if not allowed:
-            return (
-                False,
-                JSONResponse(
-                    {
-                        "error": "Daily free limit reached. Upgrade to Premium for unlimited scans.",
-                        "plan": user.get("plan", "free"),
-                        "limit": limit,
-                        "remaining": 0,
-                    },
-                    status_code=429,
-                ),
-                None,
-            )
-        return True, None, None
-
-    # Guest
-    state = _get_guest_state(request)
-    today = time.strftime("%Y-%m-%d")
-    if state.get("date") != today:
-        state = {"date": today, "count": 0}
-
-    limit = GUEST_DAILY_LIMIT
-    if state["count"] >= limit:
-        err = JSONResponse(
-            {
-                "error": "Guest limit reached. Create a free account for more scans.",
-                "plan": "guest",
-                "limit": limit,
-                "remaining": 0,
-            },
-            status_code=429,
-        )
-        return False, err, state
-
-    state["count"] += 1
-    return True, None, state
 
 
 # ---------------------------------------------------------
@@ -346,11 +249,6 @@ def contact_page():
     return FileResponse(STATIC_DIR / "contact.html")
 
 
-@app.get("/pricing")
-def pricing_page():
-    return FileResponse(STATIC_DIR / "pricing.html")
-
-
 @app.get("/login-admin")
 def login_admin_page():
     # Optional separate URL to load login.html
@@ -361,9 +259,13 @@ def login_admin_page():
 def admin_page(request: Request):
     token = request.cookies.get(ADMIN_COOKIE_NAME)
     if not token or not verify_admin_token(token):
-        # Redirect to login page
         return FileResponse(STATIC_DIR / "login.html")
     return FileResponse(STATIC_DIR / "admin.html")
+
+
+@app.get("/account")
+def account_page():
+    return FileResponse(STATIC_DIR / "account.html")
 
 
 # ---------------------------------------------------------
@@ -437,28 +339,32 @@ def user_login(body: UserLoginRequest):
 
 
 @app.post("/auth/google")
-def auth_google(body: GoogleAuthRequest):
-    if not GOOGLE_CLIENT_ID:
+def google_auth(body: GoogleAuthRequest):
+    if not body.credential:
+        return JSONResponse({"error": "Missing credential."}, status_code=400)
+
+    if "google" not in globals() or google is None:  # type: ignore
         return JSONResponse(
-            {"error": "Google Sign-In not configured."}, status_code=500
+            {
+                "error": "Google auth not configured on server (google-auth library missing)."
+            },
+            status_code=500,
         )
 
     try:
-        idinfo = google_id_token.verify_oauth2_token(
-            body.id_token,
-            google_requests.Request(),
-            GOOGLE_CLIENT_ID,
+        request_adapter = google.auth.transport.requests.Request()  # type: ignore
+        # If GOOGLE_CLIENT_ID is empty, audience is not enforced (less strict but easier to start)
+        idinfo = google.oauth2.id_token.verify_oauth2_token(  # type: ignore
+            body.credential,
+            request_adapter,
+            GOOGLE_CLIENT_ID or None,
         )
+        email = idinfo.get("email")
+        sub = idinfo.get("sub")
+        if not email or not sub:
+            raise ValueError("Missing email or sub.")
     except Exception:
         return JSONResponse({"error": "Invalid Google token."}, status_code=401)
-
-    email = idinfo.get("email")
-    sub = idinfo.get("sub")
-
-    if not email or not sub:
-        return JSONResponse(
-            {"error": "Google profile missing email."}, status_code=400
-        )
 
     user = get_or_create_google_user(email=email, google_sub=sub)
 
@@ -494,8 +400,6 @@ def user_logout():
     resp = JSONResponse({"success": True})
     resp.delete_cookie(USER_ACCESS_COOKIE)
     resp.delete_cookie(USER_REFRESH_COOKIE)
-    # also reset guest counter
-    resp.delete_cookie(GUEST_SCAN_COOKIE)
     return resp
 
 
@@ -515,9 +419,7 @@ def refresh_token(body: RefreshTokenRequest, request: Request):
 
     payload = verify_refresh_token(token)
     if not payload:
-        return JSONResponse(
-            {"error": "Invalid or expired refresh token."}, status_code=401
-        )
+        return JSONResponse({"error": "Invalid or expired refresh token."}, status_code=401)
 
     uid = payload.get("uid")
     if not uid:
@@ -589,7 +491,6 @@ async def log_scan(request: Request):
 
 @app.post("/update-subscription-status")
 def update_subscription(body: SubscriptionUpdateRequest):
-    # simple shared-secret hook if you don't want to use Stripe webhooks
     if body.secret != SUBSCRIPTION_WEBHOOK_SECRET:
         return JSONResponse({"error": "Unauthorized."}, status_code=401)
 
@@ -600,89 +501,55 @@ def update_subscription(body: SubscriptionUpdateRequest):
     return {"success": True, **_user_response(user)}
 
 
-# ---------------------------------------------------------
-# Billing with Stripe
-# ---------------------------------------------------------
-@app.post("/billing/create-checkout-session")
-def create_checkout_session(req: CheckoutSessionRequest, request: Request):
-    if not STRIPE_SECRET_KEY:
-        return JSONResponse(
-            {"error": "Billing is not configured."}, status_code=500
-        )
-
+@app.post("/account/change-password")
+def account_change_password(body: ChangePasswordRequest, request: Request):
     user = get_current_user(request)
     if not user:
         return JSONResponse({"error": "Authentication required."}, status_code=401)
 
-    price_id = (
-        STRIPE_PRICE_ID_YEARLY if req.billing_period == "year" else STRIPE_PRICE_ID_MONTHLY
-    )
-    if not price_id:
+    ok = change_password(user["id"], body.current_password, body.new_password)
+    if not ok:
         return JSONResponse(
-            {"error": "No price ID configured for this plan."}, status_code=500
+            {
+                "error": "Current password is incorrect or this account is Google-only."
+            },
+            status_code=400,
         )
 
-    try:
-        session = stripe.checkout.Session.create(
-            mode="subscription",
-            payment_method_types=["card"],
-            customer_email=user["email"],
-            line_items=[{"price": price_id, "quantity": 1}],
-            success_url=STRIPE_SUCCESS_URL,
-            cancel_url=STRIPE_CANCEL_URL,
-            metadata={"user_id": user["id"], "email": user["email"]},
-        )
-    except Exception:
+    return {"success": True}
+
+
+@app.post("/account/delete")
+def account_delete(body: DeleteAccountRequest, request: Request):
+    user = get_current_user(request)
+    if not user:
+        return JSONResponse({"error": "Authentication required."}, status_code=401)
+
+    if body.confirm.strip().lower() != "delete":
         return JSONResponse(
-            {"error": "Unable to create checkout session."}, status_code=500
+            {"error": 'Type DELETE (all caps) to confirm.'}, status_code=400
         )
 
-    return {"url": session.url}
+    # If they have password auth, require password
+    method = user.get("auth_method", "password")
+    if method in ("password", "mixed"):
+        if not body.password:
+            return JSONResponse(
+                {"error": "Password required to delete this account."},
+                status_code=400,
+            )
+        verify = verify_user_credentials(user["email"], body.password)
+        if not verify:
+            return JSONResponse({"error": "Incorrect password."}, status_code=400)
 
+    ok = delete_user(user["id"])
+    if not ok:
+        return JSONResponse({"error": "Account not found."}, status_code=404)
 
-@app.post("/billing/webhook")
-async def stripe_webhook(request: Request):
-    if not STRIPE_WEBHOOK_SECRET:
-        return JSONResponse(
-            {"error": "Webhook secret not configured."}, status_code=500
-        )
-
-    payload = await request.body()
-    sig_header = request.headers.get("stripe-signature")
-
-    try:
-        event = stripe.Webhook.construct_event(
-            payload, sig_header, STRIPE_WEBHOOK_SECRET
-        )
-    except ValueError:
-        return JSONResponse({"error": "Invalid payload."}, status_code=400)
-    except stripe.error.SignatureVerificationError:
-        return JSONResponse({"error": "Invalid signature."}, status_code=400)
-
-    event_type = event["type"]
-    data = event["data"]["object"]
-
-    email = None
-    if isinstance(data, dict):
-        if data.get("customer_details"):
-            email = data["customer_details"].get("email")
-        if not email:
-            email = data.get("customer_email")
-
-    if email:
-        if event_type in (
-            "checkout.session.completed",
-            "customer.subscription.created",
-            "customer.subscription.updated",
-        ):
-            update_user_plan_by_email(email, "premium")
-        elif event_type in (
-            "customer.subscription.deleted",
-            "invoice.payment_failed",
-        ):
-            update_user_plan_by_email(email, "free")
-
-    return {"received": True}
+    resp = JSONResponse({"success": True})
+    resp.delete_cookie(USER_ACCESS_COOKIE)
+    resp.delete_cookie(USER_REFRESH_COOKIE)
+    return resp
 
 
 # ---------------------------------------------------------
@@ -759,6 +626,7 @@ def analyze(req: AnalyzeRequest, request: Request):
         return JSONResponse({"error": "content is empty"}, status_code=400)
 
     user = get_current_user(request)
+    user_id = user["id"] if user else None
     plan = user.get("plan", "free") if user else "guest"
     is_premium = plan == "premium"
 
@@ -776,11 +644,18 @@ def analyze(req: AnalyzeRequest, request: Request):
 
     # --------------------- TEXT (auto) --------------------
     if mode == "text" or (mode == "auto" and not url_like):
-        allowed, error_resp, guest_state = check_scan_limit(request, user)
-        if not allowed:
-            if not user and guest_state:
-                _set_guest_state_cookie(error_resp, guest_state)
-            return error_resp
+        if user:
+            allowed, remaining, limit = register_scan_attempt(user_id)
+            if not allowed:
+                return JSONResponse(
+                    {
+                        "error": "Daily free limit reached. Upgrade to Premium for unlimited scans.",
+                        "plan": plan,
+                        "limit": limit,
+                        "remaining": 0,
+                    },
+                    status_code=429,
+                )
 
         raw = analyze_text(content) or {}
         base_score = raw.get("score", 0)
@@ -791,7 +666,7 @@ def analyze(req: AnalyzeRequest, request: Request):
         reasons = raw.get("reasons", [])
         details = raw.get("details", {})
 
-        resp_dict = build_response(
+        resp = build_response(
             score=score,
             category="text",
             reasons=reasons,
@@ -800,33 +675,37 @@ def analyze(req: AnalyzeRequest, request: Request):
             details=details,
         )
 
-        if resp_dict["verdict"] == "SAFE":
+        if resp["verdict"] == "SAFE":
             record_event("safe")
         else:
             record_event("scam")
 
         add_scan_log(
-            user_id=user["id"] if user else None,
+            user_id=user_id,
             category="text",
             mode=mode,
-            verdict=resp_dict["verdict"],
-            score=resp_dict["score"],
+            verdict=resp["verdict"],
+            score=resp["score"],
             content_snippet=content,
-            details=resp_dict.get("details"),
+            details=resp.get("details"),
         )
 
-        resp = JSONResponse(resp_dict)
-        if not user and guest_state:
-            _set_guest_state_cookie(resp, guest_state)
         return resp
 
     # --------------------- URL (auto) ---------------------
     if mode == "url" or (mode == "auto" and url_like):
-        allowed, error_resp, guest_state = check_scan_limit(request, user)
-        if not allowed:
-            if not user and guest_state:
-                _set_guest_state_cookie(error_resp, guest_state)
-            return error_resp
+        if user:
+            allowed, remaining, limit = register_scan_attempt(user_id)
+            if not allowed:
+                return JSONResponse(
+                    {
+                        "error": "Daily free limit reached. Upgrade to Premium for unlimited scans.",
+                        "plan": plan,
+                        "limit": limit,
+                        "remaining": 0,
+                    },
+                    status_code=429,
+                )
 
         raw = analyze_url(content) or {}
         base_score = raw.get("score", 0)
@@ -837,7 +716,7 @@ def analyze(req: AnalyzeRequest, request: Request):
         reasons = raw.get("reasons", [])
         details = raw.get("details", raw)
 
-        resp_dict = build_response(
+        resp = build_response(
             score=score,
             category="url",
             reasons=reasons,
@@ -846,40 +725,44 @@ def analyze(req: AnalyzeRequest, request: Request):
             details=details,
         )
 
-        if resp_dict["verdict"] == "SAFE":
+        if resp["verdict"] == "SAFE":
             record_event("safe")
         else:
             record_event("scam")
 
         add_scan_log(
-            user_id=user["id"] if user else None,
+            user_id=user_id,
             category="url",
             mode=mode,
-            verdict=resp_dict["verdict"],
-            score=resp_dict["score"],
+            verdict=resp["verdict"],
+            score=resp["score"],
             content_snippet=content,
-            details=resp_dict.get("details"),
+            details=resp.get("details"),
         )
 
-        resp = JSONResponse(resp_dict)
-        if not user and guest_state:
-            _set_guest_state_cookie(resp, guest_state)
         return resp
 
     # ----------------- AI Actor Detection -----------------
     if mode == "chat":
-        allowed, error_resp, guest_state = check_scan_limit(request, user)
-        if not allowed:
-            if not user and guest_state:
-                _set_guest_state_cookie(error_resp, guest_state)
-            return error_resp
+        if user:
+            allowed, remaining, limit = register_scan_attempt(user_id)
+            if not allowed:
+                return JSONResponse(
+                    {
+                        "error": "Daily free limit reached. Upgrade to Premium for unlimited scans.",
+                        "plan": plan,
+                        "limit": limit,
+                        "remaining": 0,
+                    },
+                    status_code=429,
+                )
 
         result = analyze_actor(content)
         score = _normalize_score(result.get("ai_probability", 0))
         explanation = f"Detected actor type: {result.get('actor_type')}"
         reasons = result.get("signals", [])
 
-        resp_dict = build_response(
+        resp = build_response(
             score=score,
             category="ai_detector",
             reasons=reasons,
@@ -889,27 +772,31 @@ def analyze(req: AnalyzeRequest, request: Request):
         )
 
         add_scan_log(
-            user_id=user["id"] if user else None,
+            user_id=user_id,
             category="ai_detector",
             mode=mode,
-            verdict=resp_dict["verdict"],
-            score=resp_dict["score"],
+            verdict=resp["verdict"],
+            score=resp["score"],
             content_snippet=content,
-            details=resp_dict.get("details"),
+            details=resp.get("details"),
         )
 
-        resp = JSONResponse(resp_dict)
-        if not user and guest_state:
-            _set_guest_state_cookie(resp, guest_state)
         return resp
 
     # -------------- Manipulation Profiler -----------------
     if mode == "manipulation":
-        allowed, error_resp, guest_state = check_scan_limit(request, user)
-        if not allowed:
-            if not user and guest_state:
-                _set_guest_state_cookie(error_resp, guest_state)
-            return error_resp
+        if user:
+            allowed, remaining, limit = register_scan_attempt(user_id)
+            if not allowed:
+                return JSONResponse(
+                    {
+                        "error": "Daily free limit reached. Upgrade to Premium for unlimited scans.",
+                        "plan": plan,
+                        "limit": limit,
+                        "remaining": 0,
+                    },
+                    status_code=429,
+                )
 
         result = analyze_manipulation(content)
         score = _normalize_score(result.get("risk_score", 0))
@@ -923,7 +810,7 @@ def analyze(req: AnalyzeRequest, request: Request):
 
         reasons = result.get("primary_tactics", [])
 
-        resp_dict = build_response(
+        resp = build_response(
             score=score,
             category="manipulation",
             reasons=reasons,
@@ -933,18 +820,15 @@ def analyze(req: AnalyzeRequest, request: Request):
         )
 
         add_scan_log(
-            user_id=user["id"] if user else None,
+            user_id=user_id,
             category="manipulation",
             mode=mode,
-            verdict=resp_dict["verdict"],
-            score=resp_dict["score"],
+            verdict=resp["verdict"],
+            score=resp["score"],
             content_snippet=content,
-            details=resp_dict.get("details"),
+            details=resp.get("details"),
         )
 
-        resp = JSONResponse(resp_dict)
-        if not user and guest_state:
-            _set_guest_state_cookie(resp, guest_state)
         return resp
 
     # Unknown mode
@@ -956,24 +840,21 @@ async def qr(request: Request, image: UploadFile = File(...)):
     record_event("request")
 
     user = get_current_user(request)
+    user_id = user["id"] if user else None
     plan = user.get("plan", "free") if user else "guest"
-    is_premium = plan == "premium"
 
-    # QR is premium-only
-    if not is_premium:
-        return JSONResponse(
-            {
-                "error": "QR scanning is available for Premium accounts only.",
-                "plan": plan,
-            },
-            status_code=402,
-        )
-
-    allowed, error_resp, guest_state = check_scan_limit(request, user)
-    if not allowed:
-        if not user and guest_state:
-            _set_guest_state_cookie(error_resp, guest_state)
-        return error_resp
+    if user:
+        allowed, remaining, limit = register_scan_attempt(user_id)
+        if not allowed:
+            return JSONResponse(
+                {
+                    "error": "Daily free limit reached. Upgrade to Premium for unlimited scans.",
+                    "plan": plan,
+                    "limit": limit,
+                    "remaining": 0,
+                },
+                status_code=429,
+            )
 
     img_bytes = await image.read()
     result = process_qr_image(img_bytes)
@@ -987,7 +868,7 @@ async def qr(request: Request, image: UploadFile = File(...)):
         record_event("scam")
 
     add_scan_log(
-        user_id=user["id"] if user else None,
+        user_id=user_id,
         category="qr",
         mode="qr",
         verdict=verdict,
@@ -996,7 +877,4 @@ async def qr(request: Request, image: UploadFile = File(...)):
         details=result,
     )
 
-    resp = JSONResponse(result)
-    if not user and guest_state:
-        _set_guest_state_cookie(resp, guest_state)
-    return resp
+    return result

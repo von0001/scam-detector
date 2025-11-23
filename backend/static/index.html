@@ -20,19 +20,17 @@
         </div>
       </div>
 
-      <nav class="nav-links">
+      <nav class="nav-links" style="position: relative;">
         <a href="#how-it-works">How it Works</a>
-        <a href="/pricing">Pricing</a>
         <a href="/support">Support</a>
         <a href="/privacy">Privacy</a>
         <a href="/feedback">Feedback</a>
         <button id="account-button" class="nav-pill nav-account">Sign In</button>
 
-        <!-- Account dropdown -->
         <div id="account-menu" class="account-menu" hidden>
           <div class="account-menu-email" id="account-menu-email"></div>
           <button type="button" id="account-manage-btn" class="account-menu-item">
-            Manage subscription
+            Manage account
           </button>
           <button type="button" id="account-logout-btn" class="account-menu-item account-menu-item-danger">
             Sign out
@@ -117,19 +115,19 @@
                 <span>Text</span>
               </label>
 
-              <label class="mode-pill" data-premium="true">
+              <label class="mode-pill">
                 <input type="radio" name="mode" value="chat" />
-                <span>AI Detector 🔒</span>
+                <span>AI Detector</span>
               </label>
 
-              <label class="mode-pill" data-premium="true">
+              <label class="mode-pill">
                 <input type="radio" name="mode" value="manipulation" />
-                <span>Manipulation 🔒</span>
+                <span>Manipulation</span>
               </label>
 
-              <label class="mode-pill" data-premium="true">
+              <label class="mode-pill">
                 <input type="radio" name="mode" value="qr" />
-                <span>QR Code 🔒</span>
+                <span>QR Code</span>
               </label>
             </div>
           </div>
@@ -249,7 +247,6 @@
           </button>
         </div>
 
-        <!-- Google Sign-in -->
         <div id="google-btn" class="google-btn-container" data-google-client-id="YOUR_GOOGLE_CLIENT_ID_HERE"></div>
 
         <div class="auth-divider">
