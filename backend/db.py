@@ -48,6 +48,7 @@ def init_db() -> None:
                 email TEXT NOT NULL UNIQUE,
                 password_hash TEXT,
                 plan TEXT NOT NULL DEFAULT 'free',
+                is_admin BOOLEAN NOT NULL DEFAULT FALSE,
                 subscription_status TEXT NOT NULL DEFAULT 'inactive',
                 billing_cycle TEXT NOT NULL DEFAULT 'none',
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -68,6 +69,12 @@ def init_db() -> None:
             """
             CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_lower
             ON users ((lower(email)));
+            """
+        )
+        cur.execute(
+            """
+            ALTER TABLE users
+            ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT FALSE;
             """
         )
         cur.execute(

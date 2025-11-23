@@ -6,6 +6,7 @@ from typing import List, Dict, Any, Optional, Tuple
 from collections import Counter
 from datetime import datetime, date, timezone
 import uuid
+import os
 
 import bcrypt
 from psycopg2.extras import Json
@@ -13,6 +14,7 @@ from psycopg2.extras import Json
 from backend.db import get_cursor, init_db
 
 DEFAULT_FREE_DAILY_LIMIT = 8
+OWNER_EMAIL = (os.getenv("OWNER_EMAIL") or os.getenv("ADMIN_EMAIL") or "").lower()
 
 # Ensure tables exist on import
 init_db()
@@ -82,7 +84,12 @@ def _strip_sensitive(row: Dict[str, Any]) -> Dict[str, Any]:
         "last_plan_change": _to_epoch(row.get("last_plan_change")),
         "stripe_customer_id": row.get("stripe_customer_id"),
         "stripe_subscription_id": row.get("stripe_subscription_id"),
+        "is_admin": bool(row.get("is_admin")),
     }
+
+
+def _is_owner_email(email: str) -> bool:
+    return bool(OWNER_EMAIL) and email.lower() == OWNER_EMAIL
 
 
 def find_user_by_email(email: str) -> Optional[Dict[str, Any]]:
@@ -92,7 +99,7 @@ def find_user_by_email(email: str) -> Optional[Dict[str, Any]]:
             (email,),
         )
         row = cur.fetchone()
-    return _strip_sensitive(row) if row else None
+    return _ensure_owner_row(row)
 
 
 def _get_user_for_update(query: str, params: tuple) -> Optional[Dict[str, Any]]:
@@ -105,7 +112,28 @@ def get_user_by_id(user_id: str) -> Optional[Dict[str, Any]]:
     with get_cursor() as (_, cur):
         cur.execute("SELECT * FROM users WHERE id = %s LIMIT 1", (user_id,))
         row = cur.fetchone()
-    return _strip_sensitive(row) if row else None
+    return _ensure_owner_row(row)
+
+
+def _ensure_owner_row(row: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    if not row:
+        return None
+    if not _is_owner_email(row.get("email", "")):
+        return _strip_sensitive(row)
+
+    if row.get("is_admin") and row.get("plan") == "premium":
+        return _strip_sensitive(row)
+
+    return _apply_plan_update(
+        row,
+        plan="premium",
+        billing_cycle="owner",
+        status="active",
+        renewal=row.get("subscription_renewal"),
+        stripe_customer_id=row.get("stripe_customer_id"),
+        stripe_subscription_id=row.get("stripe_subscription_id"),
+        is_admin=True,
+    )
 
 
 def create_user(email: str, password: str) -> Dict[str, Any]:
@@ -115,6 +143,7 @@ def create_user(email: str, password: str) -> Dict[str, Any]:
     )
     now = datetime.now(timezone.utc)
     user_id = uuid.uuid4()
+    owner_flag = _is_owner_email(email_lower)
 
     with get_cursor() as (_, cur):
         cur.execute(
@@ -130,13 +159,13 @@ def create_user(email: str, password: str) -> Dict[str, Any]:
                 id, email, password_hash, plan, auth_method, created_at, last_login,
                 daily_scan_date, daily_scan_count, daily_limit, billing_cycle,
                 subscription_status, subscription_renewal, last_plan_change,
-                stripe_customer_id, stripe_subscription_id
+                stripe_customer_id, stripe_subscription_id, is_admin
             )
             VALUES (
-                %s, %s, %s, 'free', 'password', %s, %s,
-                NULL, 0, %s, 'none',
-                'inactive', NULL, %s,
-                NULL, NULL
+                %s, %s, %s, %s, 'password', %s, %s,
+                NULL, 0, %s, %s,
+                %s, NULL, %s,
+                NULL, NULL, %s
             )
             RETURNING *;
             """,
@@ -144,20 +173,25 @@ def create_user(email: str, password: str) -> Dict[str, Any]:
                 str(user_id),
                 email_lower,
                 password_hash,
+                "premium" if owner_flag else "free",
                 now,
                 now,
-                DEFAULT_FREE_DAILY_LIMIT,
+                999_999 if owner_flag else DEFAULT_FREE_DAILY_LIMIT,
+                "owner" if owner_flag else "none",
+                "active" if owner_flag else "inactive",
                 now,
+                owner_flag,
             ),
         )
         row = cur.fetchone()
 
-    return _strip_sensitive(row)
+    return _ensure_owner_row(row)
 
 
 def get_or_create_google_user(email: str, google_sub: str) -> Dict[str, Any]:
     email_lower = email.lower()
     now = datetime.now(timezone.utc)
+    owner_flag = _is_owner_email(email_lower)
 
     with get_cursor() as (_, cur):
         cur.execute(
@@ -167,10 +201,28 @@ def get_or_create_google_user(email: str, google_sub: str) -> Dict[str, Any]:
         row = cur.fetchone()
         if row:
             cur.execute(
-                "UPDATE users SET last_login = %s WHERE id = %s RETURNING *",
-                (now, row["id"]),
+                """
+                UPDATE users
+                SET last_login = %s,
+                    is_admin = %s,
+                    plan = CASE WHEN %s THEN 'premium' ELSE plan END,
+                    billing_cycle = CASE WHEN %s THEN 'owner' ELSE billing_cycle END,
+                    subscription_status = CASE WHEN %s THEN 'active' ELSE subscription_status END,
+                    daily_limit = CASE WHEN %s THEN 999999 ELSE daily_limit END
+                WHERE id = %s
+                RETURNING *;
+                """,
+                (
+                    now,
+                    owner_flag or row.get("is_admin"),
+                    owner_flag,
+                    owner_flag,
+                    owner_flag,
+                    owner_flag,
+                    row["id"],
+                ),
             )
-            return _strip_sensitive(cur.fetchone())
+            return _ensure_owner_row(cur.fetchone())
 
         cur.execute(
             "SELECT * FROM users WHERE lower(email) = lower(%s) LIMIT 1",
@@ -185,13 +237,28 @@ def get_or_create_google_user(email: str, google_sub: str) -> Dict[str, Any]:
                 UPDATE users
                 SET auth_method = %s,
                     google_sub = %s,
-                    last_login = %s
+                    last_login = %s,
+                    is_admin = %s,
+                    plan = CASE WHEN %s THEN 'premium' ELSE plan END,
+                    billing_cycle = CASE WHEN %s THEN 'owner' ELSE billing_cycle END,
+                    subscription_status = CASE WHEN %s THEN 'active' ELSE subscription_status END,
+                    daily_limit = CASE WHEN %s THEN 999999 ELSE daily_limit END
                 WHERE id = %s
                 RETURNING *;
                 """,
-                (new_method, google_sub, now, row["id"]),
+                (
+                    new_method,
+                    google_sub,
+                    now,
+                    owner_flag or row.get("is_admin"),
+                    owner_flag,
+                    owner_flag,
+                    owner_flag,
+                    owner_flag,
+                    row["id"],
+                ),
             )
-            return _strip_sensitive(cur.fetchone())
+            return _ensure_owner_row(cur.fetchone())
 
         user_id = uuid.uuid4()
         cur.execute(
@@ -200,29 +267,33 @@ def get_or_create_google_user(email: str, google_sub: str) -> Dict[str, Any]:
                 id, email, plan, auth_method, google_sub, created_at, last_login,
                 daily_scan_date, daily_scan_count, daily_limit, billing_cycle,
                 subscription_status, subscription_renewal, last_plan_change,
-                stripe_customer_id, stripe_subscription_id
+                stripe_customer_id, stripe_subscription_id, is_admin
             )
             VALUES (
-                %s, %s, 'free', 'google', %s, %s, %s,
-                NULL, 0, %s, 'none',
-                'inactive', NULL, %s,
-                NULL, NULL
+                %s, %s, %s, 'google', %s, %s, %s,
+                NULL, 0, %s, %s,
+                %s, NULL, %s,
+                NULL, NULL, %s
             )
             RETURNING *;
             """,
             (
                 str(user_id),
                 email_lower,
+                "premium" if owner_flag else "free",
                 google_sub,
                 now,
                 now,
-                DEFAULT_FREE_DAILY_LIMIT,
+                999_999 if owner_flag else DEFAULT_FREE_DAILY_LIMIT,
+                "owner" if owner_flag else "none",
+                "active" if owner_flag else "inactive",
                 now,
+                owner_flag,
             ),
         )
         row = cur.fetchone()
 
-    return _strip_sensitive(row)
+    return _ensure_owner_row(row)
 
 
 def verify_user_credentials(email: str, password: str) -> Optional[Dict[str, Any]]:
@@ -247,7 +318,7 @@ def verify_user_credentials(email: str, password: str) -> Optional[Dict[str, Any
         )
         updated = cur.fetchone()
 
-    return _strip_sensitive(updated) if updated else None
+    return _ensure_owner_row(updated) if updated else None
 
 
 def _apply_plan_update(
@@ -258,6 +329,7 @@ def _apply_plan_update(
     renewal: Optional[Any],
     stripe_customer_id: Optional[str],
     stripe_subscription_id: Optional[str],
+    is_admin: Optional[bool] = None,
 ) -> Dict[str, Any]:
     desired_plan = _normalize_plan(plan)
     cycle = _normalize_billing_cycle(billing_cycle or row.get("billing_cycle"))
@@ -277,6 +349,7 @@ def _apply_plan_update(
                 subscription_renewal = %s,
                 last_plan_change = %s,
                 daily_limit = %s,
+                is_admin = COALESCE(%s, is_admin),
                 stripe_customer_id = COALESCE(%s, stripe_customer_id),
                 stripe_subscription_id = COALESCE(%s, stripe_subscription_id)
             WHERE id = %s
@@ -289,6 +362,7 @@ def _apply_plan_update(
                 renewal_value,
                 now,
                 daily_limit,
+                is_admin,
                 stripe_customer_id,
                 stripe_subscription_id,
                 row["id"],
@@ -571,6 +645,7 @@ def build_account_snapshot(user: Dict[str, Any], history_limit: int = 20) -> Dic
         "last_plan_change": fresh_user.get("last_plan_change"),
         "stripe_customer_id": fresh_user.get("stripe_customer_id"),
         "stripe_subscription_id": fresh_user.get("stripe_subscription_id"),
+        "is_admin": fresh_user.get("is_admin", False),
     }
 
     stats = {

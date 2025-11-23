@@ -31,6 +31,7 @@ def create_access_token(user: Dict[str, Any]) -> str:
     }
     # Include plan for convenience, but it is never trusted for authorization.
     payload["plan"] = user.get("plan", "free")
+    payload["admin"] = bool(user.get("is_admin"))
     return jwt.encode(payload, SECRET_KEY, algorithm=_ALGORITHM)
 
 

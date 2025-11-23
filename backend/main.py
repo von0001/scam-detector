@@ -237,6 +237,7 @@ def _user_response(user: dict) -> dict:
             "id": user["id"],
             "email": user["email"],
             "plan": user.get("plan", "free"),
+            "is_admin": bool(user.get("is_admin")),
             "auth_method": user.get("auth_method", "password"),
             "created_at": user.get("created_at"),
             "last_login": user.get("last_login"),
@@ -356,8 +357,8 @@ def login_admin_page():
 
 @app.get("/admin")
 def admin_page(request: Request):
-    token = request.cookies.get(ADMIN_COOKIE_NAME)
-    if not token or not verify_admin_token(token):
+    user = get_current_user(request)
+    if not user or not user.get("is_admin"):
         return FileResponse(STATIC_DIR / "login.html")
     return FileResponse(STATIC_DIR / "admin.html")
 
@@ -849,24 +850,17 @@ def account_delete(body: DeleteAccountRequest, request: Request):
 # ---------------------------------------------------------
 @app.post("/admin/login")
 def admin_login(body: AdminLoginRequest):
-    if body.password != ADMIN_PASSWORD:
-        return JSONResponse({"error": "Invalid admin password."}, status_code=401)
-
-    token = create_admin_token()
-    resp = JSONResponse({"success": True})
-    resp.set_cookie(
-        ADMIN_COOKIE_NAME,
-        token,
-        max_age=60 * 60 * 4,
-        httponly=True,
-        samesite="lax",
+    return JSONResponse(
+        {
+            "error": "Admin login is reserved for the owner account. Sign in with the owner email instead."
+        },
+        status_code=403,
     )
-    return resp
 
 
 def _require_admin(request: Request) -> bool:
-    token = request.cookies.get(ADMIN_COOKIE_NAME)
-    return bool(token and verify_admin_token(token))
+    user = get_current_user(request)
+    return bool(user and user.get("is_admin"))
 
 
 @app.get("/admin/analytics")
