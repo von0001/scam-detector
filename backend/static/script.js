@@ -60,9 +60,25 @@ const deleteConfirmText = document.getElementById("delete-confirm-text");
 const deleteStatus = document.getElementById("delete-status");
 
 const accountBillingBtn = document.getElementById("account-billing-btn");
+const accountContent = document.getElementById("account-content");
+const accountLocked = document.getElementById("account-locked");
+const accountLockedBtn = document.getElementById("account-locked-btn");
+const usagePlanLabel = document.getElementById("usage-plan-label");
+const usageMeterFill = document.getElementById("usage-meter-fill");
+const usageMeterLabel = document.getElementById("usage-meter-label");
+const usageLastScan = document.getElementById("usage-last-scan");
+const usageActivity = document.getElementById("usage-activity");
+const usageFlagged = document.getElementById("usage-flagged");
+const flaggedList = document.getElementById("flagged-list");
+const flaggedEmpty = document.getElementById("flagged-empty");
+const recentScansBody = document.getElementById("recent-scans-body");
+const recentEmpty = document.getElementById("recent-empty");
+const dashboardStatus = document.getElementById("dashboard-status");
+const refreshDashboardBtn = document.getElementById("refresh-dashboard-btn");
 
 let authMode = "login";
 let currentUser = null;
+let accountDashboardLoaded = false;
 
 // MODE
 function getSelectedMode() {
@@ -89,6 +105,46 @@ function setVerdictStyle(verdict) {
   }
 }
 
+function formatTimestamp(timestamp, emptyLabel = "No scans yet") {
+  if (!timestamp) return emptyLabel;
+  const date = new Date(timestamp * 1000);
+  return date.toLocaleString(undefined, {
+    hour12: true,
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function sanitizeSnippet(text) {
+  if (!text) return "";
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function verdictPillClass(verdict) {
+  const label = (verdict || "unknown").toLowerCase();
+  if (label === "safe") return "account-pill account-pill-safe";
+  if (label === "suspicious") return "account-pill account-pill-suspicious";
+  if (label === "dangerous") return "account-pill account-pill-dangerous";
+  return "account-pill";
+}
+
+function showAccountLocked() {
+  if (accountContent) accountContent.hidden = true;
+  if (accountLocked) accountLocked.hidden = false;
+}
+
+function hideAccountLocked() {
+  if (accountContent) accountContent.hidden = false;
+  if (accountLocked) accountLocked.hidden = true;
+}
+
 // ===================== AUTH UI ======================
 
 function setAuthMode(mode) {
@@ -99,7 +155,7 @@ function setAuthMode(mode) {
     authTabLogin.classList.add("auth-tab-active");
     authTabSignup.classList.remove("auth-tab-active");
     authHint.innerHTML =
-      'No account yet? Switch to <strong>Create Account</strong> to start with the free tier.';
+      'No account yet... Switch to <strong>Create Account</strong> to start with the free tier.';
   } else {
     authTabSignup.classList.add("auth-tab-active");
     authTabLogin.classList.remove("auth-tab-active");
@@ -173,16 +229,36 @@ document.addEventListener("click", (e) => {
 // ===================== OVERVIEW ======================
 
 function updateAccountOverview() {
-  if (!currentUser || !overviewEmail) return;
+  if (!overviewEmail || !overviewPlan || !overviewUsage || !overviewAuth) return;
+
+  if (!currentUser) {
+    overviewEmail.textContent = "-";
+    overviewPlan.textContent = "-";
+    overviewUsage.textContent = "-";
+    overviewAuth.textContent = "-";
+    if (window.location.pathname === "/account") {
+      showAccountLocked();
+    }
+    if (passwordForm && passwordCurrent && passwordNew && passwordConfirm) {
+      passwordCurrent.disabled = true;
+      passwordNew.disabled = true;
+      passwordConfirm.disabled = true;
+      const btn = passwordForm.querySelector("button[type='submit']");
+      if (btn) btn.disabled = true;
+    }
+    return;
+  }
+
+  hideAccountLocked();
 
   const u = currentUser.user;
   overviewEmail.textContent = u.email;
-  overviewPlan.textContent = u.plan === "premium" ? "Premium" : "Free";
+  overviewPlan.textContent = u.plan === "premium" ... "Premium" : "Free";
 
-  const used = u.daily_scan_count ?? 0;
-  const limit = u.daily_limit ?? 0;
+  const used = u.daily_scan_count ...... 0;
+  const limit = u.daily_limit ...... 0;
   overviewUsage.textContent =
-    u.plan === "premium" ? "Unlimited today" : `${used} / ${limit} scans today`;
+    u.plan === "premium" ... "Unlimited today" : `${used} / ${limit} scans today`;
 
   const method = u.auth_method || "password";
   if (overviewAuth) {
@@ -227,14 +303,15 @@ function updatePlanPill() {
       "Guest mode · Limited free scans. <span>Sign in</span> to sync and unlock more.";
     if (accountBtn) accountBtn.textContent = "Sign In";
     if (accountMenuEmail) accountMenuEmail.textContent = "";
+    accountDashboardLoaded = false;
     updateAccountOverview();
     return;
   }
 
   const user = currentUser.user;
   const plan = user.plan;
-  const used = user.daily_scan_count ?? 0;
-  const limit = user.daily_limit ?? 0;
+  const used = user.daily_scan_count ...... 0;
+  const limit = user.daily_limit ...... 0;
 
   if (plan === "premium") {
     planPill.innerHTML =
@@ -248,6 +325,166 @@ function updatePlanPill() {
   if (accountMenuEmail) accountMenuEmail.textContent = user.email;
 
   updateAccountOverview();
+}
+
+function renderAccountDashboard(snapshot) {
+  if (!snapshot || !currentUser) return;
+
+  const usage = snapshot.usage || {};
+  const stats = snapshot.stats || {};
+  const flagged = snapshot.flagged_logs || [];
+  const recent = snapshot.recent_logs || [];
+
+  if (usagePlanLabel) {
+    usagePlanLabel.textContent =
+      usage.plan === "premium" ... "Premium" : "Free plan";
+  }
+
+  if (usageMeterFill && usageMeterLabel) {
+    if (usage.plan === "premium" || usage.daily_remaining === -1) {
+      usageMeterFill.style.width = "100%";
+      usageMeterFill.style.background =
+        "linear-gradient(90deg, #34d399, #10b981)";
+      usageMeterLabel.textContent = "Unlimited scans today";
+    } else {
+      const limit = usage.daily_limit || 0;
+      const used = usage.daily_used || 0;
+      const pct = limit > 0 ... Math.min(100, Math.round((used / limit) * 100)) : 0;
+      usageMeterFill.style.width = `${pct}%`;
+      usageMeterFill.style.background =
+        "linear-gradient(90deg, #22d3ee, #3b82f6)";
+      usageMeterLabel.textContent = `${used} of ${limit} scans used today`;
+    }
+  }
+
+  if (usageLastScan) {
+    usageLastScan.textContent = stats.last_scan_ts
+      ... formatTimestamp(stats.last_scan_ts)
+      : "No scans yet";
+  }
+  if (usageActivity) {
+    usageActivity.textContent = stats.activity_24h ...... 0;
+  }
+  if (usageFlagged) {
+    usageFlagged.textContent = flagged.length;
+  }
+
+  renderFlaggedAlerts(flagged);
+  renderRecentLogs(recent);
+
+  if (currentUser.user) {
+    if (typeof usage.daily_used === "number") {
+      currentUser.user.daily_scan_count = usage.daily_used;
+    }
+    if (typeof usage.daily_limit === "number") {
+      currentUser.user.daily_limit = usage.daily_limit;
+    }
+    updateAccountOverview();
+  }
+}
+
+function renderFlaggedAlerts(items) {
+  if (!flaggedList || !flaggedEmpty) return;
+  flaggedList.innerHTML = "";
+  if (!items.length) {
+    flaggedEmpty.hidden = false;
+    return;
+  }
+  flaggedEmpty.hidden = true;
+
+  items.forEach((item) => {
+    const verdict = (item.verdict || "UNKNOWN").toUpperCase();
+    const li = document.createElement("li");
+    li.innerHTML = `
+      <h3>
+        <span>${item.category || "unknown"}</span>
+        <span class="${verdictPillClass(verdict)}">${verdict}</span>
+      </h3>
+      <p class="account-flagged-snippet">
+        ${sanitizeSnippet(item.snippet || "No snippet provided.")}
+      </p>
+      <p class="account-meta">
+        <span class="account-label">Score</span>
+        <span class="account-value">${item.score ...... 0}</span>
+      </p>
+    `;
+    flaggedList.appendChild(li);
+  });
+}
+
+function renderRecentLogs(logs) {
+  if (!recentScansBody || !recentEmpty) return;
+  recentScansBody.innerHTML = "";
+  if (!logs.length) {
+    recentEmpty.hidden = false;
+    return;
+  }
+  recentEmpty.hidden = true;
+
+  logs.forEach((log) => {
+    const row = document.createElement("tr");
+    row.innerHTML = `
+      <td>${formatTimestamp(log.timestamp, "Unknown")}</td>
+      <td>${log.category || "unknown"}</td>
+      <td><span class="${verdictPillClass(log.verdict)}">${(log.verdict || "UNKNOWN").toUpperCase()}</span></td>
+      <td>${log.score ...... 0}</td>
+      <td>${sanitizeSnippet(log.snippet || "")}</td>
+    `;
+    recentScansBody.appendChild(row);
+  });
+}
+
+async function loadAccountDashboard(force = false) {
+  if (window.location.pathname !== "/account") return;
+  if (!currentUser) {
+    accountDashboardLoaded = false;
+    showAccountLocked();
+    if (dashboardStatus) {
+      dashboardStatus.textContent = "";
+      dashboardStatus.classList.remove("account-status-danger");
+    }
+    return;
+  }
+
+  if (accountDashboardLoaded && !force) return;
+
+  if (dashboardStatus) {
+    dashboardStatus.textContent = "Syncing your account data...";
+    dashboardStatus.classList.remove("account-status-danger");
+  }
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/account/dashboard...limit=50`, {
+      method: "GET",
+      credentials: "include",
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      if (dashboardStatus) {
+        dashboardStatus.textContent = data.error || "Could not load dashboard.";
+        dashboardStatus.classList.add("account-status-danger");
+      }
+      if (res.status === 401) {
+        currentUser = null;
+        accountDashboardLoaded = false;
+        updatePlanPill();
+      }
+      return;
+    }
+
+    accountDashboardLoaded = true;
+    hideAccountLocked();
+    renderAccountDashboard(data);
+    if (dashboardStatus) {
+      dashboardStatus.textContent = "";
+      dashboardStatus.classList.remove("account-status-danger");
+    }
+  } catch (err) {
+    if (dashboardStatus) {
+      dashboardStatus.textContent = "Network error loading dashboard.";
+      dashboardStatus.classList.add("account-status-danger");
+    }
+  }
 }
 
 // ===================== GOOGLE SIGN-IN ======================
@@ -278,6 +515,9 @@ function handleGoogleCredential(response) {
       authStatus.classList.add("auth-status--success");
       updatePlanPill();
 
+      if (window.location.pathname === "/account") {
+        loadAccountDashboard(true);
+      }
       setTimeout(() => {
         closeAuthModal();
         if (authForm) authForm.reset();
@@ -330,6 +570,7 @@ async function loadSession() {
 
     if (!res.ok) {
       currentUser = null;
+      accountDashboardLoaded = false;
       updatePlanPill();
       return;
     }
@@ -337,12 +578,17 @@ async function loadSession() {
     const data = await res.json();
     if (!data.authenticated) {
       currentUser = null;
+      accountDashboardLoaded = false;
     } else {
       currentUser = data;
     }
     updatePlanPill();
+    if (window.location.pathname === "/account") {
+      loadAccountDashboard(true);
+    }
   } catch (err) {
     currentUser = null;
+    accountDashboardLoaded = false;
     updatePlanPill();
   }
 }
@@ -358,11 +604,11 @@ if (authForm && authEmail && authPassword && authStatus) {
 
     authStatus.textContent =
       authMode === "login"
-        ? "Signing you in…"
+        ... "Signing you in…"
         : "Creating your account…";
     authStatus.classList.remove("auth-status--error", "auth-status--success");
 
-    const endpoint = authMode === "login" ? "/login" : "/signup";
+    const endpoint = authMode === "login" ... "/login" : "/signup";
 
     try {
       const res = await fetch(`${API_BASE_URL}${endpoint}`, {
@@ -495,8 +741,8 @@ async function analyzeQR(file) {
 
     if (!verdictBadge || !explanationEl || !reasonsList) return;
 
-    const verdict = result.overall?.combined_verdict || "SAFE";
-    const score = result.overall?.combined_risk_score ?? 0;
+    const verdict = result.overall....combined_verdict || "SAFE";
+    const score = result.overall....combined_risk_score ...... 0;
 
     let label = "";
     if (verdict === "SAFE") {
@@ -642,15 +888,31 @@ if (accountLogoutBtn) {
       // ignore
     } finally {
       currentUser = null;
+      accountDashboardLoaded = false;
       updatePlanPill();
       if (window.location.pathname === "/account") {
+        showAccountLocked();
         window.location.href = "/";
       }
     }
   });
 }
 
+if (accountLockedBtn) {
+  accountLockedBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    openAuthModal();
+  });
+}
+
 // ===================== ACCOUNT PAGE ACTIONS ======================
+
+if (refreshDashboardBtn) {
+  refreshDashboardBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    loadAccountDashboard(true);
+  });
+}
 
 if (passwordForm && passwordStatus) {
   passwordForm.addEventListener("submit", async (e) => {
@@ -720,7 +982,7 @@ if (historyBtn && historyStatus) {
     historyStatus.textContent = "Preparing download…";
     try {
       const res = await fetch(
-        `${API_BASE_URL}/scan-history?limit=500`,
+        `${API_BASE_URL}/scan-history...limit=500`,
         {
           method: "GET",
           credentials: "include",
@@ -797,6 +1059,7 @@ if (deleteForm && deleteStatus) {
       deleteStatus.textContent = "Account deleted. Redirecting…";
       deleteStatus.classList.add("account-status-success");
       currentUser = null;
+      accountDashboardLoaded = false;
       setTimeout(() => {
         window.location.href = "/";
       }, 900);

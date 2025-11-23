@@ -36,100 +36,175 @@
       </nav>
     </header>
 
+    
     <main class="account-main">
       <h1 class="account-heading">Manage your account</h1>
       <p class="account-subtitle">
-        Email, plan, security, data — everything in one place.
+        Email, plan, security, data - everything in one place.
       </p>
 
-      <div class="account-grid">
-        <!-- Overview -->
-        <section class="account-card">
-          <h2>Overview</h2>
-          <p class="account-meta">
-            <span class="account-label">Email</span>
-            <span id="overview-email" class="account-value">–</span>
-          </p>
-          <p class="account-meta">
-            <span class="account-label">Plan</span>
-            <span id="overview-plan" class="account-value">–</span>
-          </p>
-          <p class="account-meta">
-            <span class="account-label">Today’s usage</span>
-            <span id="overview-usage" class="account-value">–</span>
-          </p>
-          <p class="account-meta">
-            <span class="account-label">Sign-in method</span>
-            <span id="overview-auth" class="account-value">–</span>
-          </p>
-          <p class="account-hint">
-            Upgrade, downgrade, or cancel anytime from the billing section.
-          </p>
-          <button class="secondary-btn account-btn" id="account-billing-btn">
-            Manage billing / subscription
-          </button>
-        </section>
-
-        <!-- Security -->
-        <section class="account-card">
-          <h2>Security</h2>
-          <p class="account-hint" id="password-hint">
-            Change your password for email sign-in.
-          </p>
-
-          <form id="password-form" class="account-form">
-            <label for="password-current">Current password</label>
-            <input type="password" id="password-current" autocomplete="current-password" />
-
-            <label for="password-new">New password</label>
-            <input type="password" id="password-new" autocomplete="new-password" />
-
-            <label for="password-confirm">Confirm new password</label>
-            <input type="password" id="password-confirm" autocomplete="new-password" />
-
-            <button type="submit" class="primary-btn account-btn">
-              Update password
-            </button>
-          </form>
-          <p id="password-status" class="account-status"></p>
-        </section>
+      <div id="account-locked" class="account-locked" hidden>
+        <h2>Sign in to manage your account</h2>
+        <p>You need to sign in so we can load your plan, usage, and security settings. Your account controls live here once you are authenticated.</p>
+        <button id="account-locked-btn" class="primary-btn account-btn">Open sign in</button>
       </div>
 
-      <div class="account-grid account-grid-bottom">
-        <!-- Data & history -->
-        <section class="account-card">
-          <h2>Data & history</h2>
-          <p class="account-hint">
-            Download a copy of your recent scan history as JSON.
-          </p>
-          <button class="secondary-btn account-btn" id="download-history-btn">
-            Download scan history
-          </button>
-          <p id="history-status" class="account-status"></p>
-        </section>
-
-        <!-- Danger zone -->
-        <section class="account-card account-card-danger">
-          <h2>Danger zone</h2>
-          <p class="account-hint">
-            Permanently delete your ScamDetector account. This logs you out and anonymizes your scan logs. This cannot be undone.
-          </p>
-
-          <form id="delete-form" class="account-form">
-            <label for="delete-password">Password (required for email accounts)</label>
-            <input type="password" id="delete-password" autocomplete="current-password" />
-
-            <label for="delete-confirm-text">Type <strong>DELETE</strong> to confirm</label>
-            <input type="text" id="delete-confirm-text" placeholder="DELETE" />
-
-            <button type="submit" class="secondary-btn account-btn account-btn-danger">
-              Delete my account
+      <div id="account-content">
+        <div class="account-grid">
+          <!-- Overview -->
+          <section class="account-card">
+            <h2>Overview</h2>
+            <p class="account-meta">
+              <span class="account-label">Email</span>
+              <span id="overview-email" class="account-value">-</span>
+            </p>
+            <p class="account-meta">
+              <span class="account-label">Plan</span>
+              <span id="overview-plan" class="account-value">-</span>
+            </p>
+            <p class="account-meta">
+              <span class="account-label">Today's usage</span>
+              <span id="overview-usage" class="account-value">-</span>
+            </p>
+            <p class="account-meta">
+              <span class="account-label">Sign-in method</span>
+              <span id="overview-auth" class="account-value">-</span>
+            </p>
+            <p class="account-hint">
+              Upgrade, downgrade, or cancel anytime from the billing section.
+            </p>
+            <button class="secondary-btn account-btn" id="account-billing-btn">
+              Manage billing / subscription
             </button>
-          </form>
-          <p id="delete-status" class="account-status account-status-danger"></p>
+          </section>
+
+          <!-- Security -->
+          <section class="account-card">
+            <h2>Security</h2>
+            <p class="account-hint" id="password-hint">
+              Change your password for email sign-in.
+            </p>
+
+            <form id="password-form" class="account-form">
+              <label for="password-current">Current password</label>
+              <input type="password" id="password-current" autocomplete="current-password" />
+
+              <label for="password-new">New password</label>
+              <input type="password" id="password-new" autocomplete="new-password" />
+
+              <label for="password-confirm">Confirm new password</label>
+              <input type="password" id="password-confirm" autocomplete="new-password" />
+
+              <button type="submit" class="primary-btn account-btn">
+                Update password
+              </button>
+            </form>
+            <p id="password-status" class="account-status"></p>
+          </section>
+        </div>
+
+        <div class="account-grid account-grid-insights">
+          <section class="account-card">
+            <div class="account-card-headline">
+              <h2>Usage insights</h2>
+              <span id="usage-plan-label" class="account-pill">Plan</span>
+            </div>
+            <div class="account-meter">
+              <div id="usage-meter-fill" class="account-meter-fill"></div>
+            </div>
+            <p id="usage-meter-label" class="account-meter-label">-</p>
+            <ul class="account-list">
+              <li>
+                <span>Last scan</span>
+                <span id="usage-last-scan">-</span>
+              </li>
+              <li>
+                <span>Scans in last 24h</span>
+                <span id="usage-activity">-</span>
+              </li>
+              <li>
+                <span>Flagged alerts</span>
+                <span id="usage-flagged">-</span>
+              </li>
+            </ul>
+          </section>
+
+          <section class="account-card">
+            <div class="account-card-headline">
+              <h2>Alerts & signals</h2>
+              <span class="account-chip">Auto-generated</span>
+            </div>
+            <p class="account-hint">
+              We highlight the latest suspicious scans so you can review or escalate if needed.
+            </p>
+            <div id="flagged-empty" class="account-empty">No alerts yet. Keep scanning safely.</div>
+            <ul id="flagged-list" class="account-flagged-list"></ul>
+          </section>
+        </div>
+
+        <section class="account-card account-card-wide">
+          <div class="account-card-headline">
+            <h2>Recent scans</h2>
+            <button id="refresh-dashboard-btn" class="ghost-btn" type="button">Refresh</button>
+          </div>
+          <p class="account-hint">
+            A quick feed of your latest scans, verdicts, and snippets. Download the full log anytime below.
+          </p>
+          <div class="account-table-wrap">
+            <table class="account-table">
+              <thead>
+                <tr>
+                  <th>Timestamp</th>
+                  <th>Category</th>
+                  <th>Verdict</th>
+                  <th>Score</th>
+                  <th>Snippet</th>
+                </tr>
+              </thead>
+              <tbody id="recent-scans-body"></tbody>
+            </table>
+            <div id="recent-empty" class="account-empty">No scans yet. Run your first scan to see activity here.</div>
+          </div>
+          <p id="dashboard-status" class="account-status"></p>
         </section>
+
+        <div class="account-grid account-grid-bottom">
+          <!-- Data & history -->
+          <section class="account-card">
+            <h2>Data & history</h2>
+            <p class="account-hint">
+              Download a copy of your recent scan history as JSON.
+            </p>
+            <button class="secondary-btn account-btn" id="download-history-btn">
+              Download scan history
+            </button>
+            <p id="history-status" class="account-status"></p>
+          </section>
+
+          <!-- Danger zone -->
+          <section class="account-card account-card-danger">
+            <h2>Danger zone</h2>
+            <p class="account-hint">
+              Permanently delete your ScamDetector account. This logs you out and anonymizes your scan logs. This cannot be undone.
+            </p>
+
+            <form id="delete-form" class="account-form">
+              <label for="delete-password">Password (required for email accounts)</label>
+              <input type="password" id="delete-password" autocomplete="current-password" />
+
+              <label for="delete-confirm-text">Type <strong>DELETE</strong> to confirm</label>
+              <input type="text" id="delete-confirm-text" placeholder="DELETE" />
+
+              <button type="submit" class="secondary-btn account-btn account-btn-danger">
+                Delete my account
+              </button>
+            </form>
+            <p id="delete-status" class="account-status account-status-danger"></p>
+          </section>
+        </div>
       </div>
     </main>
+
 
     <footer class="app-footer">
       <p>Built to protect awareness, not to replace your judgment. Not financial or legal advice.</p>

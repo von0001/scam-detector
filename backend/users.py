@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 from typing import List, Dict, Any, Optional, Tuple
+from collections import Counter
 from pathlib import Path
 import json
 import time
@@ -407,3 +408,79 @@ def delete_user(user_id: str) -> bool:
         _save_logs(logs)
 
     return True
+
+
+def _format_breakdown(counter: Counter) -> List[Dict[str, Any]]:
+    """
+    Convert a Counter into a sorted list of {label, count} pairs.
+    """
+    if not counter:
+        return []
+    return [
+        {"label": label, "count": count}
+        for label, count in counter.most_common()
+    ]
+
+
+def build_account_snapshot(user: Dict[str, Any], history_limit: int = 20) -> Dict[str, Any]:
+    """
+    Build a richer account payload for the dashboard page with usage + log stats.
+    """
+    user_id = user["id"]
+    logs = get_scan_history_for_user(user_id, limit=history_limit)
+
+    verdict_counter: Counter = Counter()
+    category_counter: Counter = Counter()
+    flagged_logs: List[Dict[str, Any]] = []
+    now = int(time.time())
+
+    for log in logs:
+        verdict = (log.get("verdict") or "UNKNOWN").upper()
+        if verdict not in {"SAFE", "SUSPICIOUS", "DANGEROUS"}:
+            verdict = "OTHER"
+        verdict_counter[verdict] += 1
+
+        category = log.get("category") or "unknown"
+        category_counter[category] += 1
+
+        if log.get("verdict") != "SAFE" and len(flagged_logs) < 5:
+            flagged_logs.append(log)
+
+    last_scan_ts = logs[0]["timestamp"] if logs else None
+    activity_24h = sum(1 for log in logs if now - log.get("timestamp", 0) <= 86_400)
+
+    plan = user.get("plan", "free")
+    daily_limit = user.get("daily_limit", DEFAULT_FREE_DAILY_LIMIT)
+    daily_used = user.get("daily_scan_count", 0)
+    if plan == "premium":
+        daily_remaining = -1
+    else:
+        limit_value = daily_limit if isinstance(daily_limit, int) else DEFAULT_FREE_DAILY_LIMIT
+        used_value = daily_used if isinstance(daily_used, int) else 0
+        daily_remaining = max(limit_value - used_value, 0)
+
+    usage = {
+        "plan": plan,
+        "daily_limit": daily_limit,
+        "daily_used": daily_used,
+        "daily_remaining": daily_remaining,
+        "last_reset_date": user.get("daily_scan_date", ""),
+        "last_login": user.get("last_login"),
+        "created_at": user.get("created_at"),
+    }
+
+    stats = {
+        "last_scan_ts": last_scan_ts,
+        "activity_24h": activity_24h,
+        "recent_total": len(logs),
+        "verdict_breakdown": _format_breakdown(verdict_counter),
+        "category_breakdown": _format_breakdown(category_counter),
+    }
+
+    return {
+        "user": user,
+        "usage": usage,
+        "stats": stats,
+        "recent_logs": logs,
+        "flagged_logs": flagged_logs[:3],
+    }

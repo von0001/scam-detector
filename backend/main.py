@@ -32,6 +32,7 @@ from backend.users import (
     get_or_create_google_user,
     change_password,
     delete_user,
+    build_account_snapshot,
 )
 from backend.user_auth import (
     create_access_token,
@@ -64,6 +65,7 @@ GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 # ---------------------------------------------------------
 BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
+ACCOUNT_PAGE = BASE_DIR / "account.html"
 
 app = FastAPI(title="ScamDetector API")
 
@@ -265,7 +267,19 @@ def admin_page(request: Request):
 
 @app.get("/account")
 def account_page():
-    return FileResponse(STATIC_DIR / "account.html")
+    target = ACCOUNT_PAGE if ACCOUNT_PAGE.exists() else STATIC_DIR / "account.html"
+    return FileResponse(target)
+
+
+@app.get("/account/dashboard")
+def account_dashboard(request: Request, limit: int = 25):
+    user = get_current_user(request)
+    if not user:
+        return JSONResponse({"error": "Authentication required."}, status_code=401)
+
+    limit = max(5, min(limit, 200))
+    snapshot = build_account_snapshot(user, history_limit=limit)
+    return snapshot
 
 
 # ---------------------------------------------------------
