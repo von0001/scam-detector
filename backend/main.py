@@ -52,6 +52,11 @@ from backend.auth import (
     verify_admin_token,
 )
 
+try:
+    import stripe  # type: ignore
+except Exception:  # pragma: no cover
+    stripe = None  # type: ignore
+
 # Optional: Google ID token verification
 try:
     import google.auth.transport.requests
@@ -60,6 +65,19 @@ except ImportError:  # pragma: no cover
     google = None  # type: ignore
 
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
+STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "")
+STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "https://scamdetectorapp.com")
+
+STRIPE_PRICE_MONTHLY = os.getenv(
+    "STRIPE_PRICE_MONTHLY", "price_1SWh0pLSwRqmFbmS16yHTkBQ"
+)
+STRIPE_PRICE_YEARLY = os.getenv(
+    "STRIPE_PRICE_YEARLY", "price_1SWh0pLSwRqmFbmShWjQBjjn"
+)
+
+if stripe and STRIPE_SECRET_KEY:
+    stripe.api_key = STRIPE_SECRET_KEY
 
 # ---------------------------------------------------------
 # FastAPI + static
@@ -118,6 +136,10 @@ class SubscriptionUpdateRequest(BaseModel):
 class SelfSubscriptionRequest(BaseModel):
     plan: Literal["free", "premium"]
     billing_cycle: Optional[Literal["monthly", "yearly", "none"]] = "monthly"
+
+
+class CheckoutSessionRequest(BaseModel):
+    plan: Literal["monthly", "yearly"] = "monthly"
 
 
 class AdminLoginRequest(BaseModel):
@@ -225,8 +247,51 @@ def _user_response(user: dict) -> dict:
             "subscription_status": user.get("subscription_status", "inactive"),
             "subscription_renewal": user.get("subscription_renewal"),
             "last_plan_change": user.get("last_plan_change"),
+            "stripe_customer_id": user.get("stripe_customer_id"),
+            "stripe_subscription_id": user.get("stripe_subscription_id"),
         }
     }
+
+
+def _stripe_price_for_plan(plan: str) -> str:
+    plan = plan.lower()
+    if plan == "yearly":
+        return STRIPE_PRICE_YEARLY
+    return STRIPE_PRICE_MONTHLY
+
+
+def _plan_cycle_from_price(price_id: str) -> tuple[str, str]:
+    if price_id == STRIPE_PRICE_YEARLY:
+        return "premium", "yearly"
+    return "premium", "monthly"
+
+
+def _should_be_premium(status: str) -> bool:
+    status_lower = (status or "").lower()
+    return status_lower in {"active", "trialing", "past_due", "incomplete"}
+
+
+def _apply_subscription_update(
+    user_id: str,
+    *,
+    price_id: Optional[str] = None,
+    status: str = "active",
+    customer_id: Optional[str] = None,
+    subscription_id: Optional[str] = None,
+    current_period_end: Optional[int] = None,
+):
+    plan, cycle = _plan_cycle_from_price(price_id or STRIPE_PRICE_MONTHLY)
+    desired_plan = plan if _should_be_premium(status) else "free"
+    subscription_status = "active" if _should_be_premium(status) else "canceled"
+    update_user_plan(
+        user_id=user_id,
+        plan=desired_plan,
+        billing_cycle=cycle if desired_plan == "premium" else "none",
+        status=subscription_status,
+        renewal=current_period_end,
+        stripe_customer_id=customer_id,
+        stripe_subscription_id=subscription_id,
+    )
 
 
 # ---------------------------------------------------------
@@ -296,6 +361,66 @@ def account_dashboard(request: Request, limit: int = 25):
     limit = max(5, min(limit, 200))
     snapshot = build_account_snapshot(user, history_limit=limit)
     return snapshot
+
+
+@app.post("/create-checkout-session")
+def create_checkout_session(body: CheckoutSessionRequest, request: Request):
+    user = get_current_user(request)
+    if not user:
+        return JSONResponse({"error": "Authentication required."}, status_code=401)
+
+    if stripe is None or not STRIPE_SECRET_KEY:
+        return JSONResponse(
+            {"error": "Stripe is not configured on the server."}, status_code=503
+        )
+
+    price_id = _stripe_price_for_plan(body.plan)
+    try:
+        session = stripe.checkout.Session.create(
+            mode="subscription",
+            payment_method_types=["card"],
+            line_items=[{"price": price_id, "quantity": 1}],
+            success_url=f"{FRONTEND_URL}/account?checkout=success",
+            cancel_url=f"{FRONTEND_URL}/subscribe?checkout=cancel",
+            metadata={"userId": user["id"], "plan": body.plan},
+            subscription_data={
+                "metadata": {"userId": user["id"], "plan": body.plan}
+            },
+            customer=user.get("stripe_customer_id") or None,
+            customer_email=user.get("email"),
+        )
+    except Exception as exc:  # pragma: no cover
+        return JSONResponse({"error": str(exc)}, status_code=500)
+
+    return {"url": session.url}
+
+
+@app.post("/billing-portal")
+def billing_portal(request: Request):
+    user = get_current_user(request)
+    if not user:
+        return JSONResponse({"error": "Authentication required."}, status_code=401)
+
+    if stripe is None or not STRIPE_SECRET_KEY:
+        return JSONResponse(
+            {"error": "Stripe is not configured on the server."}, status_code=503
+        )
+
+    customer_id = user.get("stripe_customer_id")
+    if not customer_id:
+        return JSONResponse(
+            {"error": "No billing profile found for this account."}, status_code=400
+        )
+
+    try:
+        portal = stripe.billing_portal.Session.create(
+            customer=customer_id,
+            return_url=f"{FRONTEND_URL}/account",
+        )
+    except Exception as exc:  # pragma: no cover
+        return JSONResponse({"error": str(exc)}, status_code=500)
+
+    return {"url": portal.url}
 
 
 # ---------------------------------------------------------
@@ -573,6 +698,82 @@ def account_downgrade(request: Request):
         return JSONResponse({"error": "Could not downgrade."}, status_code=400)
 
     return {"success": True, **_user_response(updated)}
+
+
+# ---------------------------------------------------------
+# Stripe Webhooks
+# ---------------------------------------------------------
+@app.post("/stripe-webhook")
+async def stripe_webhook(request: Request):
+    if stripe is None or not STRIPE_WEBHOOK_SECRET:
+        return JSONResponse({"error": "Stripe not configured."}, status_code=503)
+
+    signature = request.headers.get("stripe-signature")
+    payload = await request.body()
+
+    try:
+        event = stripe.Webhook.construct_event(
+            payload, signature, STRIPE_WEBHOOK_SECRET
+        )
+    except Exception as exc:  # pragma: no cover
+        return JSONResponse({"error": f"Invalid webhook: {exc}"}, status_code=400)
+
+    event_type = event.get("type", "")
+    data_object = event.get("data", {}).get("object", {})
+
+    def _meta_user_id(meta: dict) -> Optional[str]:
+        return (meta or {}).get("userId") or (meta or {}).get("user_id")
+
+    if event_type == "checkout.session.completed":
+        meta = data_object.get("metadata") or {}
+        user_id = _meta_user_id(meta)
+        if user_id and data_object.get("subscription"):
+            try:
+                sub = stripe.Subscription.retrieve(data_object["subscription"])
+                price_id = sub["items"]["data"][0]["price"]["id"]
+                _apply_subscription_update(
+                    user_id,
+                    price_id=price_id,
+                    status=sub.get("status", "active"),
+                    customer_id=sub.get("customer"),
+                    subscription_id=sub.get("id"),
+                    current_period_end=sub.get("current_period_end"),
+                )
+            except Exception:
+                pass
+    elif event_type in {
+        "invoice.paid",
+        "customer.subscription.updated",
+        "customer.subscription.deleted",
+    }:
+        subscription = data_object
+        # For invoice events, subscription is nested
+        if event_type == "invoice.paid":
+            subscription_id = data_object.get("subscription")
+            if subscription_id:
+                try:
+                    subscription = stripe.Subscription.retrieve(subscription_id)
+                except Exception:
+                    subscription = None
+        if subscription:
+            meta = subscription.get("metadata") or {}
+            user_id = _meta_user_id(meta)
+            if user_id:
+                price_id = (
+                    (subscription.get("items", {}).get("data") or [{}])[0]
+                    .get("price", {})
+                    .get("id")
+                )
+                _apply_subscription_update(
+                    user_id,
+                    price_id=price_id,
+                    status=subscription.get("status", "active"),
+                    customer_id=subscription.get("customer"),
+                    subscription_id=subscription.get("id"),
+                    current_period_end=subscription.get("current_period_end"),
+                )
+
+    return {"received": True}
 
 
 @app.post("/account/change-password")

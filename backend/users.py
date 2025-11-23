@@ -138,6 +138,8 @@ def create_user(email: str, password: str) -> Dict[str, Any]:
         "subscription_status": "inactive",  # active | canceled | inactive
         "subscription_renewal": None,
         "last_plan_change": now,
+        "stripe_customer_id": None,
+        "stripe_subscription_id": None,
     }
 
     users.append(user)
@@ -218,6 +220,8 @@ def get_or_create_google_user(email: str, google_sub: str) -> Dict[str, Any]:
         "subscription_status": "inactive",
         "subscription_renewal": None,
         "last_plan_change": now,
+        "stripe_customer_id": None,
+        "stripe_subscription_id": None,
     }
     users.append(user)
     _save_users(users)
@@ -264,6 +268,8 @@ def update_user_plan_by_email(
     billing_cycle: Optional[str] = None,
     status: str = "active",
     renewal: Optional[int] = None,
+    stripe_customer_id: Optional[str] = None,
+    stripe_subscription_id: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     """
     Legacy helper used by webhook: update plan by email and reset limits.
@@ -281,6 +287,8 @@ def update_user_plan_by_email(
                 billing_cycle=billing_cycle or u.get("billing_cycle", "none"),
                 status=status or u.get("subscription_status", "active"),
                 renewal=renewal if renewal is not None else u.get("subscription_renewal"),
+                stripe_customer_id=stripe_customer_id or u.get("stripe_customer_id"),
+                stripe_subscription_id=stripe_subscription_id or u.get("stripe_subscription_id"),
             )
             changed = True
             break
@@ -356,6 +364,8 @@ def _set_plan(
     billing_cycle: str = "none",
     status: str = "active",
     renewal: Optional[int] = None,
+    stripe_customer_id: Optional[str] = None,
+    stripe_subscription_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Mutate the user record with plan + billing info and return safe view.
@@ -369,6 +379,10 @@ def _set_plan(
     user["subscription_status"] = status
     user["subscription_renewal"] = renewal
     user["last_plan_change"] = int(time.time())
+    if stripe_customer_id:
+        user["stripe_customer_id"] = stripe_customer_id
+    if stripe_subscription_id:
+        user["stripe_subscription_id"] = stripe_subscription_id
 
     if plan == "premium":
         user["daily_limit"] = 999_999
@@ -384,6 +398,8 @@ def update_user_plan(
     billing_cycle: str = "none",
     status: str = "active",
     renewal: Optional[int] = None,
+    stripe_customer_id: Optional[str] = None,
+    stripe_subscription_id: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     """
     Update a user plan by id (used for self-serve subscription changes).
@@ -401,6 +417,8 @@ def update_user_plan(
             billing_cycle=billing_cycle,
             status=status,
             renewal=renewal,
+            stripe_customer_id=stripe_customer_id,
+            stripe_subscription_id=stripe_subscription_id,
         )
         changed = True
         break
@@ -571,6 +589,8 @@ def build_account_snapshot(user: Dict[str, Any], history_limit: int = 20) -> Dic
         "subscription_status": user.get("subscription_status", "inactive"),
         "subscription_renewal": user.get("subscription_renewal"),
         "last_plan_change": user.get("last_plan_change"),
+        "stripe_customer_id": user.get("stripe_customer_id"),
+        "stripe_subscription_id": user.get("stripe_subscription_id"),
     }
 
     stats = {
