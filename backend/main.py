@@ -294,6 +294,22 @@ def _apply_subscription_update(
     )
 
 
+def _create_checkout_session_for_user(user: dict, cycle: str):
+    price_id = _stripe_price_for_plan(cycle)
+    session = stripe.checkout.Session.create(
+        mode="subscription",
+        payment_method_types=["card"],
+        line_items=[{"price": price_id, "quantity": 1}],
+        success_url=f"{FRONTEND_URL}/account?checkout=success",
+        cancel_url=f"{FRONTEND_URL}/subscribe?checkout=cancel",
+        metadata={"userId": user["id"], "plan": cycle},
+        subscription_data={"metadata": {"userId": user["id"], "plan": cycle}},
+        customer=user.get("stripe_customer_id") or None,
+        customer_email=user.get("email"),
+    )
+    return session
+
+
 # ---------------------------------------------------------
 # Pages
 # ---------------------------------------------------------
@@ -374,23 +390,13 @@ def create_checkout_session(body: CheckoutSessionRequest, request: Request):
             {"error": "Stripe is not configured on the server."}, status_code=503
         )
 
-    price_id = _stripe_price_for_plan(body.plan)
+    if user.get("plan") == "premium":
+        return JSONResponse({"error": "Account is already on Premium."}, status_code=400)
+
     try:
-        session = stripe.checkout.Session.create(
-            mode="subscription",
-            payment_method_types=["card"],
-            line_items=[{"price": price_id, "quantity": 1}],
-            success_url=f"{FRONTEND_URL}/account?checkout=success",
-            cancel_url=f"{FRONTEND_URL}/subscribe?checkout=cancel",
-            metadata={"userId": user["id"], "plan": body.plan},
-            subscription_data={
-                "metadata": {"userId": user["id"], "plan": body.plan}
-            },
-            customer=user.get("stripe_customer_id") or None,
-            customer_email=user.get("email"),
-        )
+        session = _create_checkout_session_for_user(user, body.plan)
     except Exception as exc:  # pragma: no cover
-        return JSONResponse({"error": str(exc)}, status_code=500)
+        return JSONResponse({"error": f"Unable to start checkout: {exc}"}, status_code=500)
 
     return {"url": session.url}
 
@@ -667,19 +673,30 @@ def account_subscribe(body: SelfSubscriptionRequest, request: Request):
     if not user:
         return JSONResponse({"error": "Authentication required."}, status_code=401)
 
-    target_plan = body.plan
+    if stripe is None or not STRIPE_SECRET_KEY:
+        return JSONResponse(
+            {"error": "Stripe is not configured on the server."}, status_code=503
+        )
+
+    if body.plan != "premium":
+        return JSONResponse(
+            {"error": "Subscriptions are managed via Stripe checkout only."},
+            status_code=400,
+        )
+
     billing_cycle = body.billing_cycle or "monthly"
+    if user.get("plan") == "premium":
+        return JSONResponse(
+            {"error": "Account is already on Premium."},
+            status_code=400,
+        )
 
-    updated = update_user_plan(
-        user_id=user["id"],
-        plan=target_plan,
-        billing_cycle=billing_cycle,
-        status="active" if target_plan == "premium" else "inactive",
-    )
-    if not updated:
-        return JSONResponse({"error": "Could not update subscription."}, status_code=400)
+    try:
+        session = _create_checkout_session_for_user(user, billing_cycle)
+    except Exception as exc:  # pragma: no cover
+        return JSONResponse({"error": f"Unable to start checkout: {exc}"}, status_code=500)
 
-    return {"success": True, **_user_response(updated)}
+    return {"url": session.url}
 
 
 @app.post("/account/downgrade")

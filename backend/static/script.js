@@ -546,7 +546,7 @@ function ensureLoggedInForSubscription(cycle) {
   if (currentUser) return true;
   pendingSubscriptionCycle = cycle;
   openAuthModal();
-  setSubscribeStatus("Sign in to upgrade to Premium.", true);
+  setSubscribeStatus("Sign in to upgrade via secure checkout.", true);
   return false;
 }
 
@@ -557,32 +557,30 @@ async function triggerSubscription(billingCycle = "monthly") {
     pendingSubscriptionCycle = null;
     return;
   }
-  setSubscribeStatus("Upgrading you to Premium...", false);
+  setSubscribeStatus("Redirecting you to secure checkout...", false);
   try {
-    const res = await fetch(`${API_BASE_URL}/account/subscribe`, {
+    const res = await fetch(`${API_BASE_URL}/create-checkout-session`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
       body: JSON.stringify({
-        plan: "premium",
-        billing_cycle: billingCycle,
+        plan: billingCycle === "yearly" ? "yearly" : "monthly",
       }),
     });
     const data = await res.json();
     if (!res.ok) {
-      setSubscribeStatus(data.error || "Could not start subscription.", true);
+      setSubscribeStatus(
+        data.error || "Could not start Stripe checkout.",
+        true
+      );
       return;
     }
-    currentUser = data;
     pendingSubscriptionCycle = null;
-    updatePlanPill();
-    if (window.location.pathname === "/account") {
-      loadAccountDashboard(true);
+    if (data.url) {
+      window.location.href = data.url;
+      return;
     }
-    setSubscribeStatus("You're upgraded. Redirecting to account...", false);
-    setTimeout(() => {
-      window.location.href = "/account";
-    }, 700);
+    setSubscribeStatus("Could not start Stripe checkout.", true);
   } catch (err) {
     setSubscribeStatus("Network error. Try again.", true);
   }
