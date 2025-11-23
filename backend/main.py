@@ -29,6 +29,7 @@ from backend.users import (
     add_scan_log,
     get_scan_history_for_user,
     update_user_plan_by_email,
+    update_user_plan,
     get_or_create_google_user,
     change_password,
     delete_user,
@@ -111,6 +112,12 @@ class SubscriptionUpdateRequest(BaseModel):
     email: EmailStr
     plan: Literal["free", "premium"]
     secret: Optional[str] = None
+    billing_cycle: Optional[Literal["monthly", "yearly", "none"]] = None
+
+
+class SelfSubscriptionRequest(BaseModel):
+    plan: Literal["free", "premium"]
+    billing_cycle: Optional[Literal["monthly", "yearly", "none"]] = "monthly"
 
 
 class AdminLoginRequest(BaseModel):
@@ -143,7 +150,7 @@ def is_url_like(text: str) -> bool:
 
 
 def _normalize_score(score: int | float) -> int:
-    # Ensure 0–100
+    # Ensure 0-100
     try:
         s = float(score)
     except Exception:
@@ -214,6 +221,10 @@ def _user_response(user: dict) -> dict:
             "daily_scan_date": user.get("daily_scan_date", ""),
             "daily_scan_count": user.get("daily_scan_count", 0),
             "daily_limit": user.get("daily_limit"),
+            "billing_cycle": user.get("billing_cycle", "none"),
+            "subscription_status": user.get("subscription_status", "inactive"),
+            "subscription_renewal": user.get("subscription_renewal"),
+            "last_plan_change": user.get("last_plan_change"),
         }
     }
 
@@ -244,6 +255,11 @@ def terms_page():
 @app.get("/feedback")
 def feedback_page():
     return FileResponse(STATIC_DIR / "feedback.html")
+
+
+@app.get("/subscribe")
+def subscribe_page():
+    return FileResponse(STATIC_DIR / "subscribe.html")
 
 
 @app.get("/contact")
@@ -508,11 +524,55 @@ def update_subscription(body: SubscriptionUpdateRequest):
     if body.secret != SUBSCRIPTION_WEBHOOK_SECRET:
         return JSONResponse({"error": "Unauthorized."}, status_code=401)
 
-    user = update_user_plan_by_email(body.email, body.plan)
+    user = update_user_plan_by_email(
+        body.email,
+        body.plan,
+        billing_cycle=body.billing_cycle,
+        status="active" if body.plan == "premium" else "inactive",
+    )
     if not user:
         return JSONResponse({"error": "User not found."}, status_code=404)
 
     return {"success": True, **_user_response(user)}
+
+
+@app.post("/account/subscribe")
+def account_subscribe(body: SelfSubscriptionRequest, request: Request):
+    user = get_current_user(request)
+    if not user:
+        return JSONResponse({"error": "Authentication required."}, status_code=401)
+
+    target_plan = body.plan
+    billing_cycle = body.billing_cycle or "monthly"
+
+    updated = update_user_plan(
+        user_id=user["id"],
+        plan=target_plan,
+        billing_cycle=billing_cycle,
+        status="active" if target_plan == "premium" else "inactive",
+    )
+    if not updated:
+        return JSONResponse({"error": "Could not update subscription."}, status_code=400)
+
+    return {"success": True, **_user_response(updated)}
+
+
+@app.post("/account/downgrade")
+def account_downgrade(request: Request):
+    user = get_current_user(request)
+    if not user:
+        return JSONResponse({"error": "Authentication required."}, status_code=401)
+
+    updated = update_user_plan(
+        user_id=user["id"],
+        plan="free",
+        billing_cycle="none",
+        status="canceled",
+    )
+    if not updated:
+        return JSONResponse({"error": "Could not downgrade."}, status_code=400)
+
+    return {"success": True, **_user_response(updated)}
 
 
 @app.post("/account/change-password")

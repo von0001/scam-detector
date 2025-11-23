@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Account — ScamDetector</title>
+  <title>Account - ScamDetector</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="stylesheet" href="/static/style.css" />
 </head>
@@ -10,7 +10,7 @@
   <div class="app">
     <header class="top-nav">
       <div class="brand">
-        <div class="brand-mark">🛡</div>
+        <div class="brand-mark">SD</div>
         <div class="brand-text">
           <span class="brand-name">ScamDetector</span>
           <span class="brand-tagline">Digital Safety Framework</span>
@@ -36,7 +36,6 @@
       </nav>
     </header>
 
-    
     <main class="account-main">
       <h1 class="account-heading">Manage your account</h1>
       <p class="account-subtitle">
@@ -51,7 +50,6 @@
 
       <div id="account-content">
         <div class="account-grid">
-          <!-- Overview -->
           <section class="account-card">
             <h2>Overview</h2>
             <p class="account-meta">
@@ -70,15 +68,25 @@
               <span class="account-label">Sign-in method</span>
               <span id="overview-auth" class="account-value">-</span>
             </p>
+            <p class="account-meta">
+              <span class="account-label">Billing</span>
+              <span id="overview-billing" class="account-value">-</span>
+            </p>
+            <p class="account-meta">
+              <span class="account-label">Subscription</span>
+              <span id="overview-subscription" class="account-value">-</span>
+            </p>
             <p class="account-hint">
               Upgrade, downgrade, or cancel anytime from the billing section.
             </p>
             <button class="secondary-btn account-btn" id="account-billing-btn">
               Manage billing / subscription
             </button>
+            <button class="ghost-btn account-btn" id="account-downgrade-btn">
+              Downgrade to Free
+            </button>
           </section>
 
-          <!-- Security -->
           <section class="account-card">
             <h2>Security</h2>
             <p class="account-hint" id="password-hint">
@@ -169,7 +177,6 @@
         </section>
 
         <div class="account-grid account-grid-bottom">
-          <!-- Data & history -->
           <section class="account-card">
             <h2>Data & history</h2>
             <p class="account-hint">
@@ -181,7 +188,6 @@
             <p id="history-status" class="account-status"></p>
           </section>
 
-          <!-- Danger zone -->
           <section class="account-card account-card-danger">
             <h2>Danger zone</h2>
             <p class="account-hint">
@@ -205,7 +211,6 @@
       </div>
     </main>
 
-
     <footer class="app-footer">
       <p>Built to protect awareness, not to replace your judgment. Not financial or legal advice.</p>
       <div class="legal-links">
@@ -216,13 +221,12 @@
       </div>
     </footer>
 
-    <!-- AUTH MODAL (same as home, reused so people can sign in) -->
     <div id="auth-modal" class="auth-modal" hidden>
       <div class="auth-card">
-        <button id="auth-close" class="auth-close" aria-label="Close">✕</button>
+        <button id="auth-close" class="auth-close" aria-label="Close">x</button>
 
         <div class="auth-header-pill">
-          <span>🛡</span>
+          <span>SD</span>
           <span>Account & Sync</span>
         </div>
 

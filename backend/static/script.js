@@ -1,4 +1,4 @@
-// SCRIPT.JS — FULL VERSION WITH AUTH + ACCOUNT + QR + GOOGLE
+// SCRIPT.JS - FULL VERSION WITH AUTH + ACCOUNT + QR + GOOGLE
 
 const API_BASE_URL = "https://scamdetectorapp.com";
 
@@ -43,6 +43,8 @@ const overviewEmail = document.getElementById("overview-email");
 const overviewPlan = document.getElementById("overview-plan");
 const overviewUsage = document.getElementById("overview-usage");
 const overviewAuth = document.getElementById("overview-auth");
+const overviewBilling = document.getElementById("overview-billing");
+const overviewSubscription = document.getElementById("overview-subscription");
 
 const passwordForm = document.getElementById("password-form");
 const passwordCurrent = document.getElementById("password-current");
@@ -60,6 +62,7 @@ const deleteConfirmText = document.getElementById("delete-confirm-text");
 const deleteStatus = document.getElementById("delete-status");
 
 const accountBillingBtn = document.getElementById("account-billing-btn");
+const accountDowngradeBtn = document.getElementById("account-downgrade-btn");
 const accountContent = document.getElementById("account-content");
 const accountLocked = document.getElementById("account-locked");
 const accountLockedBtn = document.getElementById("account-locked-btn");
@@ -75,10 +78,14 @@ const recentScansBody = document.getElementById("recent-scans-body");
 const recentEmpty = document.getElementById("recent-empty");
 const dashboardStatus = document.getElementById("dashboard-status");
 const refreshDashboardBtn = document.getElementById("refresh-dashboard-btn");
+const subscribeMonthlyBtn = document.getElementById("subscribe-monthly-btn");
+const subscribeYearlyBtn = document.getElementById("subscribe-yearly-btn");
+const subscribeStatus = document.getElementById("subscribe-status");
 
 let authMode = "login";
 let currentUser = null;
 let accountDashboardLoaded = false;
+let pendingSubscriptionCycle = null;
 
 // MODE
 function getSelectedMode() {
@@ -160,7 +167,7 @@ function setAuthMode(mode) {
     authTabSignup.classList.add("auth-tab-active");
     authTabLogin.classList.remove("auth-tab-active");
     authHint.textContent =
-      "We’ll start you on the free plan. Upgrade to Premium anytime for unlimited scans.";
+      "We'll start you on the free plan. Upgrade to Premium anytime for unlimited scans.";
   }
 }
 
@@ -236,6 +243,12 @@ function updateAccountOverview() {
     overviewPlan.textContent = "-";
     overviewUsage.textContent = "-";
     overviewAuth.textContent = "-";
+    if (typeof overviewBilling !== "undefined" && overviewBilling) {
+      overviewBilling.textContent = "-";
+    }
+    if (typeof overviewSubscription !== "undefined" && overviewSubscription) {
+      overviewSubscription.textContent = "-";
+    }
     if (window.location.pathname === "/account") {
       showAccountLocked();
     }
@@ -246,6 +259,9 @@ function updateAccountOverview() {
       const btn = passwordForm.querySelector("button[type='submit']");
       if (btn) btn.disabled = true;
     }
+    if (accountDowngradeBtn) {
+      accountDowngradeBtn.disabled = true;
+    }
     return;
   }
 
@@ -253,12 +269,12 @@ function updateAccountOverview() {
 
   const u = currentUser.user;
   overviewEmail.textContent = u.email;
-  overviewPlan.textContent = u.plan === "premium" ... "Premium" : "Free";
+  overviewPlan.textContent = u.plan === "premium" ? "Premium" : "Free";
 
-  const used = u.daily_scan_count ...... 0;
-  const limit = u.daily_limit ...... 0;
+  const used = u.daily_scan_count ?? 0;
+  const limit = u.daily_limit ?? 0;
   overviewUsage.textContent =
-    u.plan === "premium" ... "Unlimited today" : `${used} / ${limit} scans today`;
+    u.plan === "premium" ? "Unlimited today" : `${used} / ${limit} scans today`;
 
   const method = u.auth_method || "password";
   if (overviewAuth) {
@@ -269,6 +285,22 @@ function updateAccountOverview() {
     } else {
       overviewAuth.textContent = "Email + password";
     }
+  }
+
+  if (overviewBilling) {
+    const cycle = u.billing_cycle || "none";
+    overviewBilling.textContent =
+      u.plan === "premium" ? `${cycle} billing` : "None";
+  }
+
+  if (overviewSubscription) {
+    const status = u.subscription_status || "inactive";
+    overviewSubscription.textContent =
+      u.plan === "premium" ? `Active (${status})` : "Inactive";
+  }
+
+  if (accountDowngradeBtn) {
+    accountDowngradeBtn.disabled = u.plan !== "premium";
   }
 
   if (passwordForm && passwordHint && passwordCurrent && passwordNew && passwordConfirm) {
@@ -300,7 +332,7 @@ function updatePlanPill() {
 
   if (!currentUser) {
     planPill.innerHTML =
-      "Guest mode · Limited free scans. <span>Sign in</span> to sync and unlock more.";
+      "Guest mode - Limited free scans. <span>Sign in</span> to sync and unlock more.";
     if (accountBtn) accountBtn.textContent = "Sign In";
     if (accountMenuEmail) accountMenuEmail.textContent = "";
     accountDashboardLoaded = false;
@@ -310,21 +342,32 @@ function updatePlanPill() {
 
   const user = currentUser.user;
   const plan = user.plan;
-  const used = user.daily_scan_count ...... 0;
-  const limit = user.daily_limit ...... 0;
+  const used = user.daily_scan_count ?? 0;
+  const limit = user.daily_limit ?? 0;
 
   if (plan === "premium") {
     planPill.innerHTML =
-      "<span>Premium</span> · Unlimited scans & deep analysis.";
+      "<span>Premium</span> - Unlimited scans & deep analysis.";
   } else {
     const remaining = Math.max((limit || 0) - used, 0);
-    planPill.innerHTML = `<span>Free plan</span> · ${remaining} of ${limit} daily scans left.`;
+    planPill.innerHTML = `<span>Free plan</span> - ${remaining} of ${limit} daily scans left.`;
   }
 
   if (accountBtn) accountBtn.textContent = user.email;
   if (accountMenuEmail) accountMenuEmail.textContent = user.email;
 
   updateAccountOverview();
+
+  if (subscribeStatus) {
+    if (plan === "premium") {
+      const cycle = (user.billing_cycle || "monthly").toLowerCase();
+      subscribeStatus.textContent = `You're on Premium (${cycle}).`;
+      subscribeStatus.classList.remove("account-status-danger");
+    } else {
+      subscribeStatus.textContent = "Upgrade to unlock unlimited scans and deep analysis.";
+      subscribeStatus.classList.remove("account-status-danger");
+    }
+  }
 }
 
 function renderAccountDashboard(snapshot) {
@@ -337,7 +380,7 @@ function renderAccountDashboard(snapshot) {
 
   if (usagePlanLabel) {
     usagePlanLabel.textContent =
-      usage.plan === "premium" ... "Premium" : "Free plan";
+      usage.plan === "premium" ? "Premium" : "Free plan";
   }
 
   if (usageMeterFill && usageMeterLabel) {
@@ -349,7 +392,7 @@ function renderAccountDashboard(snapshot) {
     } else {
       const limit = usage.daily_limit || 0;
       const used = usage.daily_used || 0;
-      const pct = limit > 0 ... Math.min(100, Math.round((used / limit) * 100)) : 0;
+      const pct = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0;
       usageMeterFill.style.width = `${pct}%`;
       usageMeterFill.style.background =
         "linear-gradient(90deg, #22d3ee, #3b82f6)";
@@ -359,11 +402,11 @@ function renderAccountDashboard(snapshot) {
 
   if (usageLastScan) {
     usageLastScan.textContent = stats.last_scan_ts
-      ... formatTimestamp(stats.last_scan_ts)
+      ? formatTimestamp(stats.last_scan_ts)
       : "No scans yet";
   }
   if (usageActivity) {
-    usageActivity.textContent = stats.activity_24h ...... 0;
+    usageActivity.textContent = stats.activity_24h ?? 0;
   }
   if (usageFlagged) {
     usageFlagged.textContent = flagged.length;
@@ -405,7 +448,7 @@ function renderFlaggedAlerts(items) {
       </p>
       <p class="account-meta">
         <span class="account-label">Score</span>
-        <span class="account-value">${item.score ...... 0}</span>
+        <span class="account-value">${item.score ?? 0}</span>
       </p>
     `;
     flaggedList.appendChild(li);
@@ -427,7 +470,7 @@ function renderRecentLogs(logs) {
       <td>${formatTimestamp(log.timestamp, "Unknown")}</td>
       <td>${log.category || "unknown"}</td>
       <td><span class="${verdictPillClass(log.verdict)}">${(log.verdict || "UNKNOWN").toUpperCase()}</span></td>
-      <td>${log.score ...... 0}</td>
+      <td>${log.score ?? 0}</td>
       <td>${sanitizeSnippet(log.snippet || "")}</td>
     `;
     recentScansBody.appendChild(row);
@@ -454,7 +497,7 @@ async function loadAccountDashboard(force = false) {
   }
 
   try {
-    const res = await fetch(`${API_BASE_URL}/account/dashboard...limit=50`, {
+    const res = await fetch(`${API_BASE_URL}/account/dashboard?limit=50`, {
       method: "GET",
       credentials: "include",
     });
@@ -487,13 +530,108 @@ async function loadAccountDashboard(force = false) {
   }
 }
 
+// ===================== SUBSCRIPTION HELPERS ======================
+
+function setSubscribeStatus(message, isError = false) {
+  if (!subscribeStatus) return;
+  subscribeStatus.textContent = message;
+  if (isError) {
+    subscribeStatus.classList.add("account-status-danger");
+  } else {
+    subscribeStatus.classList.remove("account-status-danger");
+  }
+}
+
+function ensureLoggedInForSubscription(cycle) {
+  if (currentUser) return true;
+  pendingSubscriptionCycle = cycle;
+  openAuthModal();
+  setSubscribeStatus("Sign in to upgrade to Premium.", true);
+  return false;
+}
+
+async function triggerSubscription(billingCycle = "monthly") {
+  if (!ensureLoggedInForSubscription(billingCycle)) return;
+  if (currentUser && currentUser.user && currentUser.user.plan === "premium") {
+    setSubscribeStatus("You're already on Premium.", false);
+    pendingSubscriptionCycle = null;
+    return;
+  }
+  setSubscribeStatus("Upgrading you to Premium...", false);
+  try {
+    const res = await fetch(`${API_BASE_URL}/account/subscribe`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({
+        plan: "premium",
+        billing_cycle: billingCycle,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setSubscribeStatus(data.error || "Could not start subscription.", true);
+      return;
+    }
+    currentUser = data;
+    pendingSubscriptionCycle = null;
+    updatePlanPill();
+    if (window.location.pathname === "/account") {
+      loadAccountDashboard(true);
+    }
+    setSubscribeStatus("You're upgraded. Redirecting to account...", false);
+    setTimeout(() => {
+      window.location.href = "/account";
+    }, 700);
+  } catch (err) {
+    setSubscribeStatus("Network error. Try again.", true);
+  }
+}
+
+async function triggerDowngrade() {
+  if (!currentUser) {
+    openAuthModal();
+    return;
+  }
+  if (dashboardStatus) {
+    dashboardStatus.textContent = "";
+    dashboardStatus.classList.remove("account-status-danger");
+  }
+  try {
+    const res = await fetch(`${API_BASE_URL}/account/downgrade`, {
+      method: "POST",
+      credentials: "include",
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      if (dashboardStatus) {
+        dashboardStatus.textContent = data.error || "Could not downgrade.";
+        dashboardStatus.classList.add("account-status-danger");
+      }
+      return;
+    }
+    currentUser = data;
+    pendingSubscriptionCycle = null;
+    updatePlanPill();
+    if (window.location.pathname === "/account") {
+      loadAccountDashboard(true);
+    }
+    setSubscribeStatus("Downgraded to Free. Limits reset.", false);
+  } catch (err) {
+    if (dashboardStatus) {
+      dashboardStatus.textContent = "Network error. Try again.";
+      dashboardStatus.classList.add("account-status-danger");
+    }
+  }
+}
+
 // ===================== GOOGLE SIGN-IN ======================
 
 function handleGoogleCredential(response) {
   if (!response || !response.credential) return;
   if (!authStatus) return;
 
-  authStatus.textContent = "Signing you in with Google…";
+  authStatus.textContent = "Signing you in with Google...";
   authStatus.classList.remove("auth-status--error", "auth-status--success");
 
   fetch(`${API_BASE_URL}/auth/google`, {
@@ -511,9 +649,13 @@ function handleGoogleCredential(response) {
       }
 
       currentUser = data;
-      authStatus.textContent = "You’re in. Syncing your protection…";
+      authStatus.textContent = "You're in. Syncing your protection...";
       authStatus.classList.add("auth-status--success");
       updatePlanPill();
+      if (pendingSubscriptionCycle) {
+        triggerSubscription(pendingSubscriptionCycle);
+        return;
+      }
 
       if (window.location.pathname === "/account") {
         loadAccountDashboard(true);
@@ -604,11 +746,11 @@ if (authForm && authEmail && authPassword && authStatus) {
 
     authStatus.textContent =
       authMode === "login"
-        ... "Signing you in…"
-        : "Creating your account…";
+        ? "Signing you in..."
+        : "Creating your account...";
     authStatus.classList.remove("auth-status--error", "auth-status--success");
 
-    const endpoint = authMode === "login" ... "/login" : "/signup";
+    const endpoint = authMode === "login" ? "/login" : "/signup";
 
     try {
       const res = await fetch(`${API_BASE_URL}${endpoint}`, {
@@ -630,9 +772,13 @@ if (authForm && authEmail && authPassword && authStatus) {
       }
 
       currentUser = data;
-      authStatus.textContent = "You’re in. Syncing your protection…";
+      authStatus.textContent = "You're in. Syncing your protection...";
       authStatus.classList.add("auth-status--success");
       updatePlanPill();
+      if (pendingSubscriptionCycle) {
+        triggerSubscription(pendingSubscriptionCycle);
+        return;
+      }
 
       setTimeout(() => {
         closeAuthModal();
@@ -658,7 +804,7 @@ async function analyzeContent() {
     return;
   }
 
-  statusEl.textContent = "Running scam + manipulation checks…";
+  statusEl.textContent = "Running scam + manipulation checks...";
   analyzeBtn.disabled = true;
 
   try {
@@ -680,11 +826,11 @@ async function analyzeContent() {
 
     let label = "";
     if (result.verdict === "SAFE") {
-      label = "SAFE · No major scam patterns detected";
+      label = "SAFE - No major scam patterns detected";
     } else if (result.verdict === "SUSPICIOUS") {
-      label = "SUSPICIOUS · Some warning signs present";
+      label = "SUSPICIOUS - Some warning signs present";
     } else if (result.verdict === "DANGEROUS") {
-      label = "DANGEROUS · Strong scam or manipulation risk";
+      label = "DANGEROUS - Strong scam or manipulation risk";
     } else {
       label = result.verdict || "Result";
     }
@@ -719,7 +865,7 @@ async function analyzeContent() {
 async function analyzeQR(file) {
   if (!statusEl || !analyzeBtn) return;
 
-  statusEl.textContent = "Scanning QR code and checking destination safety…";
+  statusEl.textContent = "Scanning QR code and checking destination safety...";
   analyzeBtn.disabled = true;
 
   const form = new FormData();
@@ -741,16 +887,16 @@ async function analyzeQR(file) {
 
     if (!verdictBadge || !explanationEl || !reasonsList) return;
 
-    const verdict = result.overall....combined_verdict || "SAFE";
-    const score = result.overall....combined_risk_score ...... 0;
+    const verdict = result.overall?.combined_verdict || "SAFE";
+    const score = result.overall?.combined_risk_score ?? 0;
 
     let label = "";
     if (verdict === "SAFE") {
-      label = `SAFE QR · Score ${score}`;
+      label = `SAFE QR - Score ${score}`;
     } else if (verdict === "SUSPICIOUS") {
-      label = `SUSPICIOUS QR · Score ${score}`;
+      label = `SUSPICIOUS QR - Score ${score}`;
     } else if (verdict === "DANGEROUS") {
-      label = `DANGEROUS QR · Score ${score}`;
+      label = `DANGEROUS QR - Score ${score}`;
     } else {
       label = `QR Score ${score}`;
     }
@@ -763,7 +909,7 @@ async function analyzeQR(file) {
     reasonsList.innerHTML = "";
     (result.items || []).forEach((item) => {
       const li = document.createElement("li");
-      li.textContent = `${item.qr_type.toUpperCase()} → ${item.verdict}: ${item.content}`;
+      li.textContent = `${item.qr_type.toUpperCase()} -> ${item.verdict}: ${item.content}`;
       reasonsList.appendChild(li);
     });
 
@@ -785,7 +931,7 @@ async function analyzeQR(file) {
 
 async function runOCR(imageFile) {
   if (!statusEl || !contentInput) return;
-  statusEl.textContent = "Reading text from your screenshot…";
+  statusEl.textContent = "Reading text from your screenshot...";
   try {
     const worker = await Tesseract.createWorker();
     await worker.load();
@@ -802,7 +948,7 @@ async function runOCR(imageFile) {
     }
 
     contentInput.value = extractedText;
-    statusEl.textContent = "Text extracted — running safety check…";
+    statusEl.textContent = "Text extracted - running safety check...";
     analyzeContent();
   } catch (err) {
     statusEl.textContent = "OCR failed. Try a clearer or closer screenshot.";
@@ -905,6 +1051,20 @@ if (accountLockedBtn) {
   });
 }
 
+if (subscribeMonthlyBtn) {
+  subscribeMonthlyBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    triggerSubscription("monthly");
+  });
+}
+
+if (subscribeYearlyBtn) {
+  subscribeYearlyBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    triggerSubscription("yearly");
+  });
+}
+
 // ===================== ACCOUNT PAGE ACTIONS ======================
 
 if (refreshDashboardBtn) {
@@ -938,7 +1098,7 @@ if (passwordForm && passwordStatus) {
       return;
     }
 
-    passwordStatus.textContent = "Updating password…";
+    passwordStatus.textContent = "Updating password...";
     passwordStatus.classList.remove("account-status-danger");
     passwordStatus.classList.remove("account-status-success");
 
@@ -979,10 +1139,10 @@ if (historyBtn && historyStatus) {
       return;
     }
 
-    historyStatus.textContent = "Preparing download…";
+    historyStatus.textContent = "Preparing download...";
     try {
       const res = await fetch(
-        `${API_BASE_URL}/scan-history...limit=500`,
+        `${API_BASE_URL}/scan-history?limit=500`,
         {
           method: "GET",
           credentials: "include",
@@ -1035,7 +1195,7 @@ if (deleteForm && deleteStatus) {
       return;
     }
 
-    deleteStatus.textContent = "Deleting account…";
+    deleteStatus.textContent = "Deleting account...";
     deleteStatus.classList.remove("account-status-danger");
     deleteStatus.classList.remove("account-status-success");
 
@@ -1056,7 +1216,7 @@ if (deleteForm && deleteStatus) {
         return;
       }
 
-      deleteStatus.textContent = "Account deleted. Redirecting…";
+      deleteStatus.textContent = "Account deleted. Redirecting...";
       deleteStatus.classList.add("account-status-success");
       currentUser = null;
       accountDashboardLoaded = false;
@@ -1077,6 +1237,13 @@ if (accountBillingBtn) {
       openAuthModal();
       return;
     }
-    window.location.href = "/pricing";
+    window.location.href = "/subscribe";
+  });
+}
+
+if (accountDowngradeBtn) {
+  accountDowngradeBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    triggerDowngrade();
   });
 }

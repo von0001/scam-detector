@@ -71,6 +71,10 @@ def _strip_sensitive(user: Dict[str, Any]) -> Dict[str, Any]:
         "daily_scan_date": user.get("daily_scan_date", ""),
         "daily_scan_count": user.get("daily_scan_count", 0),
         "daily_limit": user.get("daily_limit", DEFAULT_FREE_DAILY_LIMIT),
+        "billing_cycle": user.get("billing_cycle", "none"),
+        "subscription_status": user.get("subscription_status", "inactive"),
+        "last_plan_change": user.get("last_plan_change"),
+        "subscription_renewal": user.get("subscription_renewal"),
     }
 
 
@@ -130,6 +134,10 @@ def create_user(email: str, password: str) -> Dict[str, Any]:
         "daily_scan_date": "",
         "daily_scan_count": 0,
         "daily_limit": DEFAULT_FREE_DAILY_LIMIT,
+        "billing_cycle": "none",  # monthly | yearly | none
+        "subscription_status": "inactive",  # active | canceled | inactive
+        "subscription_renewal": None,
+        "last_plan_change": now,
     }
 
     users.append(user)
@@ -157,6 +165,14 @@ def get_or_create_google_user(email: str, google_sub: str) -> Dict[str, Any]:
                 u["plan"] = "free"
             if not u.get("auth_method"):
                 u["auth_method"] = "google"
+            if "billing_cycle" not in u:
+                u["billing_cycle"] = "none"
+            if "subscription_status" not in u:
+                u["subscription_status"] = "inactive"
+            if "subscription_renewal" not in u:
+                u["subscription_renewal"] = None
+            if "last_plan_change" not in u:
+                u["last_plan_change"] = now
             _save_users(users)
             return _strip_sensitive(u)
 
@@ -175,6 +191,13 @@ def get_or_create_google_user(email: str, google_sub: str) -> Dict[str, Any]:
                 u["plan"] = "free"
             if "daily_limit" not in u:
                 u["daily_limit"] = DEFAULT_FREE_DAILY_LIMIT
+            if "billing_cycle" not in u:
+                u["billing_cycle"] = "none"
+            if "subscription_status" not in u:
+                u["subscription_status"] = "inactive"
+            if "subscription_renewal" not in u:
+                u["subscription_renewal"] = None
+            u["last_plan_change"] = now
             _save_users(users)
             return _strip_sensitive(u)
 
@@ -191,6 +214,10 @@ def get_or_create_google_user(email: str, google_sub: str) -> Dict[str, Any]:
         "daily_scan_date": "",
         "daily_scan_count": 0,
         "daily_limit": DEFAULT_FREE_DAILY_LIMIT,
+        "billing_cycle": "none",
+        "subscription_status": "inactive",
+        "subscription_renewal": None,
+        "last_plan_change": now,
     }
     users.append(user)
     _save_users(users)
@@ -231,7 +258,16 @@ def verify_user_credentials(email: str, password: str) -> Optional[Dict[str, Any
     return user_out
 
 
-def update_user_plan_by_email(email: str, plan: str) -> Optional[Dict[str, Any]]:
+def update_user_plan_by_email(
+    email: str,
+    plan: str,
+    billing_cycle: Optional[str] = None,
+    status: str = "active",
+    renewal: Optional[int] = None,
+) -> Optional[Dict[str, Any]]:
+    """
+    Legacy helper used by webhook: update plan by email and reset limits.
+    """
     users = _load_users()
     email_lower = email.lower()
     changed = False
@@ -239,13 +275,14 @@ def update_user_plan_by_email(email: str, plan: str) -> Optional[Dict[str, Any]]
 
     for u in users:
         if u["email"].lower() == email_lower:
-            u["plan"] = plan
-            if plan == "premium":
-                u["daily_limit"] = 999999
-            else:
-                u["daily_limit"] = DEFAULT_FREE_DAILY_LIMIT
+            updated_user = _set_plan(
+                u,
+                plan=plan,
+                billing_cycle=billing_cycle or u.get("billing_cycle", "none"),
+                status=status or u.get("subscription_status", "active"),
+                renewal=renewal if renewal is not None else u.get("subscription_renewal"),
+            )
             changed = True
-            updated_user = _strip_sensitive(u)
             break
 
     if changed:
@@ -308,6 +345,69 @@ def register_scan_attempt(user_id: str) -> Tuple[bool, int, int]:
         _save_users(users)
 
     return allowed, remaining, limit
+
+
+# -------------------------------------------------------------------
+# Plan upgrades / downgrades
+# -------------------------------------------------------------------
+def _set_plan(
+    user: Dict[str, Any],
+    plan: str,
+    billing_cycle: str = "none",
+    status: str = "active",
+    renewal: Optional[int] = None,
+) -> Dict[str, Any]:
+    """
+    Mutate the user record with plan + billing info and return safe view.
+    """
+    plan = plan if plan in {"free", "premium"} else "free"
+    billing_cycle = billing_cycle if billing_cycle in {"monthly", "yearly", "none"} else "none"
+    status = status if status in {"active", "canceled", "inactive"} else "inactive"
+
+    user["plan"] = plan
+    user["billing_cycle"] = billing_cycle
+    user["subscription_status"] = status
+    user["subscription_renewal"] = renewal
+    user["last_plan_change"] = int(time.time())
+
+    if plan == "premium":
+        user["daily_limit"] = 999_999
+    else:
+        user["daily_limit"] = DEFAULT_FREE_DAILY_LIMIT
+
+    return _strip_sensitive(user)
+
+
+def update_user_plan(
+    user_id: str,
+    plan: str,
+    billing_cycle: str = "none",
+    status: str = "active",
+    renewal: Optional[int] = None,
+) -> Optional[Dict[str, Any]]:
+    """
+    Update a user plan by id (used for self-serve subscription changes).
+    """
+    users = _load_users()
+    changed = False
+    updated_user: Optional[Dict[str, Any]] = None
+
+    for u in users:
+        if u["id"] != user_id:
+            continue
+        updated_user = _set_plan(
+            u,
+            plan=plan,
+            billing_cycle=billing_cycle,
+            status=status,
+            renewal=renewal,
+        )
+        changed = True
+        break
+
+    if changed:
+        _save_users(users)
+    return updated_user
 
 
 # -------------------------------------------------------------------
@@ -467,6 +567,10 @@ def build_account_snapshot(user: Dict[str, Any], history_limit: int = 20) -> Dic
         "last_reset_date": user.get("daily_scan_date", ""),
         "last_login": user.get("last_login"),
         "created_at": user.get("created_at"),
+        "billing_cycle": user.get("billing_cycle", "none"),
+        "subscription_status": user.get("subscription_status", "inactive"),
+        "subscription_renewal": user.get("subscription_renewal"),
+        "last_plan_change": user.get("last_plan_change"),
     }
 
     stats = {
