@@ -1,4 +1,4 @@
-// SCRIPT.JS — FULL VERSION WITH AUTH + QR
+// SCRIPT.JS — FULL VERSION WITH AUTH + QR + SUBSCRIPTION + GOOGLE
 
 const API_BASE_URL = "https://scamdetectorapp.com";
 
@@ -30,6 +30,12 @@ const authStatus = document.getElementById("auth-status");
 const authHint = document.getElementById("auth-hint");
 const authTabLogin = document.getElementById("auth-tab-login");
 const authTabSignup = document.getElementById("auth-tab-signup");
+const googleBtn = document.getElementById("google-login-btn");
+
+// Subscription page elements (only exist on /subscribe)
+const subMonthlyBtn = document.getElementById("subscribe-monthly-btn");
+const subYearlyBtn = document.getElementById("subscribe-yearly-btn");
+const subscribeStatus = document.getElementById("subscribe-status");
 
 let authMode = "login";
 let currentUser = null;
@@ -43,6 +49,8 @@ function getSelectedMode() {
 
 // Verdict color + label
 function setVerdictStyle(verdict) {
+  if (!verdictBadge) return;
+
   verdictBadge.classList.remove(
     "verdict-safe",
     "verdict-suspicious",
@@ -67,13 +75,17 @@ function setAuthMode(mode) {
   if (mode === "login") {
     authTabLogin.classList.add("auth-tab-active");
     authTabSignup.classList.remove("auth-tab-active");
-    authHint.innerHTML =
-      'No account yet? Switch to <strong>Create Account</strong> to start with the free tier.';
+    if (authHint) {
+      authHint.innerHTML =
+        'No account yet? Switch to <strong>Create Account</strong> to start with the free tier.';
+    }
   } else {
     authTabSignup.classList.add("auth-tab-active");
     authTabLogin.classList.remove("auth-tab-active");
-    authHint.textContent =
-      "We’ll start you on the free plan. Upgrade to Premium anytime for unlimited scans.";
+    if (authHint) {
+      authHint.textContent =
+        "We’ll start you on the free plan. Upgrade to Premium anytime for unlimited scans.";
+    }
   }
 }
 
@@ -108,8 +120,23 @@ if (authClose) {
   });
 }
 
+// Google sign-in button
+if (googleBtn) {
+  googleBtn.addEventListener("click", () => {
+    window.location.href = `${API_BASE_URL}/auth/google/login`;
+  });
+}
+
 function updatePlanPill() {
-  if (!planPill) return;
+  if (!planPill) {
+    // Still update account button text
+    if (currentUser && accountBtn) {
+      accountBtn.textContent = currentUser.user.email;
+    } else if (accountBtn) {
+      accountBtn.textContent = "Sign In";
+    }
+    return;
+  }
 
   if (!currentUser) {
     planPill.innerHTML =
@@ -167,11 +194,16 @@ if (authForm) {
     e.preventDefault();
     if (!authEmail.value || !authPassword.value) return;
 
-    authStatus.textContent =
-      authMode === "login"
-        ? "Signing you in…"
-        : "Creating your account…";
-    authStatus.classList.remove("auth-status--error", "auth-status--success");
+    if (authStatus) {
+      authStatus.textContent =
+        authMode === "login"
+          ? "Signing you in…"
+          : "Creating your account…";
+      authStatus.classList.remove(
+        "auth-status--error",
+        "auth-status--success"
+      );
+    }
 
     const endpoint = authMode === "login" ? "/login" : "/signup";
 
@@ -189,14 +221,18 @@ if (authForm) {
       const data = await res.json();
 
       if (!res.ok) {
-        authStatus.textContent = data.error || "Authentication failed.";
-        authStatus.classList.add("auth-status--error");
+        if (authStatus) {
+          authStatus.textContent = data.error || "Authentication failed.";
+          authStatus.classList.add("auth-status--error");
+        }
         return;
       }
 
       currentUser = data;
-      authStatus.textContent = "You’re in. Syncing your protection…";
-      authStatus.classList.add("auth-status--success");
+      if (authStatus) {
+        authStatus.textContent = "You’re in. Syncing your protection…";
+        authStatus.classList.add("auth-status--success");
+      }
       updatePlanPill();
 
       setTimeout(() => {
@@ -204,15 +240,97 @@ if (authForm) {
         authForm.reset();
       }, 600);
     } catch (err) {
-      authStatus.textContent = "Network error. Try again in a moment.";
-      authStatus.classList.add("auth-status--error");
+      if (authStatus) {
+        authStatus.textContent = "Network error. Try again in a moment.";
+        authStatus.classList.add("auth-status--error");
+      }
     }
   });
+}
+
+// ===================== PREMIUM MODE BLOCKING (UI) ======================
+
+// Prevent free / guest from selecting premium-only modes
+const premiumOnlyModes = new Set(["chat", "manipulation", "qr"]);
+
+const modeRadios = document.querySelectorAll('input[name="mode"]');
+if (modeRadios.length && statusEl) {
+  modeRadios.forEach((radio) => {
+    radio.addEventListener("change", () => {
+      const val = radio.value;
+      if (!premiumOnlyModes.has(val)) return;
+
+      const plan =
+        currentUser?.user?.plan || "guest";
+
+      if (plan !== "premium") {
+        statusEl.textContent =
+          "This scan mode is for Premium members only. Sign in and upgrade to unlock it.";
+        // bounce them back to auto
+        const autoRadio = document.querySelector(
+          'input[name="mode"][value="auto"]'
+        );
+        if (autoRadio) autoRadio.checked = true;
+        openAuthModal();
+      }
+    });
+  });
+}
+
+// ===================== SUBSCRIPTION FRONTEND ======================
+
+async function startCheckout(mode) {
+  if (!subscribeStatus) return;
+  subscribeStatus.textContent = "Redirecting to secure checkout…";
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/create-checkout-session`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ mode }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      if (res.status === 401) {
+        subscribeStatus.textContent =
+          "Sign in or create a free account first.";
+        openAuthModal();
+        return;
+      }
+
+      subscribeStatus.textContent =
+        data.error || "Unable to start checkout right now.";
+      return;
+    }
+
+    if (data.url) {
+      window.location.href = data.url;
+    } else {
+      subscribeStatus.textContent =
+        "Unexpected response from billing server.";
+    }
+  } catch (err) {
+    subscribeStatus.textContent =
+      "Network error starting checkout. Try again.";
+  }
+}
+
+if (subMonthlyBtn) {
+  subMonthlyBtn.addEventListener("click", () => startCheckout("monthly"));
+}
+
+if (subYearlyBtn) {
+  subYearlyBtn.addEventListener("click", () => startCheckout("yearly"));
 }
 
 // ===================== MAIN ANALYZE ======================
 
 async function analyzeContent() {
+  if (!contentInput || !statusEl) return;
+
   const content = contentInput.value.trim();
   const mode = getSelectedMode();
 
@@ -222,7 +340,7 @@ async function analyzeContent() {
   }
 
   statusEl.textContent = "Running scam + manipulation checks…";
-  analyzeBtn.disabled = true;
+  if (analyzeBtn) analyzeBtn.disabled = true;
 
   try {
     const response = await fetch(`${API_BASE_URL}/analyze`, {
@@ -233,9 +351,23 @@ async function analyzeContent() {
     });
 
     const result = await response.json();
+
     if (!response.ok) {
+      if (response.status === 402) {
+        statusEl.textContent =
+          result.error ||
+          "This feature is reserved for Premium members.";
+        // gentle nudge
+        openAuthModal();
+        return;
+      }
+
       statusEl.textContent =
         result.error || "Something went wrong during analysis.";
+      return;
+    }
+
+    if (!verdictBadge || !resultSection || !explanationEl || !reasonsList) {
       return;
     }
 
@@ -262,6 +394,7 @@ async function analyzeContent() {
     });
 
     if (detailsPre) {
+      // Details are hidden for now (they're more technical)
       detailsPre.hidden = true;
     }
 
@@ -272,15 +405,17 @@ async function analyzeContent() {
   } catch (err) {
     statusEl.textContent = "Network error. Try again in a moment.";
   } finally {
-    analyzeBtn.disabled = false;
+    if (analyzeBtn) analyzeBtn.disabled = false;
   }
 }
 
 // ===================== QR SCAN ======================
 
 async function analyzeQR(file) {
+  if (!statusEl) return;
+
   statusEl.textContent = "Scanning QR code and checking destination safety…";
-  analyzeBtn.disabled = true;
+  if (analyzeBtn) analyzeBtn.disabled = true;
 
   const form = new FormData();
   form.append("image", file);
@@ -294,13 +429,25 @@ async function analyzeQR(file) {
     const result = await response.json();
 
     if (!response.ok) {
+      if (response.status === 402) {
+        statusEl.textContent =
+          result.error ||
+          "QR and screenshot analysis are reserved for Premium members.";
+        openAuthModal();
+        return;
+      }
+
       statusEl.textContent =
         result.error || "Failed to analyze QR. Try a clearer image.";
       return;
     }
 
-    const verdict = result.overall?.combined_verdict || "SAFE";
-    const score = result.overall?.combined_risk_score ?? 0;
+    if (!verdictBadge || !resultSection || !explanationEl || !reasonsList) {
+      return;
+    }
+
+    const verdict = result.verdict || "SAFE";
+    const score = result.score ?? 0;
 
     let label = "";
     if (verdict === "SAFE") {
@@ -316,14 +463,10 @@ async function analyzeQR(file) {
     verdictBadge.textContent = label;
     setVerdictStyle(verdict);
 
-    explanationEl.textContent = `Detected ${result.count} QR code(s).`;
+    explanationEl.textContent = result.explanation || "";
 
     reasonsList.innerHTML = "";
-    (result.items || []).forEach((item) => {
-      const li = document.createElement("li");
-      li.textContent = `${item.qr_type.toUpperCase()} → ${item.verdict}: ${item.content}`;
-      reasonsList.appendChild(li);
-    });
+    // (Optional) you could list each QR here if you want
 
     if (detailsPre) {
       detailsPre.hidden = true;
@@ -335,13 +478,15 @@ async function analyzeQR(file) {
   } catch (err) {
     statusEl.textContent = "Failed to analyze QR. Try a clearer image.";
   } finally {
-    analyzeBtn.disabled = false;
+    if (analyzeBtn) analyzeBtn.disabled = false;
   }
 }
 
 // ===================== OCR ======================
 
 async function runOCR(imageFile) {
+  if (!statusEl || !contentInput) return;
+
   statusEl.textContent = "Reading text from your screenshot…";
   try {
     const worker = await Tesseract.createWorker();

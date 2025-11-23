@@ -9,3 +9,5 @@ groq
 tldextract
 itsdangerous
 python-multipart
+stripe
+Authlib

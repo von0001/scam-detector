@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>ScamDetector – Free vs Premium Protection</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+
+<body>
+  <div class="app">
+
+    <!-- TOP NAV / BRAND -->
+    <header class="top-nav">
+      <div class="brand">
+        <div class="brand-mark">🛡</div>
+        <div class="brand-text">
+          <span class="brand-name">ScamDetector</span>
+          <span class="brand-tagline">Digital Safety Framework</span>
+        </div>
+      </div>
+
+      <nav class="nav-links">
+        <a href="/">Scanner</a>
+        <a href="#tiers">Pricing</a>
+        <a href="/support">Support</a>
+        <a href="/privacy">Privacy</a>
+        <a href="/feedback">Feedback</a>
+        <button id="account-button" class="nav-pill nav-account">Sign In</button>
+      </nav>
+    </header>
+
+    <main class="pricing-page" id="tiers">
+      <section class="pricing-header">
+        <p class="hero-eyebrow">Free vs Full Armor</p>
+        <h1 class="hero-headline">
+          Start free. Upgrade when you want
+          <span class="hero-highlight">total protection.</span>
+        </h1>
+        <p class="hero-subtext">
+          Free gives you basic protection. Premium turns your phone and laptop into a
+          <span class="hero-subtext-strong">24/7 scam and manipulation firewall.</span>
+        </p>
+        <p id="subscribe-status" class="pricing-status"></p>
+      </section>
+
+      <section class="pricing-grid">
+        <!-- FREE CARD -->
+        <article class="pricing-card pricing-card-free">
+          <div class="pricing-badge">Free</div>
+          <h2>Free Tier – Safe Starter Mode</h2>
+          <p class="pricing-subtitle">
+            Test ScamDetector, get real protection, and feel how the ceiling hits.
+          </p>
+
+          <ul class="pricing-list">
+            <li>✅ Auto Mode (basic AI or light rule + AI hybrid)</li>
+            <li>✅ Up to 5–8 scans per day</li>
+            <li>✅ Basic URL scan</li>
+            <li>✅ Basic text scan</li>
+            <li>✅ Verdict: SAFE / SUSPICIOUS / DANGEROUS</li>
+            <li>✅ Short, simple explanation (non-technical)</li>
+            <li>✅ Basic risk reasons (3–5 bullets)</li>
+            <li>✅ Slight delay in processing</li>
+            <li>✅ Very limited history (last 3–5 scans)</li>
+          </ul>
+
+          <div class="pricing-footer">
+            <div class="pricing-price">
+              <span class="pricing-price-main">$0</span>
+              <span class="pricing-price-note">forever</span>
+            </div>
+            <button class="primary-btn pricing-btn" disabled>
+              Current free tier
+            </button>
+          </div>
+        </article>
+
+        <!-- PREMIUM CARD -->
+        <article class="pricing-card pricing-card-premium">
+          <div class="pricing-badge pricing-badge-premium">Premium</div>
+          <h2>Premium – Full Dominance Mode</h2>
+          <p class="pricing-subtitle">
+            This is the “I’m armored” tier. Unlimited scans, deep AI, full breakdowns.
+          </p>
+
+          <ul class="pricing-list">
+            <li>🚀 Unlimited scans</li>
+            <li>🧠 Deep AI Analysis Mode</li>
+            <li>🧠 Psychological manipulation detection</li>
+            <li>📸 Screenshot / image & QR scan</li>
+            <li>🔍 Advanced URL spoof detection</li>
+            <li>🎯 Confidence score + risk breakdown</li>
+            <li>📊 Full scan history + logs</li>
+            <li>📤 Exportable reports (future upgrade)</li>
+            <li>⚡ Faster processing (priority queue)</li>
+            <li>🛡 Real-time scan mode (when added)</li>
+            <li>🆕 Early access to new features</li>
+          </ul>
+
+          <div class="pricing-footer">
+            <div class="pricing-price">
+              <span class="pricing-price-main">$6.99</span>
+              <span class="pricing-price-note">per month</span>
+            </div>
+            <button id="subscribe-monthly-btn" class="primary-btn pricing-btn">
+              Go Premium – $6.99 / month
+            </button>
+
+            <div class="pricing-alt">
+              <span class="pricing-price-main-small">$59</span>
+              <span class="pricing-price-note">per year (save more)</span>
+              <button id="subscribe-yearly-btn" class="secondary-btn pricing-btn-secondary">
+                Go Premium – $59 / year
+              </button>
+            </div>
+          </div>
+        </article>
+      </section>
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="app-footer">
+      <p>Built to protect awareness, not to replace your judgment. Not financial or legal advice.</p>
+      <div class="legal-links">
+        <a href="/terms">Terms</a>
+        <a href="/privacy">Privacy</a>
+        <a href="/support">Support</a>
+        <a href="/feedback">Feedback</a>
+      </div>
+    </footer>
+
+    <!-- AUTH MODAL (same as index) -->
+    <div id="auth-modal" class="auth-modal" hidden>
+      <div class="auth-card">
+        <button id="auth-close" class="auth-close" aria-label="Close">✕</button>
+
+        <div class="auth-header-pill">
+          <span>🛡</span>
+          <span>Account & Sync</span>
+        </div>
+
+        <h2 class="auth-title">Sign in to protect everything, everywhere.</h2>
+        <p class="auth-subtitle">
+          One account across web, extension, and iOS. Sync your scans, unlock higher limits, upgrade when you’re ready.
+        </p>
+
+        <button type="button" id="google-login-btn" class="google-btn">
+          <span>🔐 Continue with Google</span>
+        </button>
+
+        <div class="auth-divider">
+          <span>or use email</span>
+        </div>
+
+        <div class="auth-tabs">
+          <button type="button" id="auth-tab-login" class="auth-tab auth-tab-active" data-mode="login">
+            Sign In
+          </button>
+          <button type="button" id="auth-tab-signup" class="auth-tab" data-mode="signup">
+            Create Account
+          </button>
+        </div>
+
+        <form id="auth-form" class="auth-form">
+          <label for="auth-email">Email</label>
+          <input type="email" id="auth-email" required placeholder="you@example.com" />
+
+          <label for="auth-password">Password</label>
+          <input type="password" id="auth-password" required minlength="8" placeholder="Minimum 8 characters" />
+
+          <button type="submit" id="auth-submit" class="primary-btn auth-submit">
+            Continue
+          </button>
+        </form>
+
+        <p id="auth-hint" class="auth-hint">
+          No account yet? Switch to <strong>Create Account</strong> to start with the free tier.
+        </p>
+        <p id="auth-status" class="auth-status"></p>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="/static/script.js"></script>
+</body>
+</html>

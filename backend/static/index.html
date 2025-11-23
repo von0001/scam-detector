@@ -20,14 +20,15 @@
         </div>
       </div>
 
-      <nav class="nav-links">
-        <a href="#how-it-works">How it Works</a>
-        <a href="/support">Support</a>
-        <a href="/privacy">Privacy</a>
-        <a href="/feedback">Feedback</a>
-        <button id="account-button" class="nav-pill nav-account">Sign In</button>
-      </nav>
-    </header>
+    <nav class="nav-links">
+      <a href="#how-it-works">How it Works</a>
+      <a href="/subscribe">Pricing</a>
+      <a href="/support">Support</a>
+      <a href="/privacy">Privacy</a>
+      <a href="/feedback">Feedback</a>
+      <button id="account-button" class="nav-pill nav-account">Sign In</button>
+    </nav>
+
 
     <!-- HERO: LEFT = COPY, RIGHT = CONTROL PANEL -->
     <main class="hero-layout">
@@ -213,7 +214,7 @@
       </div>
     </footer>
 
-    <!-- AUTH MODAL -->
+ <!-- AUTH MODAL -->
     <div id="auth-modal" class="auth-modal" hidden>
       <div class="auth-card">
         <button id="auth-close" class="auth-close" aria-label="Close">✕</button>
@@ -227,6 +228,14 @@
         <p class="auth-subtitle">
           One account across web, extension, and iOS. Sync your scans, unlock higher limits, upgrade when you’re ready.
         </p>
+
+        <button type="button" id="google-login-btn" class="google-btn">
+          <span>🔐 Continue with Google</span>
+        </button>
+
+        <div class="auth-divider">
+          <span>or use email</span>
+        </div>
 
         <div class="auth-tabs">
           <button type="button" id="auth-tab-login" class="auth-tab auth-tab-active" data-mode="login">
