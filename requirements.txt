@@ -11,3 +11,4 @@ itsdangerous
 python-multipart
 stripe
 Authlib
+google-auth

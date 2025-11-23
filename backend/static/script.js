@@ -1,4 +1,4 @@
-// SCRIPT.JS — FULL VERSION WITH AUTH + QR + SUBSCRIPTION + GOOGLE
+// SCRIPT.JS — AUTH + BILLING + QR + GOOGLE
 
 const API_BASE_URL = "https://scamdetectorapp.com";
 
@@ -21,6 +21,11 @@ const dropZone = document.getElementById("drop-zone");
 const accountBtn = document.getElementById("account-button");
 const planPill = document.getElementById("plan-pill");
 
+const accountMenu = document.getElementById("account-menu");
+const accountMenuEmail = document.getElementById("account-menu-email");
+const accountLogoutBtn = document.getElementById("account-logout-btn");
+const accountManageBtn = document.getElementById("account-manage-btn");
+
 const authModal = document.getElementById("auth-modal");
 const authClose = document.getElementById("auth-close");
 const authForm = document.getElementById("auth-form");
@@ -30,12 +35,11 @@ const authStatus = document.getElementById("auth-status");
 const authHint = document.getElementById("auth-hint");
 const authTabLogin = document.getElementById("auth-tab-login");
 const authTabSignup = document.getElementById("auth-tab-signup");
-const googleBtn = document.getElementById("google-login-btn");
+const googleBtnContainer = document.getElementById("google-btn");
 
-// Subscription page elements (only exist on /subscribe)
-const subMonthlyBtn = document.getElementById("subscribe-monthly-btn");
-const subYearlyBtn = document.getElementById("subscribe-yearly-btn");
-const subscribeStatus = document.getElementById("subscribe-status");
+const startFreeBtn = document.getElementById("start-free-btn");
+const upgradeMonthlyBtn = document.getElementById("upgrade-monthly");
+const upgradeYearlyBtn = document.getElementById("upgrade-yearly");
 
 let authMode = "login";
 let currentUser = null;
@@ -49,8 +53,6 @@ function getSelectedMode() {
 
 // Verdict color + label
 function setVerdictStyle(verdict) {
-  if (!verdictBadge) return;
-
   verdictBadge.classList.remove(
     "verdict-safe",
     "verdict-suspicious",
@@ -70,22 +72,18 @@ function setVerdictStyle(verdict) {
 
 function setAuthMode(mode) {
   authMode = mode;
-  if (!authTabLogin || !authTabSignup) return;
+  if (!authTabLogin || !authTabSignup || !authHint) return;
 
   if (mode === "login") {
     authTabLogin.classList.add("auth-tab-active");
     authTabSignup.classList.remove("auth-tab-active");
-    if (authHint) {
-      authHint.innerHTML =
-        'No account yet? Switch to <strong>Create Account</strong> to start with the free tier.';
-    }
+    authHint.innerHTML =
+      'No account yet? Switch to <strong>Create Account</strong> to start with the free tier.';
   } else {
     authTabSignup.classList.add("auth-tab-active");
     authTabLogin.classList.remove("auth-tab-active");
-    if (authHint) {
-      authHint.textContent =
-        "We’ll start you on the free plan. Upgrade to Premium anytime for unlimited scans.";
-    }
+    authHint.textContent =
+      "We’ll start you on the free plan. Upgrade to Premium anytime for unlimited scans.";
   }
 }
 
@@ -106,10 +104,23 @@ function closeAuthModal() {
   if (authModal) authModal.hidden = true;
 }
 
+function closeAccountMenu() {
+  if (accountMenu) accountMenu.hidden = true;
+}
+
+function toggleAccountMenu() {
+  if (!accountMenu) return;
+  accountMenu.hidden = !accountMenu.hidden;
+}
+
 if (accountBtn) {
   accountBtn.addEventListener("click", (e) => {
     e.preventDefault();
-    openAuthModal();
+    if (currentUser) {
+      toggleAccountMenu();
+    } else {
+      openAuthModal();
+    }
   });
 }
 
@@ -120,28 +131,45 @@ if (authClose) {
   });
 }
 
-// Google sign-in button
-if (googleBtn) {
-  googleBtn.addEventListener("click", () => {
-    window.location.href = `${API_BASE_URL}/auth/google/login`;
+// Close account menu when clicking outside
+document.addEventListener("click", (e) => {
+  if (!accountMenu || accountMenu.hidden) return;
+  if (
+    accountBtn &&
+    (e.target === accountBtn || accountBtn.contains(e.target))
+  ) {
+    return;
+  }
+  if (accountMenu.contains(e.target)) return;
+  closeAccountMenu();
+});
+
+function updatePremiumModeLock() {
+  const premiumPills = document.querySelectorAll('.mode-pill[data-premium="true"]');
+  const plan = currentUser?.user?.plan ?? "guest";
+
+  premiumPills.forEach((pill) => {
+    const input = pill.querySelector('input[type="radio"]');
+    if (!input) return;
+    if (plan === "premium") {
+      pill.classList.remove("mode-pill-locked");
+      input.disabled = false;
+    } else {
+      pill.classList.add("mode-pill-locked");
+      // still let them select; backend will refuse, but UX shows lock
+    }
   });
 }
 
 function updatePlanPill() {
-  if (!planPill) {
-    // Still update account button text
-    if (currentUser && accountBtn) {
-      accountBtn.textContent = currentUser.user.email;
-    } else if (accountBtn) {
-      accountBtn.textContent = "Sign In";
-    }
-    return;
-  }
+  if (!planPill) return;
 
   if (!currentUser) {
     planPill.innerHTML =
       "Guest mode · Limited free scans. <span>Sign in</span> to sync and unlock more.";
     if (accountBtn) accountBtn.textContent = "Sign In";
+    if (accountMenuEmail) accountMenuEmail.textContent = "";
+    updatePremiumModeLock();
     return;
   }
 
@@ -153,12 +181,14 @@ function updatePlanPill() {
   if (plan === "premium") {
     planPill.innerHTML =
       "<span>Premium</span> · Unlimited scans & deep analysis.";
-    if (accountBtn) accountBtn.textContent = user.email;
   } else {
     const remaining = Math.max((limit || 0) - used, 0);
     planPill.innerHTML = `<span>Free plan</span> · ${remaining} of ${limit} daily scans left.`;
-    if (accountBtn) accountBtn.textContent = user.email;
   }
+
+  if (accountBtn) accountBtn.textContent = user.email;
+  if (accountMenuEmail) accountMenuEmail.textContent = user.email;
+  updatePremiumModeLock();
 }
 
 async function loadSession() {
@@ -187,6 +217,7 @@ async function loadSession() {
   }
 }
 
+// Call on load
 loadSession();
 
 if (authForm) {
@@ -194,16 +225,11 @@ if (authForm) {
     e.preventDefault();
     if (!authEmail.value || !authPassword.value) return;
 
-    if (authStatus) {
-      authStatus.textContent =
-        authMode === "login"
-          ? "Signing you in…"
-          : "Creating your account…";
-      authStatus.classList.remove(
-        "auth-status--error",
-        "auth-status--success"
-      );
-    }
+    authStatus.textContent =
+      authMode === "login"
+        ? "Signing you in…"
+        : "Creating your account…";
+    authStatus.classList.remove("auth-status--error", "auth-status--success");
 
     const endpoint = authMode === "login" ? "/login" : "/signup";
 
@@ -221,18 +247,14 @@ if (authForm) {
       const data = await res.json();
 
       if (!res.ok) {
-        if (authStatus) {
-          authStatus.textContent = data.error || "Authentication failed.";
-          authStatus.classList.add("auth-status--error");
-        }
+        authStatus.textContent = data.error || "Authentication failed.";
+        authStatus.classList.add("auth-status--error");
         return;
       }
 
       currentUser = data;
-      if (authStatus) {
-        authStatus.textContent = "You’re in. Syncing your protection…";
-        authStatus.classList.add("auth-status--success");
-      }
+      authStatus.textContent = "You’re in. Syncing your protection…";
+      authStatus.classList.add("auth-status--success");
       updatePlanPill();
 
       setTimeout(() => {
@@ -240,106 +262,131 @@ if (authForm) {
         authForm.reset();
       }, 600);
     } catch (err) {
-      if (authStatus) {
-        authStatus.textContent = "Network error. Try again in a moment.";
-        authStatus.classList.add("auth-status--error");
-      }
+      authStatus.textContent = "Network error. Try again in a moment.";
+      authStatus.classList.add("auth-status--error");
     }
   });
 }
 
-// ===================== PREMIUM MODE BLOCKING (UI) ======================
-
-// Prevent free / guest from selecting premium-only modes
-const premiumOnlyModes = new Set(["chat", "manipulation", "qr"]);
-
-const modeRadios = document.querySelectorAll('input[name="mode"]');
-if (modeRadios.length && statusEl) {
-  modeRadios.forEach((radio) => {
-    radio.addEventListener("change", () => {
-      const val = radio.value;
-      if (!premiumOnlyModes.has(val)) return;
-
-      const plan =
-        currentUser?.user?.plan || "guest";
-
-      if (plan !== "premium") {
-        statusEl.textContent =
-          "This scan mode is for Premium members only. Sign in and upgrade to unlock it.";
-        // bounce them back to auto
-        const autoRadio = document.querySelector(
-          'input[name="mode"][value="auto"]'
-        );
-        if (autoRadio) autoRadio.checked = true;
-        openAuthModal();
-      }
-    });
+// Logout
+if (accountLogoutBtn) {
+  accountLogoutBtn.addEventListener("click", async (e) => {
+    e.preventDefault();
+    try {
+      await fetch(`${API_BASE_URL}/logout`, {
+        method: "POST",
+        credentials: "include",
+      });
+    } catch (_) {}
+    currentUser = null;
+    closeAccountMenu();
+    updatePlanPill();
   });
 }
 
-// ===================== SUBSCRIPTION FRONTEND ======================
+// Manage subscription → jump to pricing or start checkout if already there
+if (accountManageBtn) {
+  accountManageBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    closeAccountMenu();
+    if (window.location.pathname === "/pricing") {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } else {
+      window.location.href = "/pricing";
+    }
+  });
+}
 
-async function startCheckout(mode) {
-  if (!subscribeStatus) return;
-  subscribeStatus.textContent = "Redirecting to secure checkout…";
+// ===================== GOOGLE SIGN-IN ======================
+
+function initGoogleButton() {
+  if (!googleBtnContainer) return;
+  const clientId = googleBtnContainer.dataset.googleClientId || "";
+  if (!clientId) return;
+  if (!(window.google && window.google.accounts && window.google.accounts.id)) {
+    return;
+  }
+
+  window.google.accounts.id.initialize({
+    client_id: clientId,
+    callback: handleGoogleCredential,
+  });
+
+  window.google.accounts.id.renderButton(googleBtnContainer, {
+    type: "standard",
+    theme: "outline",
+    size: "large",
+    width: "100",
+  });
+}
+
+async function handleGoogleCredential(response) {
+  if (!response || !response.credential) return;
+  if (authStatus) {
+    authStatus.textContent = "Signing in with Google…";
+    authStatus.classList.remove("auth-status--error", "auth-status--success");
+  }
 
   try {
-    const res = await fetch(`${API_BASE_URL}/create-checkout-session`, {
+    const res = await fetch(`${API_BASE_URL}/auth/google`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
-      body: JSON.stringify({ mode }),
+      body: JSON.stringify({ id_token: response.credential }),
     });
-
     const data = await res.json();
 
     if (!res.ok) {
-      if (res.status === 401) {
-        subscribeStatus.textContent =
-          "Sign in or create a free account first.";
-        openAuthModal();
-        return;
+      if (authStatus) {
+        authStatus.textContent = data.error || "Google sign-in failed.";
+        authStatus.classList.add("auth-status--error");
       }
-
-      subscribeStatus.textContent =
-        data.error || "Unable to start checkout right now.";
       return;
     }
 
-    if (data.url) {
-      window.location.href = data.url;
-    } else {
-      subscribeStatus.textContent =
-        "Unexpected response from billing server.";
+    currentUser = data;
+    if (authStatus) {
+      authStatus.textContent = "You’re in with Google.";
+      authStatus.classList.add("auth-status--success");
     }
+    updatePlanPill();
+
+    setTimeout(() => {
+      closeAuthModal();
+      if (authForm) authForm.reset();
+    }, 600);
   } catch (err) {
-    subscribeStatus.textContent =
-      "Network error starting checkout. Try again.";
+    if (authStatus) {
+      authStatus.textContent = "Network error during Google sign-in.";
+      authStatus.classList.add("auth-status--error");
+    }
   }
 }
 
-if (subMonthlyBtn) {
-  subMonthlyBtn.addEventListener("click", () => startCheckout("monthly"));
-}
-
-if (subYearlyBtn) {
-  subYearlyBtn.addEventListener("click", () => startCheckout("yearly"));
-}
+window.addEventListener("load", () => {
+  try {
+    initGoogleButton();
+  } catch (e) {
+    // ignore
+  }
+});
 
 // ===================== MAIN ANALYZE ======================
 
 async function analyzeContent() {
-  if (!contentInput || !statusEl) return;
-
-  const content = contentInput.value.trim();
+  const content = contentInput ? contentInput.value.trim() : "";
   const mode = getSelectedMode();
 
   if (!content && mode !== "qr") {
-    statusEl.textContent = "Paste a message, link, or conversation first.";
+    if (statusEl) {
+      statusEl.textContent = "Paste a message, link, or conversation first.";
+    }
     return;
   }
 
-  statusEl.textContent = "Running scam + manipulation checks…";
+  if (statusEl) {
+    statusEl.textContent = "Running scam + manipulation checks…";
+  }
   if (analyzeBtn) analyzeBtn.disabled = true;
 
   try {
@@ -351,23 +398,11 @@ async function analyzeContent() {
     });
 
     const result = await response.json();
-
     if (!response.ok) {
-      if (response.status === 402) {
+      if (statusEl) {
         statusEl.textContent =
-          result.error ||
-          "This feature is reserved for Premium members.";
-        // gentle nudge
-        openAuthModal();
-        return;
+          result.error || "Something went wrong during analysis.";
       }
-
-      statusEl.textContent =
-        result.error || "Something went wrong during analysis.";
-      return;
-    }
-
-    if (!verdictBadge || !resultSection || !explanationEl || !reasonsList) {
       return;
     }
 
@@ -394,16 +429,17 @@ async function analyzeContent() {
     });
 
     if (detailsPre) {
-      // Details are hidden for now (they're more technical)
       detailsPre.hidden = true;
     }
 
     resultSection.hidden = false;
-    statusEl.textContent = "";
+    if (statusEl) statusEl.textContent = "";
     // Refresh session counts if logged in
     loadSession();
   } catch (err) {
-    statusEl.textContent = "Network error. Try again in a moment.";
+    if (statusEl) {
+      statusEl.textContent = "Network error. Try again in a moment.";
+    }
   } finally {
     if (analyzeBtn) analyzeBtn.disabled = false;
   }
@@ -412,9 +448,9 @@ async function analyzeContent() {
 // ===================== QR SCAN ======================
 
 async function analyzeQR(file) {
-  if (!statusEl) return;
-
-  statusEl.textContent = "Scanning QR code and checking destination safety…";
+  if (statusEl) {
+    statusEl.textContent = "Scanning QR code and checking destination safety…";
+  }
   if (analyzeBtn) analyzeBtn.disabled = true;
 
   const form = new FormData();
@@ -429,25 +465,15 @@ async function analyzeQR(file) {
     const result = await response.json();
 
     if (!response.ok) {
-      if (response.status === 402) {
+      if (statusEl) {
         statusEl.textContent =
-          result.error ||
-          "QR and screenshot analysis are reserved for Premium members.";
-        openAuthModal();
-        return;
+          result.error || "Failed to analyze QR. Try a clearer image.";
       }
-
-      statusEl.textContent =
-        result.error || "Failed to analyze QR. Try a clearer image.";
       return;
     }
 
-    if (!verdictBadge || !resultSection || !explanationEl || !reasonsList) {
-      return;
-    }
-
-    const verdict = result.verdict || "SAFE";
-    const score = result.score ?? 0;
+    const verdict = result.overall?.combined_verdict || "SAFE";
+    const score = result.overall?.combined_risk_score ?? 0;
 
     let label = "";
     if (verdict === "SAFE") {
@@ -463,20 +489,26 @@ async function analyzeQR(file) {
     verdictBadge.textContent = label;
     setVerdictStyle(verdict);
 
-    explanationEl.textContent = result.explanation || "";
+    explanationEl.textContent = `Detected ${result.count} QR code(s).`;
 
     reasonsList.innerHTML = "";
-    // (Optional) you could list each QR here if you want
+    (result.items || []).forEach((item) => {
+      const li = document.createElement("li");
+      li.textContent = `${item.qr_type.toUpperCase()} → ${item.verdict}: ${item.content}`;
+      reasonsList.appendChild(li);
+    });
 
     if (detailsPre) {
       detailsPre.hidden = true;
     }
 
     resultSection.hidden = false;
-    statusEl.textContent = "";
+    if (statusEl) statusEl.textContent = "";
     loadSession();
   } catch (err) {
-    statusEl.textContent = "Failed to analyze QR. Try a clearer image.";
+    if (statusEl) {
+      statusEl.textContent = "Failed to analyze QR. Try a clearer image.";
+    }
   } finally {
     if (analyzeBtn) analyzeBtn.disabled = false;
   }
@@ -485,9 +517,9 @@ async function analyzeQR(file) {
 // ===================== OCR ======================
 
 async function runOCR(imageFile) {
-  if (!statusEl || !contentInput) return;
-
-  statusEl.textContent = "Reading text from your screenshot…";
+  if (statusEl) {
+    statusEl.textContent = "Reading text from your screenshot…";
+  }
   try {
     const worker = await Tesseract.createWorker();
     await worker.load();
@@ -499,15 +531,21 @@ async function runOCR(imageFile) {
 
     const extractedText = data.text.trim();
     if (!extractedText) {
-      statusEl.textContent = "No readable text found in the image.";
+      if (statusEl) {
+        statusEl.textContent = "No readable text found in the image.";
+      }
       return;
     }
 
-    contentInput.value = extractedText;
-    statusEl.textContent = "Text extracted — running safety check…";
+    if (contentInput) contentInput.value = extractedText;
+    if (statusEl) {
+      statusEl.textContent = "Text extracted — running safety check…";
+    }
     analyzeContent();
   } catch (err) {
-    statusEl.textContent = "OCR failed. Try a clearer or closer screenshot.";
+    if (statusEl) {
+      statusEl.textContent = "OCR failed. Try a clearer or closer screenshot.";
+    }
   }
 }
 
@@ -556,5 +594,63 @@ if (analyzeBtn) {
 if (contentInput) {
   contentInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) analyzeContent();
+  });
+}
+
+// ===================== BILLING (Stripe) ======================
+
+async function startCheckout(period) {
+  if (!currentUser) {
+    openAuthModal();
+    return;
+  }
+
+  const btn =
+    period === "year" ? upgradeYearlyBtn : upgradeMonthlyBtn;
+
+  if (btn) btn.disabled = true;
+
+  try {
+    const res = await fetch(`${API_BASE_URL}/billing/create-checkout-session`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ billing_period: period }),
+    });
+
+    const data = await res.json();
+    if (!res.ok || !data.url) {
+      const msg = data.error || "Unable to start checkout.";
+      // keeping it simple here
+      alert(msg);
+      return;
+    }
+
+    window.location.href = data.url;
+  } catch (err) {
+    alert("Network error starting checkout.");
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+if (startFreeBtn) {
+  startFreeBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    openAuthModal();
+  });
+}
+
+if (upgradeMonthlyBtn) {
+  upgradeMonthlyBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    startCheckout("month");
+  });
+}
+
+if (upgradeYearlyBtn) {
+  upgradeYearlyBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    startCheckout("year");
   });
 }

@@ -20,15 +20,26 @@
         </div>
       </div>
 
-    <nav class="nav-links">
-      <a href="#how-it-works">How it Works</a>
-      <a href="/subscribe">Pricing</a>
-      <a href="/support">Support</a>
-      <a href="/privacy">Privacy</a>
-      <a href="/feedback">Feedback</a>
-      <button id="account-button" class="nav-pill nav-account">Sign In</button>
-    </nav>
+      <nav class="nav-links">
+        <a href="#how-it-works">How it Works</a>
+        <a href="/pricing">Pricing</a>
+        <a href="/support">Support</a>
+        <a href="/privacy">Privacy</a>
+        <a href="/feedback">Feedback</a>
+        <button id="account-button" class="nav-pill nav-account">Sign In</button>
 
+        <!-- Account dropdown -->
+        <div id="account-menu" class="account-menu" hidden>
+          <div class="account-menu-email" id="account-menu-email"></div>
+          <button type="button" id="account-manage-btn" class="account-menu-item">
+            Manage subscription
+          </button>
+          <button type="button" id="account-logout-btn" class="account-menu-item account-menu-item-danger">
+            Sign out
+          </button>
+        </div>
+      </nav>
+    </header>
 
     <!-- HERO: LEFT = COPY, RIGHT = CONTROL PANEL -->
     <main class="hero-layout">
@@ -106,19 +117,19 @@
                 <span>Text</span>
               </label>
 
-              <label class="mode-pill">
+              <label class="mode-pill" data-premium="true">
                 <input type="radio" name="mode" value="chat" />
-                <span>AI Detector</span>
+                <span>AI Detector 🔒</span>
               </label>
 
-              <label class="mode-pill">
+              <label class="mode-pill" data-premium="true">
                 <input type="radio" name="mode" value="manipulation" />
-                <span>Manipulation</span>
+                <span>Manipulation 🔒</span>
               </label>
 
-              <label class="mode-pill">
+              <label class="mode-pill" data-premium="true">
                 <input type="radio" name="mode" value="qr" />
-                <span>QR Code</span>
+                <span>QR Code 🔒</span>
               </label>
             </div>
           </div>
@@ -214,7 +225,7 @@
       </div>
     </footer>
 
- <!-- AUTH MODAL -->
+    <!-- AUTH MODAL -->
     <div id="auth-modal" class="auth-modal" hidden>
       <div class="auth-card">
         <button id="auth-close" class="auth-close" aria-label="Close">✕</button>
@@ -229,14 +240,6 @@
           One account across web, extension, and iOS. Sync your scans, unlock higher limits, upgrade when you’re ready.
         </p>
 
-        <button type="button" id="google-login-btn" class="google-btn">
-          <span>🔐 Continue with Google</span>
-        </button>
-
-        <div class="auth-divider">
-          <span>or use email</span>
-        </div>
-
         <div class="auth-tabs">
           <button type="button" id="auth-tab-login" class="auth-tab auth-tab-active" data-mode="login">
             Sign In
@@ -244,6 +247,13 @@
           <button type="button" id="auth-tab-signup" class="auth-tab" data-mode="signup">
             Create Account
           </button>
+        </div>
+
+        <!-- Google Sign-in -->
+        <div id="google-btn" class="google-btn-container" data-google-client-id="YOUR_GOOGLE_CLIENT_ID_HERE"></div>
+
+        <div class="auth-divider">
+          <span>or continue with email</span>
         </div>
 
         <form id="auth-form" class="auth-form">
@@ -269,6 +279,7 @@
 
   <!-- IMPORTS -->
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script src="/static/script.js"></script>
 
 </body>

@@ -10,30 +10,20 @@ import hashlib
 
 USERS_FILE = Path("analytics/users.json")
 SCAN_LOG_FILE = Path("analytics/scan_logs.json")
-GUEST_LIMIT_FILE = Path("analytics/guest_limits.json")
 
-DEFAULT_FREE_DAILY_LIMIT = 8   # logged-in free users
-GUEST_DAILY_LIMIT = 2          # guests (no account)
+DEFAULT_FREE_DAILY_LIMIT = 8  # tweakable
 
 
 # -------------------------------------------------------------------
 # JSON helpers
 # -------------------------------------------------------------------
 def _ensure_files():
-    # Users
     if not USERS_FILE.exists():
         USERS_FILE.parent.mkdir(parents=True, exist_ok=True)
         USERS_FILE.write_text("[]")
-
-    # Scan logs
     if not SCAN_LOG_FILE.exists():
         SCAN_LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
         SCAN_LOG_FILE.write_text("[]")
-
-    # Guest scan counters
-    if not GUEST_LIMIT_FILE.exists():
-        GUEST_LIMIT_FILE.parent.mkdir(parents=True, exist_ok=True)
-        GUEST_LIMIT_FILE.write_text("{}")
 
 
 def _load_users() -> List[Dict[str, Any]]:
@@ -54,19 +44,11 @@ def _save_logs(logs: List[Dict[str, Any]]) -> None:
     SCAN_LOG_FILE.write_text(json.dumps(logs, indent=4))
 
 
-def _load_guest_limits() -> Dict[str, Any]:
-    _ensure_files()
-    return json.loads(GUEST_LIMIT_FILE.read_text() or "{}")
-
-
-def _save_guest_limits(data: Dict[str, Any]) -> None:
-    GUEST_LIMIT_FILE.write_text(json.dumps(data, indent=4))
-
-
 # -------------------------------------------------------------------
 # Password hashing (PBKDF2-SHA256)
 # -------------------------------------------------------------------
 def _hash_password(password: str, salt: str) -> str:
+    # PBKDF2 with per-user salt; only the hash is stored
     dk = hashlib.pbkdf2_hmac(
         "sha256",
         password.encode("utf-8"),
@@ -77,6 +59,7 @@ def _hash_password(password: str, salt: str) -> str:
 
 
 def _strip_sensitive(user: Dict[str, Any]) -> Dict[str, Any]:
+    """Return user data safe to send to the frontend."""
     return {
         "id": user["id"],
         "email": user["email"],
@@ -86,30 +69,46 @@ def _strip_sensitive(user: Dict[str, Any]) -> Dict[str, Any]:
         "daily_scan_date": user.get("daily_scan_date", ""),
         "daily_scan_count": user.get("daily_scan_count", 0),
         "daily_limit": user.get("daily_limit", DEFAULT_FREE_DAILY_LIMIT),
-        "auth_provider": user.get("auth_provider", "password"),
+        "auth_method": user.get("auth_method", "password"),
     }
 
 
 # -------------------------------------------------------------------
-# User CRUD
+# User lookup helpers
 # -------------------------------------------------------------------
-def find_user_by_email(email: str) -> Optional[Dict[str, Any]]:
-    users = _load_users()
+def _find_raw_by_email(users: List[Dict[str, Any]], email: str) -> Optional[Dict[str, Any]]:
     email_lower = email.lower()
     for u in users:
         if u["email"].lower() == email_lower:
-            return _strip_sensitive(u)
+            return u
     return None
+
+
+def _find_raw_by_id(users: List[Dict[str, Any]], user_id: str) -> Optional[Dict[str, Any]]:
+    for u in users:
+        if u["id"] == user_id:
+            return u
+    return None
+
+
+# -------------------------------------------------------------------
+# Public lookup APIs
+# -------------------------------------------------------------------
+def find_user_by_email(email: str) -> Optional[Dict[str, Any]]:
+    users = _load_users()
+    u = _find_raw_by_email(users, email)
+    return _strip_sensitive(u) if u else None
 
 
 def get_user_by_id(user_id: str) -> Optional[Dict[str, Any]]:
     users = _load_users()
-    for u in users:
-        if u["id"] == user_id:
-            return _strip_sensitive(u)
-    return None
+    u = _find_raw_by_id(users, user_id)
+    return _strip_sensitive(u) if u else None
 
 
+# -------------------------------------------------------------------
+# User creation (password)
+# -------------------------------------------------------------------
 def create_user(email: str, password: str) -> Dict[str, Any]:
     users = _load_users()
     email_lower = email.lower()
@@ -128,12 +127,13 @@ def create_user(email: str, password: str) -> Dict[str, Any]:
         "password_hash": pw_hash,
         "salt": salt,
         "plan": "free",
+        "auth_method": "password",
+        "google_sub": "",
         "created_at": now,
         "last_login": now,
         "daily_scan_date": "",
         "daily_scan_count": 0,
         "daily_limit": DEFAULT_FREE_DAILY_LIMIT,
-        "auth_provider": "password",
     }
 
     users.append(user)
@@ -141,48 +141,61 @@ def create_user(email: str, password: str) -> Dict[str, Any]:
     return _strip_sensitive(user)
 
 
-def get_or_create_google_user(email: str) -> Dict[str, Any]:
+# -------------------------------------------------------------------
+# Google account support
+# -------------------------------------------------------------------
+def get_or_create_google_user(email: str, google_sub: str) -> Dict[str, Any]:
     """
-    Used for Google OAuth sign-in. If a user with this email exists,
-    reuse that account. If not, create a new free-tier user.
+    Called when a verified Google ID token is received.
+    - If there's already a user with this email, attach Google as an auth method.
+    - Otherwise create a new free-plan account with Google login only.
     """
     users = _load_users()
-    email_lower = email.lower()
     now = int(time.time())
+    email_lower = email.lower()
 
-    for u in users:
-        if u["email"].lower() == email_lower:
-            # Mark provider if not set
-            if not u.get("auth_provider"):
-                u["auth_provider"] = "password"
-                _save_users(users)
-            return _strip_sensitive(u)
+    existing = _find_raw_by_email(users, email_lower)
 
-    # Create new user with random internal password
+    if existing:
+        existing["last_login"] = now
+        existing["google_sub"] = google_sub
+        # Merge auth methods
+        prev = existing.get("auth_method", "password")
+        if prev != "google":
+            existing["auth_method"] = "mixed"
+        else:
+            existing["auth_method"] = "google"
+        if not existing.get("created_at"):
+            existing["created_at"] = now
+        if "daily_limit" not in existing:
+            existing["daily_limit"] = DEFAULT_FREE_DAILY_LIMIT
+        _save_users(users)
+        return _strip_sensitive(existing)
+
+    # Brand new Google-only user
     user_id = secrets.token_hex(12)
-    salt = secrets.token_hex(16)
-    random_pw = secrets.token_hex(24)
-    pw_hash = _hash_password(random_pw, salt)
-
     user = {
         "id": user_id,
         "email": email_lower,
-        "password_hash": pw_hash,
-        "salt": salt,
+        "password_hash": "",
+        "salt": "",
         "plan": "free",
+        "auth_method": "google",
+        "google_sub": google_sub,
         "created_at": now,
         "last_login": now,
         "daily_scan_date": "",
         "daily_scan_count": 0,
         "daily_limit": DEFAULT_FREE_DAILY_LIMIT,
-        "auth_provider": "google",
     }
-
     users.append(user)
     _save_users(users)
     return _strip_sensitive(user)
 
 
+# -------------------------------------------------------------------
+# Password login
+# -------------------------------------------------------------------
 def verify_user_credentials(email: str, password: str) -> Optional[Dict[str, Any]]:
     users = _load_users()
     email_lower = email.lower()
@@ -191,9 +204,14 @@ def verify_user_credentials(email: str, password: str) -> Optional[Dict[str, Any
 
     for u in users:
         if u["email"].lower() == email_lower:
-            candidate_hash = _hash_password(password, u["salt"])
-            if candidate_hash != u["password_hash"]:
+            # If this is a Google-only account, reject password login
+            if u.get("auth_method") == "google" and not u.get("password_hash"):
                 return None
+
+            candidate_hash = _hash_password(password, u.get("salt", ""))
+            if candidate_hash != u.get("password_hash", ""):
+                return None
+
             u["last_login"] = int(time.time())
             changed = True
             user_out = _strip_sensitive(u)
@@ -205,6 +223,9 @@ def verify_user_credentials(email: str, password: str) -> Optional[Dict[str, Any
     return user_out
 
 
+# -------------------------------------------------------------------
+# Subscription / plan updates
+# -------------------------------------------------------------------
 def update_user_plan_by_email(email: str, plan: str) -> Optional[Dict[str, Any]]:
     users = _load_users()
     email_lower = email.lower()
@@ -229,7 +250,7 @@ def update_user_plan_by_email(email: str, plan: str) -> Optional[Dict[str, Any]]
 
 
 # -------------------------------------------------------------------
-# Scan limits (logged-in)
+# Scan limits
 # -------------------------------------------------------------------
 def register_scan_attempt(user_id: str) -> Tuple[bool, int, int]:
     """
@@ -282,35 +303,6 @@ def register_scan_attempt(user_id: str) -> Tuple[bool, int, int]:
         _save_users(users)
 
     return allowed, remaining, limit
-
-
-# -------------------------------------------------------------------
-# Scan limits (guest)
-# -------------------------------------------------------------------
-def register_guest_scan(ip: str) -> Tuple[bool, int, int]:
-    """
-    Very lightweight guest limiter by IP.
-    Returns (allowed, remaining, limit).
-    """
-    limits = _load_guest_limits()
-    today = time.strftime("%Y-%m-%d")
-
-    rec = limits.get(ip) or {"date": today, "count": 0}
-    if rec.get("date") != today:
-        rec = {"date": today, "count": 0}
-
-    limit = GUEST_DAILY_LIMIT
-    used = rec.get("count", 0)
-
-    if used >= limit:
-        return False, 0, limit
-
-    rec["count"] = used + 1
-    limits[ip] = rec
-    _save_guest_limits(limits)
-
-    remaining = max(limit - rec["count"], 0)
-    return True, remaining, limit
 
 
 # -------------------------------------------------------------------

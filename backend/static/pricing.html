@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Pricing — ScamDetector</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="top-nav">
+      <div class="brand">
+        <div class="brand-mark">🛡</div>
+        <div class="brand-text">
+          <span class="brand-name">ScamDetector</span>
+          <span class="brand-tagline">Digital Safety Framework</span>
+        </div>
+      </div>
+
+      <nav class="nav-links">
+        <a href="/">Home</a>
+        <a href="/pricing">Pricing</a>
+        <a href="/support">Support</a>
+        <a href="/privacy">Privacy</a>
+        <a href="/feedback">Feedback</a>
+        <button id="account-button" class="nav-pill nav-account">Sign In</button>
+
+        <div id="account-menu" class="account-menu" hidden>
+          <div class="account-menu-email" id="account-menu-email"></div>
+          <button type="button" id="account-manage-btn" class="account-menu-item">
+            Manage subscription
+          </button>
+          <button type="button" id="account-logout-btn" class="account-menu-item account-menu-item-danger">
+            Sign out
+          </button>
+        </div>
+      </nav>
+    </header>
+
+    <main class="pricing-main">
+      <h1 class="pricing-heading">Choose your protection level</h1>
+      <p class="pricing-subtitle">
+        Free feels like “this helps.” Premium feels like “I’m armored.”
+      </p>
+
+      <div class="pricing-grid">
+        <!-- Free tier -->
+        <section class="pricing-card">
+          <h2>Free</h2>
+          <p class="pricing-tagline">Solid protection, clear limits.</p>
+          <p class="pricing-price">$0 <span>/ forever</span></p>
+          <ul class="pricing-list">
+            <li>✅ Auto Mode (basic AI)</li>
+            <li>✅ Up to 5–8 scans per day</li>
+            <li>✅ Basic URL scan</li>
+            <li>✅ Basic text scan</li>
+            <li>✅ Verdict: SAFE / SUSPICIOUS / DANGEROUS</li>
+            <li>✅ Short, simple explanations</li>
+            <li>✅ 3–5 key risk reasons</li>
+            <li>⚠️ Slight delay in processing</li>
+            <li>⚠️ Very limited history</li>
+          </ul>
+          <button class="primary-btn pricing-primary-btn" id="start-free-btn">
+            Create free account
+          </button>
+        </section>
+
+        <!-- Premium tier -->
+        <section class="pricing-card pricing-card-highlight">
+          <div class="pricing-pill">Most protection</div>
+          <h2>Premium</h2>
+          <p class="pricing-tagline">Full Dominance Mode.</p>
+          <p class="pricing-price">$6.99 <span>/ month</span></p>
+          <p class="pricing-price-alt">$59 / year</p>
+
+          <ul class="pricing-list">
+            <li>🚀 Unlimited scans</li>
+            <li>🧠 Deep AI analysis mode</li>
+            <li>🧠 Psychological manipulation detection</li>
+            <li>📸 Screenshot / image scan + QR</li>
+            <li>🔍 Advanced URL spoof detection</li>
+            <li>🎯 Confidence score + detailed risk breakdown</li>
+            <li>📊 Full scan history + logs</li>
+            <li>📤 Exportable reports (future-ready)</li>
+            <li>⚡ Faster processing (priority queue)</li>
+            <li>🆕 Early access to new features</li>
+          </ul>
+
+          <button class="primary-btn pricing-primary-btn" id="upgrade-monthly">
+            Go Premium — Monthly
+          </button>
+          <button class="secondary-btn pricing-secondary-btn" id="upgrade-yearly">
+            Go Premium — Yearly
+          </button>
+
+          <p class="pricing-note">
+            Requires a ScamDetector account. You’ll be asked to sign in first if needed.
+          </p>
+        </section>
+      </div>
+    </main>
+
+    <footer class="app-footer">
+      <p>Built to protect awareness, not to replace your judgment. Not financial or legal advice.</p>
+      <div class="legal-links">
+        <a href="/terms">Terms</a>
+        <a href="/privacy">Privacy</a>
+        <a href="/support">Support</a>
+        <a href="/feedback">Feedback</a>
+      </div>
+    </footer>
+
+    <!-- Reuse auth modal -->
+    <div id="auth-modal" class="auth-modal" hidden>
+      <div class="auth-card">
+        <button id="auth-close" class="auth-close" aria-label="Close">✕</button>
+
+        <div class="auth-header-pill">
+          <span>🛡</span>
+          <span>Account & Sync</span>
+        </div>
+
+        <h2 class="auth-title">Sign in to upgrade your protection.</h2>
+        <p class="auth-subtitle">
+          One account across web, extension, and iOS. Upgrade to Premium when you’re ready.
+        </p>
+
+        <div class="auth-tabs">
+          <button type="button" id="auth-tab-login" class="auth-tab auth-tab-active" data-mode="login">
+            Sign In
+          </button>
+          <button type="button" id="auth-tab-signup" class="auth-tab" data-mode="signup">
+            Create Account
+          </button>
+        </div>
+
+        <div id="google-btn" class="google-btn-container" data-google-client-id="YOUR_GOOGLE_CLIENT_ID_HERE"></div>
+
+        <div class="auth-divider">
+          <span>or continue with email</span>
+        </div>
+
+        <form id="auth-form" class="auth-form">
+          <label for="auth-email">Email</label>
+          <input type="email" id="auth-email" required placeholder="you@example.com" />
+
+          <label for="auth-password">Password</label>
+          <input type="password" id="auth-password" required minlength="8" placeholder="Minimum 8 characters" />
+
+          <button type="submit" id="auth-submit" class="primary-btn auth-submit">
+            Continue
+          </button>
+        </form>
+
+        <p id="auth-hint" class="auth-hint">
+          No account yet? Switch to <strong>Create Account</strong> to start with the free tier.
+        </p>
+        <p id="auth-status" class="auth-status"></p>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script src="/static/script.js"></script>
+</body>
+</html>
