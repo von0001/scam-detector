@@ -3,6 +3,7 @@ uvicorn
 pydantic
 pillow
 numpy
+email-validator==2.1.0.post1
 opencv-python-headless
 groq
 tldextract
