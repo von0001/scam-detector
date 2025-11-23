@@ -1,7 +1,8 @@
-// SCRIPT.JS — FULL PATCHED VERSION (QR FIXED)
+// SCRIPT.JS — FULL VERSION WITH AUTH + QR
 
 const API_BASE_URL = "https://scamdetectorapp.com";
 
+// Core scan elements
 const contentInput = document.getElementById("content-input");
 const analyzeBtn = document.getElementById("analyze-btn");
 const statusEl = document.getElementById("status");
@@ -16,6 +17,23 @@ const ocrBtn = document.getElementById("ocr-btn");
 const fileInput = document.getElementById("ocr-file");
 const dropZone = document.getElementById("drop-zone");
 
+// Auth / account elements
+const accountBtn = document.getElementById("account-button");
+const planPill = document.getElementById("plan-pill");
+
+const authModal = document.getElementById("auth-modal");
+const authClose = document.getElementById("auth-close");
+const authForm = document.getElementById("auth-form");
+const authEmail = document.getElementById("auth-email");
+const authPassword = document.getElementById("auth-password");
+const authStatus = document.getElementById("auth-status");
+const authHint = document.getElementById("auth-hint");
+const authTabLogin = document.getElementById("auth-tab-login");
+const authTabSignup = document.getElementById("auth-tab-signup");
+
+let authMode = "login";
+let currentUser = null;
+
 // MODE
 function getSelectedMode() {
   const radios = document.querySelectorAll('input[name="mode"]');
@@ -25,7 +43,11 @@ function getSelectedMode() {
 
 // Verdict color + label
 function setVerdictStyle(verdict) {
-  verdictBadge.classList.remove("verdict-safe", "verdict-suspicious", "verdict-dangerous");
+  verdictBadge.classList.remove(
+    "verdict-safe",
+    "verdict-suspicious",
+    "verdict-dangerous"
+  );
 
   if (verdict === "SAFE") {
     verdictBadge.classList.add("verdict-safe");
@@ -36,7 +58,160 @@ function setVerdictStyle(verdict) {
   }
 }
 
-// MAIN ANALYZE
+// ===================== AUTH UI ======================
+
+function setAuthMode(mode) {
+  authMode = mode;
+  if (!authTabLogin || !authTabSignup) return;
+
+  if (mode === "login") {
+    authTabLogin.classList.add("auth-tab-active");
+    authTabSignup.classList.remove("auth-tab-active");
+    authHint.innerHTML =
+      'No account yet? Switch to <strong>Create Account</strong> to start with the free tier.';
+  } else {
+    authTabSignup.classList.add("auth-tab-active");
+    authTabLogin.classList.remove("auth-tab-active");
+    authHint.textContent =
+      "We’ll start you on the free plan. Upgrade to Premium anytime for unlimited scans.";
+  }
+}
+
+if (authTabLogin && authTabSignup) {
+  authTabLogin.addEventListener("click", () => setAuthMode("login"));
+  authTabSignup.addEventListener("click", () => setAuthMode("signup"));
+}
+
+function openAuthModal() {
+  if (authModal) authModal.hidden = false;
+  if (authStatus) {
+    authStatus.textContent = "";
+    authStatus.classList.remove("auth-status--error", "auth-status--success");
+  }
+}
+
+function closeAuthModal() {
+  if (authModal) authModal.hidden = true;
+}
+
+if (accountBtn) {
+  accountBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    openAuthModal();
+  });
+}
+
+if (authClose) {
+  authClose.addEventListener("click", (e) => {
+    e.preventDefault();
+    closeAuthModal();
+  });
+}
+
+function updatePlanPill() {
+  if (!planPill) return;
+
+  if (!currentUser) {
+    planPill.innerHTML =
+      "Guest mode · Limited free scans. <span>Sign in</span> to sync and unlock more.";
+    if (accountBtn) accountBtn.textContent = "Sign In";
+    return;
+  }
+
+  const user = currentUser.user;
+  const plan = user.plan;
+  const used = user.daily_scan_count ?? 0;
+  const limit = user.daily_limit ?? 0;
+
+  if (plan === "premium") {
+    planPill.innerHTML =
+      "<span>Premium</span> · Unlimited scans & deep analysis.";
+    if (accountBtn) accountBtn.textContent = user.email;
+  } else {
+    const remaining = Math.max((limit || 0) - used, 0);
+    planPill.innerHTML = `<span>Free plan</span> · ${remaining} of ${limit} daily scans left.`;
+    if (accountBtn) accountBtn.textContent = user.email;
+  }
+}
+
+async function loadSession() {
+  try {
+    const res = await fetch(`${API_BASE_URL}/me`, {
+      method: "GET",
+      credentials: "include",
+    });
+
+    if (!res.ok) {
+      currentUser = null;
+      updatePlanPill();
+      return;
+    }
+
+    const data = await res.json();
+    if (!data.authenticated) {
+      currentUser = null;
+    } else {
+      currentUser = data;
+    }
+    updatePlanPill();
+  } catch (err) {
+    currentUser = null;
+    updatePlanPill();
+  }
+}
+
+loadSession();
+
+if (authForm) {
+  authForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (!authEmail.value || !authPassword.value) return;
+
+    authStatus.textContent =
+      authMode === "login"
+        ? "Signing you in…"
+        : "Creating your account…";
+    authStatus.classList.remove("auth-status--error", "auth-status--success");
+
+    const endpoint = authMode === "login" ? "/login" : "/signup";
+
+    try {
+      const res = await fetch(`${API_BASE_URL}${endpoint}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          email: authEmail.value.trim(),
+          password: authPassword.value,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        authStatus.textContent = data.error || "Authentication failed.";
+        authStatus.classList.add("auth-status--error");
+        return;
+      }
+
+      currentUser = data;
+      authStatus.textContent = "You’re in. Syncing your protection…";
+      authStatus.classList.add("auth-status--success");
+      updatePlanPill();
+
+      setTimeout(() => {
+        closeAuthModal();
+        authForm.reset();
+      }, 600);
+    } catch (err) {
+      authStatus.textContent = "Network error. Try again in a moment.";
+      authStatus.classList.add("auth-status--error");
+    }
+  });
+}
+
+// ===================== MAIN ANALYZE ======================
+
 async function analyzeContent() {
   const content = contentInput.value.trim();
   const mode = getSelectedMode();
@@ -53,16 +228,17 @@ async function analyzeContent() {
     const response = await fetch(`${API_BASE_URL}/analyze`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify({ content, mode }),
     });
 
     const result = await response.json();
     if (!response.ok) {
-      statusEl.textContent = result.error || "Something went wrong during analysis.";
+      statusEl.textContent =
+        result.error || "Something went wrong during analysis.";
       return;
     }
 
-    // Big, emotionally clear verdict badge
     let label = "";
     if (result.verdict === "SAFE") {
       label = "SAFE · No major scam patterns detected";
@@ -91,6 +267,8 @@ async function analyzeContent() {
 
     resultSection.hidden = false;
     statusEl.textContent = "";
+    // Refresh session counts if logged in
+    loadSession();
   } catch (err) {
     statusEl.textContent = "Network error. Try again in a moment.";
   } finally {
@@ -98,7 +276,8 @@ async function analyzeContent() {
   }
 }
 
-// QR SCAN
+// ===================== QR SCAN ======================
+
 async function analyzeQR(file) {
   statusEl.textContent = "Scanning QR code and checking destination safety…";
   analyzeBtn.disabled = true;
@@ -107,8 +286,18 @@ async function analyzeQR(file) {
   form.append("image", file);
 
   try {
-    const response = await fetch(`${API_BASE_URL}/qr`, { method: "POST", body: form });
+    const response = await fetch(`${API_BASE_URL}/qr`, {
+      method: "POST",
+      body: form,
+      credentials: "include",
+    });
     const result = await response.json();
+
+    if (!response.ok) {
+      statusEl.textContent =
+        result.error || "Failed to analyze QR. Try a clearer image.";
+      return;
+    }
 
     const verdict = result.overall?.combined_verdict || "SAFE";
     const score = result.overall?.combined_risk_score ?? 0;
@@ -142,6 +331,7 @@ async function analyzeQR(file) {
 
     resultSection.hidden = false;
     statusEl.textContent = "";
+    loadSession();
   } catch (err) {
     statusEl.textContent = "Failed to analyze QR. Try a clearer image.";
   } finally {
@@ -149,7 +339,8 @@ async function analyzeQR(file) {
   }
 }
 
-// OCR (unchanged logic, improved status text)
+// ===================== OCR ======================
+
 async function runOCR(imageFile) {
   statusEl.textContent = "Reading text from your screenshot…";
   try {
@@ -176,39 +367,49 @@ async function runOCR(imageFile) {
 }
 
 // Upload select
-ocrBtn.addEventListener("click", () => fileInput.click());
+if (ocrBtn && fileInput) {
+  ocrBtn.addEventListener("click", () => fileInput.click());
 
-fileInput.addEventListener("change", () => {
-  const file = fileInput.files[0];
-  if (!file) return;
-  const mode = getSelectedMode();
-  if (mode === "qr") analyzeQR(file);
-  else runOCR(file);
-});
+  fileInput.addEventListener("change", () => {
+    const file = fileInput.files[0];
+    if (!file) return;
+    const mode = getSelectedMode();
+    if (mode === "qr") analyzeQR(file);
+    else runOCR(file);
+  });
+}
 
 // Drag & drop
-dropZone.addEventListener("dragover", (e) => {
-  e.preventDefault();
-  dropZone.classList.add("dragover");
-});
-dropZone.addEventListener("dragleave", () => dropZone.classList.remove("dragover"));
-dropZone.addEventListener("drop", (e) => {
-  e.preventDefault();
-  dropZone.classList.remove("dragover");
-  const file = e.dataTransfer.files[0];
-  if (!file) return;
-  const mode = getSelectedMode();
-  if (mode === "qr") analyzeQR(file);
-  else runOCR(file);
-});
+if (dropZone) {
+  dropZone.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    dropZone.classList.add("dragover");
+  });
+  dropZone.addEventListener("dragleave", () =>
+    dropZone.classList.remove("dragover")
+  );
+  dropZone.addEventListener("drop", (e) => {
+    e.preventDefault();
+    dropZone.classList.remove("dragover");
+    const file = e.dataTransfer.files[0];
+    if (!file) return;
+    const mode = getSelectedMode();
+    if (mode === "qr") analyzeQR(file);
+    else runOCR(file);
+  });
+}
 
 // Submit
-analyzeBtn.addEventListener("click", (e) => {
-  e.preventDefault();
-  analyzeContent();
-});
+if (analyzeBtn) {
+  analyzeBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    analyzeContent();
+  });
+}
 
 // Ctrl+Enter submit
-contentInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) analyzeContent();
-});
+if (contentInput) {
+  contentInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) analyzeContent();
+  });
+}

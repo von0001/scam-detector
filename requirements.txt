@@ -8,3 +8,4 @@ groq
 tldextract
 itsdangerous
 python-multipart
+chart.js

@@ -1,271 +1,523 @@
-# backend/main.py
+# main.py
+
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Optional, Literal, List
 
 import os
-import base64
-import re
+
 from fastapi import FastAPI, UploadFile, File, Request
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr, Field
 
-from backend.analytics.feedback import add_feedback, load_feedback
-
-from .text_scanner import analyze_text
-from .url_scanner import analyze_url
-
-from groq import Groq
-from .ai_detector.classify_actor import analyze_actor
-from .manipulation.profiler import analyze_manipulation
-
-from .qr_scanner.qr_engine import process_qr_image
+from backend.text_scanner import analyze_text
+from backend.url_scanner import analyze_url
+from backend.ai_detector.classify_actor import analyze_actor
+from backend.manipulation.profiler import analyze_manipulation
+from backend.qr_scanner.qr_engine import process_qr_image
 
 from backend.analytics.analytics import record_event, get_analytics
-from backend.auth import verify_password, create_session, verify_session, COOKIE_NAME
+from backend.analytics.feedback import add_feedback, load_feedback
+from backend.users import (
+    create_user,
+    verify_user_credentials,
+    get_user_by_id,
+    register_scan_attempt,
+    add_scan_log,
+    get_scan_history_for_user,
+    update_user_plan_by_email,
+)
+from backend.user_auth import (
+    create_access_token,
+    create_refresh_token,
+    verify_access_token,
+    verify_refresh_token,
+    USER_ACCESS_COOKIE,
+    USER_REFRESH_COOKIE,
+    ACCESS_TOKEN_MAX_AGE,
+    REFRESH_TOKEN_MAX_AGE,
+)
+from backend.auth import (
+    ADMIN_PASSWORD,
+    ADMIN_COOKIE_NAME,
+    create_admin_token,
+    verify_admin_token,
+)
 
-from backend.utils.reason_cleaner import clean_reasons
-from backend.models import AnalyzeRequest  # use shared model
+# ---------------------------------------------------------
+# FastAPI + static
+# ---------------------------------------------------------
+BASE_DIR = Path(__file__).resolve().parent
+STATIC_DIR = BASE_DIR / "static"
 
+app = FastAPI(title="ScamDetector API")
 
-app = FastAPI()
-
-# ======================================================================
-#                                CORS
-# ======================================================================
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # you can restrict later
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
-# ======================================================================
-#                     ADMIN SESSION PROTECTION MIDDLEWARE
-# ======================================================================
-@app.middleware("http")
-async def admin_protect(request: Request, call_next):
-    path = request.url.path
-
-    if path.startswith("/admin") and not path.startswith("/admin/login"):
-        session = request.cookies.get(COOKIE_NAME)
-        if not session or not verify_session(session):
-            return RedirectResponse("/admin/login")
-
-    return await call_next(request)
+# ---------------------------------------------------------
+# Models
+# ---------------------------------------------------------
+class AnalyzeRequest(BaseModel):
+    content: str
+    mode: str = "auto"
 
 
-# ======================================================================
-#                                   OCR
-# ======================================================================
-@app.post("/ocr")
-async def ocr(image: UploadFile = File(...)):
-    record_event("ocr")
-
-    img_bytes = await image.read()
-    b64 = base64.b64encode(img_bytes).decode()
-
-    client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-
-    response = client.chat.completions.create(
-        model="llava",
-        messages=[
-            {
-                "role": "user",
-                "content": [
-                    {"type": "input_text", "text": "Extract all text from this image."},
-                    {"type": "input_image", "image_url": f"data:image/jpeg;base64,{b64}"},
-                ],
-            }
-        ],
-    )
-
-    extracted = response.choices[0].message["content"].strip()
-    return {"text": extracted}
+class FeedbackRequest(BaseModel):
+    email: Optional[EmailStr] = None
+    message: str
+    page: Optional[str] = None
 
 
-# ======================================================================
-#                                QR SCANNER
-# ======================================================================
-@app.post("/qr")
-async def qr(image: UploadFile = File(...)):
-    record_event("qr_scan")
-
-    img_bytes = await image.read()
-
-    # Handle base64 data URLs
-    if img_bytes.startswith(b"data:image"):
-        _, b64data = img_bytes.split(b",", 1)
-        img_bytes = base64.b64decode(b64data)
-
-    return process_qr_image(img_bytes)
+class UserSignupRequest(BaseModel):
+    email: EmailStr
+    password: str = Field(..., min_length=8)
 
 
-# ======================================================================
-#                         STANDARDIZED RESPONSE BUILDER
-# ======================================================================
+class UserLoginRequest(BaseModel):
+    email: EmailStr
+    password: str
 
-def _normalize_score(raw_score) -> int:
-    """
-    Normalize scores so UI stays consistent.
 
-    - If score <= 10, treat it as a 0–10 risk index and scale to 0–100.
-    - If score > 10, assume it's already on a larger scale (URL rules),
-      just clamp to [0, 100].
-    """
+class RefreshTokenRequest(BaseModel):
+    refresh_token: Optional[str] = None
+
+
+class SubscriptionUpdateRequest(BaseModel):
+    email: EmailStr
+    plan: Literal["free", "premium"]
+    secret: Optional[str] = None
+
+
+class AdminLoginRequest(BaseModel):
+    password: str
+
+
+SUBSCRIPTION_WEBHOOK_SECRET = os.getenv("SUBSCRIPTION_WEBHOOK_SECRET", "change-this")
+
+
+# ---------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------
+def is_url_like(text: str) -> bool:
+    lowered = text.strip().lower()
+    return lowered.startswith(("http://", "https://", "www.")) or "." in lowered
+
+
+def _normalize_score(score: int | float) -> int:
+    # Ensure 0–100
     try:
-        s = float(raw_score)
-    except (TypeError, ValueError):
+        s = float(score)
+    except Exception:
         return 0
-
-    if s <= 10:
-        s = s * 10.0
-
-    if s < 0:
-        s = 0.0
-    if s > 100:
-        s = 100.0
-
-    return int(round(s))
+    return int(max(0, min(100, s)))
 
 
 def build_response(
+    *,
     score: int,
     category: str,
-    reasons,
-    explanation: str | None = None,
-    verdict: str | None = None,
-    details: dict | None = None,
+    reasons: List[str],
+    explanation: str,
+    verdict: Optional[str] = None,
+    details: Optional[dict] = None,
 ):
-    """
-    Shared response builder.
-
-    - Uses AI/model verdict if provided.
-    - Otherwise, falls back to 30/70 score thresholds.
-    """
     if verdict is None:
-        if score >= 70:
+        if score >= 60:
             verdict = "DANGEROUS"
-        elif score >= 30:
+        elif score >= 25:
             verdict = "SUSPICIOUS"
         else:
             verdict = "SAFE"
 
-    if explanation is None:
-        explanation = "Scam analysis."
-
-    resp = {
-        "score": int(score),
-        "verdict": verdict,
+    return {
+        "score": score,
         "category": category,
+        "reasons": reasons,
         "explanation": explanation,
-        "reasons": clean_reasons(reasons or []),
+        "verdict": verdict,
+        "details": details or {},
     }
 
-    if details is not None:
-        resp["details"] = details
 
+def get_current_user(request: Request) -> Optional[dict]:
+    token = None
+
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.lower().startswith("bearer "):
+        token = auth_header.split(" ", 1)[1].strip()
+
+    if not token:
+        token = request.cookies.get(USER_ACCESS_COOKIE)
+
+    if not token:
+        return None
+
+    payload = verify_access_token(token)
+    if not payload:
+        return None
+
+    uid = payload.get("uid")
+    if not uid:
+        return None
+
+    return get_user_by_id(uid)
+
+
+def _user_response(user: dict) -> dict:
+    return {
+        "user": {
+            "id": user["id"],
+            "email": user["email"],
+            "plan": user.get("plan", "free"),
+            "created_at": user.get("created_at"),
+            "last_login": user.get("last_login"),
+            "daily_scan_date": user.get("daily_scan_date", ""),
+            "daily_scan_count": user.get("daily_scan_count", 0),
+            "daily_limit": user.get("daily_limit"),
+        }
+    }
+
+
+# ---------------------------------------------------------
+# Pages
+# ---------------------------------------------------------
+@app.get("/")
+def root():
+    return FileResponse(STATIC_DIR / "index.html")
+
+
+@app.get("/support")
+def support_page():
+    return FileResponse(STATIC_DIR / "support.html")
+
+
+@app.get("/privacy")
+def privacy_page():
+    return FileResponse(STATIC_DIR / "privacy.html")
+
+
+@app.get("/terms")
+def terms_page():
+    return FileResponse(STATIC_DIR / "terms.html")
+
+
+@app.get("/feedback")
+def feedback_page():
+    return FileResponse(STATIC_DIR / "feedback.html")
+
+
+@app.get("/contact")
+def contact_page():
+    return FileResponse(STATIC_DIR / "contact.html")
+
+
+@app.get("/login-admin")
+def login_admin_page():
+    # Optional separate URL to load login.html
+    return FileResponse(STATIC_DIR / "login.html")
+
+
+@app.get("/admin")
+def admin_page(request: Request):
+    token = request.cookies.get(ADMIN_COOKIE_NAME)
+    if not token or not verify_admin_token(token):
+        # Redirect to login page
+        return FileResponse(STATIC_DIR / "login.html")
+    return FileResponse(STATIC_DIR / "admin.html")
+
+
+# ---------------------------------------------------------
+# USER ACCOUNT SYSTEM
+# ---------------------------------------------------------
+@app.post("/signup")
+def signup(body: UserSignupRequest):
+    try:
+        user = create_user(body.email, body.password)
+    except ValueError as e:
+        return JSONResponse({"error": str(e)}, status_code=400)
+
+    access = create_access_token(user)
+    refresh = create_refresh_token(user)
+
+    resp = JSONResponse(
+        {
+            **_user_response(user),
+            "access_token": access,
+            "refresh_token": refresh,
+        }
+    )
+    resp.set_cookie(
+        USER_ACCESS_COOKIE,
+        access,
+        max_age=ACCESS_TOKEN_MAX_AGE,
+        httponly=True,
+        samesite="lax",
+    )
+    resp.set_cookie(
+        USER_REFRESH_COOKIE,
+        refresh,
+        max_age=REFRESH_TOKEN_MAX_AGE,
+        httponly=True,
+        samesite="lax",
+    )
     return resp
 
 
-# ======================================================================
-#                        GOOGLE SEARCH CONSOLE VERIFY
-# ======================================================================
-@app.get("/google01a58a8eec834058.html")
-def google_verification():
-    file_path = os.path.join(os.path.dirname(__file__), "google01a58a8eec834058.html")
-    return FileResponse(file_path)
+@app.post("/login")
+def user_login(body: UserLoginRequest):
+    user = verify_user_credentials(body.email, body.password)
+    if not user:
+        return JSONResponse({"error": "Invalid email or password."}, status_code=401)
+
+    access = create_access_token(user)
+    refresh = create_refresh_token(user)
+
+    resp = JSONResponse(
+        {
+            **_user_response(user),
+            "access_token": access,
+            "refresh_token": refresh,
+        }
+    )
+    resp.set_cookie(
+        USER_ACCESS_COOKIE,
+        access,
+        max_age=ACCESS_TOKEN_MAX_AGE,
+        httponly=True,
+        samesite="lax",
+    )
+    resp.set_cookie(
+        USER_REFRESH_COOKIE,
+        refresh,
+        max_age=REFRESH_TOKEN_MAX_AGE,
+        httponly=True,
+        samesite="lax",
+    )
+    return resp
 
 
-# ======================================================================
-#                                 HEALTH
-# ======================================================================
-@app.get("/health")
-def health():
-    return {"status": "ok"}
+@app.post("/logout")
+def user_logout():
+    resp = JSONResponse({"success": True})
+    resp.delete_cookie(USER_ACCESS_COOKIE)
+    resp.delete_cookie(USER_REFRESH_COOKIE)
+    return resp
 
 
-# URL-like detector for AUTO mode
-URL_LIKE_RE = re.compile(r"^(https?://|www\.)\S+$", re.IGNORECASE)
+@app.get("/me")
+def me(request: Request):
+    user = get_current_user(request)
+    if not user:
+        return JSONResponse({"authenticated": False}, status_code=401)
+    return {"authenticated": True, **_user_response(user)}
 
 
-# ======================================================================
-#                             MEGA ANALYZE ENGINE
-# ======================================================================
+@app.post("/refresh-token")
+def refresh_token(body: RefreshTokenRequest, request: Request):
+    token = body.refresh_token or request.cookies.get(USER_REFRESH_COOKIE)
+    if not token:
+        return JSONResponse({"error": "No refresh token provided."}, status_code=400)
+
+    payload = verify_refresh_token(token)
+    if not payload:
+        return JSONResponse({"error": "Invalid or expired refresh token."}, status_code=401)
+
+    uid = payload.get("uid")
+    if not uid:
+        return JSONResponse({"error": "Invalid token payload."}, status_code=401)
+
+    user = get_user_by_id(uid)
+    if not user:
+        return JSONResponse({"error": "User not found."}, status_code=404)
+
+    new_access = create_access_token(user)
+    new_refresh = create_refresh_token(user)
+
+    resp = JSONResponse(
+        {
+            **_user_response(user),
+            "access_token": new_access,
+            "refresh_token": new_refresh,
+        }
+    )
+    resp.set_cookie(
+        USER_ACCESS_COOKIE,
+        new_access,
+        max_age=ACCESS_TOKEN_MAX_AGE,
+        httponly=True,
+        samesite="lax",
+    )
+    resp.set_cookie(
+        USER_REFRESH_COOKIE,
+        new_refresh,
+        max_age=REFRESH_TOKEN_MAX_AGE,
+        httponly=True,
+        samesite="lax",
+    )
+    return resp
+
+
+@app.get("/scan-history")
+def scan_history(request: Request, limit: int = 100):
+    user = get_current_user(request)
+    if not user:
+        return JSONResponse({"error": "Authentication required."}, status_code=401)
+
+    logs = get_scan_history_for_user(user["id"], limit=limit)
+    return {"items": logs}
+
+
+@app.post("/log-scan")
+async def log_scan(request: Request):
+    user = get_current_user(request)
+    body = await request.json()
+    category = body.get("category", "unknown")
+    mode = body.get("mode", "auto")
+    verdict = body.get("verdict", "SAFE")
+    score = int(body.get("score", 0))
+    snippet = body.get("snippet", "")[:280]
+    details = body.get("details") or {}
+
+    add_scan_log(
+        user_id=user["id"] if user else None,
+        category=category,
+        mode=mode,
+        verdict=verdict,
+        score=score,
+        content_snippet=snippet,
+        details=details,
+    )
+    return {"success": True}
+
+
+@app.post("/update-subscription-status")
+def update_subscription(body: SubscriptionUpdateRequest):
+    if body.secret != SUBSCRIPTION_WEBHOOK_SECRET:
+        return JSONResponse({"error": "Unauthorized."}, status_code=401)
+
+    user = update_user_plan_by_email(body.email, body.plan)
+    if not user:
+        return JSONResponse({"error": "User not found."}, status_code=404)
+
+    return {"success": True, **_user_response(user)}
+
+
+# ---------------------------------------------------------
+# Admin login + analytics
+# ---------------------------------------------------------
+@app.post("/admin/login")
+def admin_login(body: AdminLoginRequest):
+    if body.password != ADMIN_PASSWORD:
+        return JSONResponse({"error": "Invalid admin password."}, status_code=401)
+
+    token = create_admin_token()
+    resp = JSONResponse({"success": True})
+    resp.set_cookie(
+        ADMIN_COOKIE_NAME,
+        token,
+        max_age=60 * 60 * 4,
+        httponly=True,
+        samesite="lax",
+    )
+    return resp
+
+
+def _require_admin(request: Request) -> bool:
+    token = request.cookies.get(ADMIN_COOKIE_NAME)
+    return bool(token and verify_admin_token(token))
+
+
+@app.get("/admin/analytics")
+def admin_analytics(request: Request):
+    if not _require_admin(request):
+        return JSONResponse({"error": "Unauthorized."}, status_code=401)
+    return get_analytics()
+
+
+@app.get("/admin/feedback")
+def admin_feedback(request: Request):
+    if not _require_admin(request):
+        return JSONResponse({"error": "Unauthorized."}, status_code=401)
+    return load_feedback()
+
+
+# ---------------------------------------------------------
+# Feedback API (public)
+# ---------------------------------------------------------
+@app.post("/api/feedback")
+async def api_feedback(request: Request):
+    body = await request.json()
+    message = body.get("message", "").strip()
+    email = body.get("email", "")
+    page = body.get("page", "")
+
+    if not message:
+        return JSONResponse({"error": "Message is required."}, status_code=400)
+
+    ip = request.client.host if request.client else "unknown"
+    user_agent = request.headers.get("user-agent", "")
+
+    add_feedback(message=message, page=page, ip=ip, user_agent=user_agent)
+
+    return {"success": True}
+
+
+# ---------------------------------------------------------
+# ANALYZE / QR
+# ---------------------------------------------------------
 @app.post("/analyze")
-def analyze(req: AnalyzeRequest):
+def analyze(req: AnalyzeRequest, request: Request):
     record_event("request")
 
     content = req.content.strip()
     mode = req.mode.lower()
 
-    if not content:
+    if not content and mode != "qr":
         return JSONResponse({"error": "content is empty"}, status_code=400)
 
-    if mode == "qr":
+    user = get_current_user(request)
+    user_id = user["id"] if user else None
+    plan = user.get("plan", "free") if user else "guest"
+    is_premium = plan == "premium"
+
+    url_like = is_url_like(content)
+
+    # Premium-only modes
+    if mode in {"chat", "manipulation"} and not is_premium:
         return JSONResponse(
-            {"error": "QR mode requires uploading an image to /qr"},
-            status_code=400,
+            {
+                "error": "This scan mode is available for Premium accounts only.",
+                "plan": plan,
+            },
+            status_code=402,
         )
 
-    # ===============================================================
-    #                     AI DETECTOR MODE
-    # ===============================================================
-    if mode == "chat":
-        raw = analyze_actor(content)
-        score = raw.get("ai_probability", 0)
+    # --------------------- TEXT (auto) --------------------
+    if mode == "text" or (mode == "auto" and not url_like):
+        if user:
+            allowed, remaining, limit = register_scan_attempt(user_id)
+            if not allowed:
+                return JSONResponse(
+                    {
+                        "error": "Daily free limit reached. Upgrade to Premium for unlimited scans.",
+                        "plan": plan,
+                        "limit": limit,
+                        "remaining": 0,
+                    },
+                    status_code=429,
+                )
 
-        return {
-            "category": "chat",
-            "score": score,
-            "verdict":
-                "DANGEROUS" if score >= 70 else
-                "SUSPICIOUS" if score >= 30 else
-                "SAFE",
-            "explanation": f"Actor type detected: {raw.get('actor_type')}",
-            "reasons": clean_reasons(raw.get("signals", [])),
-            "details": raw,
-        }
-
-    # ===============================================================
-    #                 MANIPULATION PROFILER MODE
-    # ===============================================================
-    if mode == "manipulation":
-        raw = analyze_manipulation(content)
-        score = raw.get("risk_score", 0)
-
-        tactics_raw = raw.get("primary_tactics", []) or []
-        tactics_clean = clean_reasons(tactics_raw)
-
-        if score == 0 or not tactics_clean:
-            explanation = "No manipulation detected."
-            tactics_clean = ["No manipulation patterns detected."]
-        else:
-            explanation = "Emotional manipulation patterns detected."
-
-        return {
-            "category": "manipulation",
-            "score": score,
-            "verdict":
-                "DANGEROUS" if score >= 70 else
-                "SUSPICIOUS" if score >= 30 else
-                "SAFE",
-            "explanation": explanation,
-            "reasons": tactics_clean,
-            "details": raw,
-        }
-
-    # ===============================================================
-    #            AUTO DETECTION: URL vs TEXT (SMARTER)
-    # ===============================================================
-    # "URL-like" if the whole content looks like a URL.
-    is_url_like = bool(URL_LIKE_RE.match(content))
-
-    # ===============================================================
-    #              TEXT ANALYSIS (AUTO if not URL-like)
-    # ===============================================================
-    if mode == "text" or (mode == "auto" and not is_url_like):
         raw = analyze_text(content) or {}
         base_score = raw.get("score", 0)
         score = _normalize_score(base_score)
@@ -275,7 +527,7 @@ def analyze(req: AnalyzeRequest):
         reasons = raw.get("reasons", [])
         details = raw.get("details", {})
 
-        return build_response(
+        resp = build_response(
             score=score,
             category="text",
             reasons=reasons,
@@ -284,10 +536,38 @@ def analyze(req: AnalyzeRequest):
             details=details,
         )
 
-    # ===============================================================
-    #                 URL ANALYSIS (AUTO if URL-like)
-    # ===============================================================
-    if mode == "url" or (mode == "auto" and is_url_like):
+        if resp["verdict"] == "SAFE":
+            record_event("safe")
+        else:
+            record_event("scam")
+
+        add_scan_log(
+            user_id=user_id,
+            category="text",
+            mode=mode,
+            verdict=resp["verdict"],
+            score=resp["score"],
+            content_snippet=content,
+            details=resp.get("details"),
+        )
+
+        return resp
+
+    # --------------------- URL (auto) ---------------------
+    if mode == "url" or (mode == "auto" and url_like):
+        if user:
+            allowed, remaining, limit = register_scan_attempt(user_id)
+            if not allowed:
+                return JSONResponse(
+                    {
+                        "error": "Daily free limit reached. Upgrade to Premium for unlimited scans.",
+                        "plan": plan,
+                        "limit": limit,
+                        "remaining": 0,
+                    },
+                    status_code=429,
+                )
+
         raw = analyze_url(content) or {}
         base_score = raw.get("score", 0)
         score = _normalize_score(base_score)
@@ -295,10 +575,9 @@ def analyze(req: AnalyzeRequest):
         verdict = raw.get("verdict")
         explanation = raw.get("explanation") or "URL risk analysis."
         reasons = raw.get("reasons", [])
-        # Hybrid URL scanner usually returns structured details
         details = raw.get("details", raw)
 
-        return build_response(
+        resp = build_response(
             score=score,
             category="url",
             reasons=reasons,
@@ -307,112 +586,156 @@ def analyze(req: AnalyzeRequest):
             details=details,
         )
 
-    # ===============================================================
-    #                     FALLBACK (UNKNOWN MODE)
-    # ===============================================================
-    return build_response(
-        score=0,
-        category="unknown",
-        reasons=[],
-        explanation="Unable to classify content.",
-    )
+        if resp["verdict"] == "SAFE":
+            record_event("safe")
+        else:
+            record_event("scam")
 
-
-# ======================================================================
-#                             ADMIN LOGIN
-# ======================================================================
-class LoginRequest(BaseModel):
-    password: str
-
-
-@app.get("/admin/login")
-def login_page():
-    return FileResponse("backend/static/login.html")
-
-
-@app.post("/admin/login")
-def login(req: LoginRequest):
-    if verify_password(req.password):
-        session = create_session()
-        response = JSONResponse({"success": True})
-        response.set_cookie(
-            COOKIE_NAME,
-            session,
-            max_age=86400,
-            httponly=True,
-            samesite="strict",
+        add_scan_log(
+            user_id=user_id,
+            category="url",
+            mode=mode,
+            verdict=resp["verdict"],
+            score=resp["score"],
+            content_snippet=content,
+            details=resp.get("details"),
         )
-        return response
 
-    return JSONResponse({"error": "Invalid password"}, status_code=401)
+        return resp
+
+    # ----------------- AI Actor Detection -----------------
+    if mode == "chat":
+        if user:
+            allowed, remaining, limit = register_scan_attempt(user_id)
+            if not allowed:
+                return JSONResponse(
+                    {
+                        "error": "Daily free limit reached. Upgrade to Premium for unlimited scans.",
+                        "plan": plan,
+                        "limit": limit,
+                        "remaining": 0,
+                    },
+                    status_code=429,
+                )
+
+        result = analyze_actor(content)
+        score = _normalize_score(result.get("ai_probability", 0))
+        explanation = f"Detected actor type: {result.get('actor_type')}"
+        reasons = result.get("signals", [])
+
+        resp = build_response(
+            score=score,
+            category="ai_detector",
+            reasons=reasons,
+            explanation=explanation,
+            verdict=None,
+            details=result,
+        )
+
+        add_scan_log(
+            user_id=user_id,
+            category="ai_detector",
+            mode=mode,
+            verdict=resp["verdict"],
+            score=resp["score"],
+            content_snippet=content,
+            details=resp.get("details"),
+        )
+
+        return resp
+
+    # -------------- Manipulation Profiler -----------------
+    if mode == "manipulation":
+        if user:
+            allowed, remaining, limit = register_scan_attempt(user_id)
+            if not allowed:
+                return JSONResponse(
+                    {
+                        "error": "Daily free limit reached. Upgrade to Premium for unlimited scans.",
+                        "plan": plan,
+                        "limit": limit,
+                        "remaining": 0,
+                    },
+                    status_code=429,
+                )
+
+        result = analyze_manipulation(content)
+        score = _normalize_score(result.get("risk_score", 0))
+        profile = result.get("scam_profile", "unclear")
+
+        explanation = (
+            "Emotional manipulation patterns detected."
+            if score > 0
+            else "No strong emotional manipulation detected."
+        )
+
+        reasons = result.get("primary_tactics", [])
+
+        resp = build_response(
+            score=score,
+            category="manipulation",
+            reasons=reasons,
+            explanation=explanation,
+            verdict=None,
+            details=result,
+        )
+
+        add_scan_log(
+            user_id=user_id,
+            category="manipulation",
+            mode=mode,
+            verdict=resp["verdict"],
+            score=resp["score"],
+            content_snippet=content,
+            details=resp.get("details"),
+        )
+
+        return resp
+
+    # Unknown mode
+    return JSONResponse({"error": "Unsupported mode."}, status_code=400)
 
 
-@app.post("/api/feedback")
-async def submit_feedback(request: Request):
-    body = await request.json()
-    message = body.get("message", "")
-    page = body.get("page", "unknown")
+@app.post("/qr")
+async def qr(request: Request, image: UploadFile = File(...)):
+    record_event("request")
 
-    if not message.strip():
-        return JSONResponse({"error": "Empty feedback"}, status_code=400)
+    user = get_current_user(request)
+    user_id = user["id"] if user else None
+    plan = user.get("plan", "free") if user else "guest"
 
-    add_feedback(
-        message=message,
-        page=page,
-        ip=request.client.host,
-        user_agent=request.headers.get("user-agent", "unknown"),
+    if user:
+        allowed, remaining, limit = register_scan_attempt(user_id)
+        if not allowed:
+            return JSONResponse(
+                {
+                    "error": "Daily free limit reached. Upgrade to Premium for unlimited scans.",
+                    "plan": plan,
+                    "limit": limit,
+                    "remaining": 0,
+                },
+                status_code=429,
+            )
+
+    img_bytes = await image.read()
+    result = process_qr_image(img_bytes)
+
+    verdict = result.get("overall", {}).get("combined_verdict", "SAFE")
+    score = result.get("overall", {}).get("combined_risk_score", 0)
+
+    if verdict == "SAFE":
+        record_event("safe")
+    else:
+        record_event("scam")
+
+    add_scan_log(
+        user_id=user_id,
+        category="qr",
+        mode="qr",
+        verdict=verdict,
+        score=score,
+        content_snippet=f"{result.get('count', 0)} QR code(s)",
+        details=result,
     )
 
-    return {"success": True}
-
-
-# ======================================================================
-#                                ADMIN UI
-# ======================================================================
-@app.get("/admin")
-def serve_admin():
-    return FileResponse("backend/static/admin.html")
-
-
-@app.get("/admin/analytics")
-def analytics_admin():
-    return get_analytics()
-
-
-@app.get("/admin/feedback")
-def get_feedback():
-    return load_feedback()
-
-
-# ======================================================================
-#                           FRONTEND ROUTES
-# ======================================================================
-@app.get("/")
-def serve_frontend():
-    return FileResponse("backend/static/index.html")
-
-
-@app.get("/privacy")
-def serve_privacy():
-    return FileResponse("backend/static/privacy.html")
-
-
-@app.get("/terms")
-def serve_terms():
-    return FileResponse("backend/static/terms.html")
-
-
-@app.get("/support")
-def serve_support():
-    return FileResponse("backend/static/support.html")
-
-
-@app.get("/feedback")
-def feedback_page():
-    return FileResponse("backend/static/feedback.html")
-
-
-# ======================================================================
-#                                STATIC
-# ======================================================================
-app.mount("/static", StaticFiles(directory="backend/static"), name="static")
+    return result

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1"/>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <link rel="stylesheet" href="style.css"/>
+  <link rel="stylesheet" href="/static/style.css"/>
 
   <style>
     body {
@@ -50,7 +50,6 @@
       z-index: 1;
     }
 
-    /* Top bar */
     .admin-top {
       display: flex;
       align-items: center;
@@ -110,7 +109,6 @@
       color: #e5e7eb;
     }
 
-    /* Main layout */
     .dashboard {
       margin-top: 20px;
       display: flex;
@@ -118,7 +116,6 @@
       gap: 24px;
     }
 
-    /* Stat cards */
     .stats-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -170,7 +167,6 @@
       color: #6b7280;
     }
 
-    /* Charts */
     .chart-card {
       background: radial-gradient(circle at top left, #020617, #020617 50%, #020617 100%);
       border-radius: 18px;
@@ -207,7 +203,6 @@
       color: #9ca3af;
     }
 
-    /* Feedback section */
     .feedback-section-title {
       margin-top: 32px;
       font-size: 1rem;
@@ -279,7 +274,6 @@
 
   <div class="dashboard">
 
-    <!-- STATS -->
     <div class="stats-grid">
       <div class="stat-card">
         <h2>Total Requests</h2>
@@ -306,13 +300,11 @@
       </div>
     </div>
 
-    <!-- TRAFFIC CHART -->
     <div class="chart-card">
       <h2><span class="icon">📈</span>Activity Timeline</h2>
       <canvas id="trafficChart"></canvas>
     </div>
 
-    <!-- PIE CHART -->
     <div class="chart-card">
       <h2><span class="icon">📊</span>Detection Distribution</h2>
       <canvas id="pieChart"></canvas>
@@ -334,6 +326,11 @@
   async function loadData() {
     const res = await fetch("/admin/analytics");
     const data = await res.json();
+
+    if (!res.ok) {
+      alert(data.error || "Failed to load analytics.");
+      return;
+    }
 
     document.getElementById("total").innerText = data.total_requests;
     document.getElementById("scam").innerText = data.scam_detections;
@@ -398,6 +395,10 @@
 async function loadFeedback(){
   const res = await fetch("/admin/feedback");
   const data = await res.json();
+
+  if (!res.ok) {
+    return;
+  }
 
   const container = document.getElementById("feedbackList");
   container.innerHTML = "";

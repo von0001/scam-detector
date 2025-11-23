@@ -24,7 +24,8 @@
         <a href="#how-it-works">How it Works</a>
         <a href="/support">Support</a>
         <a href="/privacy">Privacy</a>
-        <a href="/feedback" class="nav-pill">Send Feedback</a>
+        <a href="/feedback">Feedback</a>
+        <button id="account-button" class="nav-pill nav-account">Sign In</button>
       </nav>
     </header>
 
@@ -64,11 +65,15 @@
       <!-- RIGHT: CONTROL CENTER PANEL -->
       <section class="scan-panel">
 
-        <!-- INPUT SECTION (unchanged IDs for JS) -->
+        <!-- INPUT SECTION -->
         <section class="input-section">
           <div class="panel-header">
             <h2 class="panel-title">Protection Console</h2>
             <p class="panel-subtitle">Paste anything that feels off. ScamDetector does the thinking.</p>
+          </div>
+
+          <div id="plan-pill" class="plan-pill">
+            Guest mode · Limited free scans. <span>Create a free account</span> to sync history.
           </div>
 
           <label for="content-input" class="input-label">
@@ -80,7 +85,7 @@
             placeholder="Example: a weird Cash App request, a ‘delivery issue’ email, or a DM that feels off..."
             rows="6"></textarea>
 
-          <!-- MODE SELECT – PILL TOGGLES (same radios, new UI) -->
+          <!-- MODE SELECT – PILL TOGGLES -->
           <div class="mode-row">
             <span class="mode-label">Scan mode</span>
 
@@ -137,7 +142,7 @@
           <p id="status" class="status"></p>
         </section>
 
-        <!-- RESULTS PANEL (reactive verdict) -->
+        <!-- RESULTS PANEL -->
         <section class="result-section" id="result-section" hidden>
           <div class="result-header">
             <h2>Scan Verdict</h2>
@@ -151,7 +156,6 @@
             <ul id="reasons-list" class="reasons-list"></ul>
           </div>
 
-          <!-- optional JSON details hook (JS already references this ID) -->
           <pre id="details-json" class="details-json" hidden></pre>
 
           <p class="result-disclaimer">
@@ -170,14 +174,14 @@
         <div class="work-box">
           <h3>1. Reads the situation</h3>
           <p>
-            We break down the message like a fraud investigator — scanning wording, structure, and patterns used in real scams.
+            We break down the message like a fraud investigator: scanning wording, structure, and patterns used in real scams.
           </p>
         </div>
 
         <div class="work-box">
           <h3>2. Detects manipulation</h3>
           <p>
-            Urgency, guilt, authority impersonation, romance pressure — ScamDetector spots psychological tricks instantly.
+            ScamDetector spots psychological tricks instantly whether it's urgency, guilt, someone trying to impersonate authority, romance pressure.
           </p>
         </div>
 
@@ -191,7 +195,7 @@
         <div class="work-box">
           <h3>4. Explains the red flags</h3>
           <p>
-            You don’t just get a color — you get a breakdown of the exact red flags so you walk away smarter than before.
+            You don't just get some random basic color; you get a breakdown of the exact red flags so you walk away smarter than before.
           </p>
         </div>
 
@@ -209,9 +213,52 @@
       </div>
     </footer>
 
+    <!-- AUTH MODAL -->
+    <div id="auth-modal" class="auth-modal" hidden>
+      <div class="auth-card">
+        <button id="auth-close" class="auth-close" aria-label="Close">✕</button>
+
+        <div class="auth-header-pill">
+          <span>🛡</span>
+          <span>Account & Sync</span>
+        </div>
+
+        <h2 class="auth-title">Sign in to protect everything, everywhere.</h2>
+        <p class="auth-subtitle">
+          One account across web, extension, and iOS. Sync your scans, unlock higher limits, upgrade when you’re ready.
+        </p>
+
+        <div class="auth-tabs">
+          <button type="button" id="auth-tab-login" class="auth-tab auth-tab-active" data-mode="login">
+            Sign In
+          </button>
+          <button type="button" id="auth-tab-signup" class="auth-tab" data-mode="signup">
+            Create Account
+          </button>
+        </div>
+
+        <form id="auth-form" class="auth-form">
+          <label for="auth-email">Email</label>
+          <input type="email" id="auth-email" required placeholder="you@example.com" />
+
+          <label for="auth-password">Password</label>
+          <input type="password" id="auth-password" required minlength="8" placeholder="Minimum 8 characters" />
+
+          <button type="submit" id="auth-submit" class="primary-btn auth-submit">
+            Continue
+          </button>
+        </form>
+
+        <p id="auth-hint" class="auth-hint">
+          No account yet? Switch to <strong>Create Account</strong> to start with the free tier.
+        </p>
+        <p id="auth-status" class="auth-status"></p>
+      </div>
+    </div>
+
   </div>
 
-  <!-- IMPORTS (UNCHANGED) -->
+  <!-- IMPORTS -->
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <script src="/static/script.js"></script>
 

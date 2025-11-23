@@ -1,69 +1,27 @@
 # backend/auth.py
 
-"""
-Railway-Safe Authentication System
-- No bcrypt (Railway can't compile it)
-- Uses SHA256 hashing (secure + lightweight)
-- Uses itsdangerous for signed session cookies
-- Drop-in replacement for your old auth system
-"""
-
-import hashlib
+from __future__ import annotations
 import os
-from itsdangerous import URLSafeTimedSerializer
+from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 
-# ---------------------------------------------------------
-# CONFIG
-# ---------------------------------------------------------
+# Core secret for signing tokens (user + admin)
+SECRET_KEY = os.getenv("APP_SECRET_KEY", "change-this-in-production")
 
-SECRET_KEY = os.getenv(
-    "SECRET_KEY",
-    "super_secret_key_change_me_123456789!!!!"
-)
+# Admin password (for /admin login page)
+ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "supersecret-admin-password")
 
-COOKIE_NAME = "admin_session"
-
-# Admin password (plaintext in env variable)
-PLAINTEXT_ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "admin123")
+_admin_serializer = URLSafeTimedSerializer(SECRET_KEY, salt="sd-admin-v1")
+ADMIN_COOKIE_NAME = "sd_admin"
+ADMIN_MAX_AGE = 60 * 60 * 4  # 4 hours
 
 
-# ---------------------------------------------------------
-# HASHING
-# ---------------------------------------------------------
-
-def _hash_password(pw: str) -> str:
-    """Generate a SHA256 hash for the password."""
-    return hashlib.sha256(pw.encode()).hexdigest()
+def create_admin_token() -> str:
+    return _admin_serializer.dumps({"role": "admin"})
 
 
-ADMIN_PASSWORD_HASH = _hash_password(PLAINTEXT_ADMIN_PASSWORD)
-
-
-# ---------------------------------------------------------
-# COOKIE SIGNER
-# ---------------------------------------------------------
-
-serializer = URLSafeTimedSerializer(SECRET_KEY)
-
-
-# ---------------------------------------------------------
-# AUTH FUNCTIONS
-# ---------------------------------------------------------
-
-def verify_password(password: str) -> bool:
-    """Check a plaintext password against the stored SHA256 hash."""
-    return _hash_password(password) == ADMIN_PASSWORD_HASH
-
-
-def create_session() -> str:
-    """Create a new signed session cookie."""
-    return serializer.dumps({"user": "admin"})
-
-
-def verify_session(cookie_value: str) -> bool:
-    """Verify signed cookie and expiration."""
+def verify_admin_token(token: str) -> bool:
     try:
-        data = serializer.loads(cookie_value, max_age=86400)  # 24 hours
-        return data.get("user") == "admin"
-    except Exception:
+        data = _admin_serializer.loads(token, max_age=ADMIN_MAX_AGE)
+        return data.get("role") == "admin"
+    except (BadSignature, SignatureExpired):
         return False
