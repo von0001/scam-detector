@@ -156,3 +156,51 @@ def init_db() -> None:
             ON admin_devices (admin_id, device_uuid);
             """
         )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS analytics_events (
+                id BIGSERIAL PRIMARY KEY,
+                event_type TEXT NOT NULL,
+                ts TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                metadata JSONB DEFAULT '{}'::jsonb
+            );
+            """
+        )
+        cur.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_analytics_events_ts ON analytics_events (ts DESC);
+            """
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS feedback (
+                id UUID PRIMARY KEY,
+                ts TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                email TEXT,
+                message TEXT,
+                combined_text TEXT,
+                what TEXT,
+                expectation TEXT,
+                confusion TEXT,
+                frustration INTEGER,
+                perfect TEXT,
+                page TEXT,
+                ip TEXT,
+                user_agent TEXT,
+                tags_user JSONB DEFAULT '[]'::jsonb,
+                tags_auto JSONB DEFAULT '[]'::jsonb,
+                tags_admin JSONB DEFAULT '[]'::jsonb,
+                priority INTEGER DEFAULT 1,
+                risk_impact INTEGER DEFAULT 1,
+                context JSONB DEFAULT '{}'::jsonb,
+                replay JSONB DEFAULT '{}'::jsonb,
+                status TEXT DEFAULT 'submitted',
+                admin_response TEXT,
+                developer_notes TEXT,
+                linked_changelog TEXT[]
+            );
+            """
+        )
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_feedback_ts ON feedback (ts DESC);"
+        )

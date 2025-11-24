@@ -8,16 +8,27 @@ from typing import Optional, Literal, List
 import os
 import time
 import json
-import subprocess
+import secrets
+import re
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from collections import deque
 import copy
+
+import sentry_sdk
+
+# Init Sentry if configured
+if SENTRY_DSN:
+    sentry_sdk.init(dsn=SENTRY_DSN, traces_sample_rate=0.2)
 
 from fastapi import FastAPI, UploadFile, File, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, EmailStr, Field
+import redis
+import logging
+import uuid
 
 from backend.text_scanner import analyze_text
 from backend.url_scanner import analyze_url
@@ -91,9 +102,14 @@ except ImportError:  # pragma: no cover
     google = None  # type: ignore
 
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
+if not GOOGLE_CLIENT_ID:
+    raise RuntimeError("Google Client ID required (GOOGLE_CLIENT_ID).")
 STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "")
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "https://scamdetectorapp.com")
+REDIS_URL = os.getenv("REDIS_URL")
+SENTRY_DSN = os.getenv("SENTRY_DSN", "")
+AI_FORWARDING_ENABLED = os.getenv("AI_FORWARDING_ENABLED", "false").lower() == "true"
 
 STRIPE_PRICE_MONTHLY = os.getenv(
     "STRIPE_PRICE_MONTHLY", "price_1SWh0pLSwRqmFbmS16yHTkBQ"
@@ -105,11 +121,6 @@ STRIPE_PRICE_YEARLY = os.getenv(
 if stripe and STRIPE_SECRET_KEY:
     stripe.api_key = STRIPE_SECRET_KEY
 
-RESTART_COMMAND = os.getenv("RESTART_COMMAND", "./scripts/restart.sh")
-FLUSH_CACHE_COMMAND = os.getenv("FLUSH_CACHE_COMMAND", "./scripts/flush_cache.sh")
-CACHE_ENDPOINT = os.getenv("CACHE_ENDPOINT", "")
-CONTROL_TOKEN = os.getenv("CONTROL_TOKEN", "")
-ADMIN_CONFIRM_TOKEN = os.getenv("ADMIN_CONFIRM_TOKEN", "")
 AI_ASSISTANT_KEY = os.getenv("AI_ASSISTANT_KEY", "")
 AI_ASSISTANT_MODEL = os.getenv("AI_ASSISTANT_MODEL", "gpt-4o")
 
@@ -120,11 +131,20 @@ BASE_DIR = Path(__file__).resolve().parent
 STATIC_DIR = BASE_DIR / "static"
 ACCOUNT_PAGE = BASE_DIR / "account.html"
 
+logger = logging.getLogger("scamdetector")
+logging.basicConfig(level=logging.INFO, format="%(message)s")
+
 app = FastAPI(title="ScamDetector API")
+
+ALLOWED_ORIGINS = [
+    "https://yourdomain.com",
+    "https://www.yourdomain.com",
+]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # you can restrict later
+    allow_origins=ALLOWED_ORIGINS + [f"chrome-extension://{os.getenv('EXTENSION_ID','jehidgbogolbhmfjobodnecbcnbibkaf')}"],
+    allow_origin_regex=r"chrome-extension://.*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -133,21 +153,52 @@ app.add_middleware(
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
+# Global headers middleware for security headers + request id
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    request_id = secrets.token_hex(8)
+    request.state.request_id = request_id
+    start_time = time.time()
+    response = await call_next(request)
+    duration = round((time.time() - start_time) * 1000, 2)
+    user = get_current_user(request)
+    log_payload = {
+        "event": "request",
+        "request_id": request_id,
+        "path": request.url.path,
+        "method": request.method,
+        "status": response.status_code,
+        "duration_ms": duration,
+        "user_id": (user or {}).get("id"),
+        "ip": _get_client_ip(request),
+    }
+    logger.info(json.dumps(log_payload))
+    response.headers["X-Request-ID"] = request_id
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains; preload"
+    response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none';"
+    return response
+
+
 @app.middleware("http")
 async def capture_errors(request: Request, call_next):
     start = time.time()
     status = 500
+    response = None
     try:
         response = await call_next(request)
         status = response.status_code
-        return response
     finally:
         duration = time.time() - start
         now = time.time()
         ERROR_EVENTS.append((now, status >= 500, duration))
-        # prune window
         while ERROR_EVENTS and now - ERROR_EVENTS[0][0] > ERROR_WINDOW_SECONDS:
             ERROR_EVENTS.popleft()
+        if response is not None:
+            _issue_csrf_cookie(request, response)
+    return response
 
 # ---------------------------------------------------------
 # Models
@@ -155,6 +206,7 @@ async def capture_errors(request: Request, call_next):
 class AnalyzeRequest(BaseModel):
     content: str
     mode: str = "auto"
+    async_job: Optional[bool] = False
 
 
 class FeedbackRequest(BaseModel):
@@ -203,13 +255,6 @@ class RefreshTokenRequest(BaseModel):
     refresh_token: Optional[str] = None
 
 
-class SubscriptionUpdateRequest(BaseModel):
-    email: EmailStr
-    plan: Literal["free", "premium"]
-    secret: Optional[str] = None
-    billing_cycle: Optional[Literal["monthly", "yearly", "none"]] = None
-
-
 class SelfSubscriptionRequest(BaseModel):
     plan: Literal["free", "premium"]
     billing_cycle: Optional[Literal["monthly", "yearly", "none"]] = "monthly"
@@ -237,12 +282,6 @@ class DeleteAccountRequest(BaseModel):
     confirm: str
 
 
-class AdminControlRequest(BaseModel):
-    action: str
-    dry_run: Optional[bool] = False
-    confirm_token: Optional[str] = None
-
-
 class FeatureFlagRequest(BaseModel):
     name: str
     value: Optional[bool] = None
@@ -262,8 +301,6 @@ class SimulationRequest(BaseModel):
 class AdminTotpVerifyRequest(BaseModel):
     code: str
 
-
-SUBSCRIPTION_WEBHOOK_SECRET = os.getenv("SUBSCRIPTION_WEBHOOK_SECRET", "change-this")
 
 MAINTENANCE_MODE = False
 CRISIS_MODE = False
@@ -288,6 +325,11 @@ ADMIN_LOGS: deque = deque(maxlen=200)
 CHANGE_SNAPSHOTS: deque = deque(maxlen=50)
 ERROR_WINDOW_SECONDS = 300
 ERROR_EVENTS: deque = deque()
+CSRF_COOKIE_NAME = "sd_csrf"
+CSRF_HEADER_NAME = "x-csrf-token"
+CSRF_MAX_AGE = REFRESH_TOKEN_MAX_AGE
+AI_FORWARDING_FLAG = "ai_forwarding_enabled"
+TASK_EXECUTOR = ThreadPoolExecutor(max_workers=4)
 
 
 # ---------------------------------------------------------
@@ -328,6 +370,179 @@ def _snapshot_state(reason: str = "") -> None:
             "flags": copy.deepcopy(FEATURE_FLAGS),
         }
     )
+
+
+def _redis_client() -> redis.Redis:
+    if not REDIS_URL:
+        raise RuntimeError("REDIS_URL must be set for rate limiting and queues.")
+    return redis.Redis.from_url(REDIS_URL, decode_responses=True)
+
+
+def _get_client_ip(request: Request) -> str:
+    xfwd = request.headers.get("x-forwarded-for")
+    if xfwd:
+        return xfwd.split(",")[0].strip()
+    if request.client:
+        return request.client.host
+    return "unknown"
+
+
+def _issue_csrf_cookie(request: Request, response) -> str:
+    token = request.cookies.get(CSRF_COOKIE_NAME)
+    if not token:
+        token = secrets.token_urlsafe(32)
+    response.set_cookie(
+        CSRF_COOKIE_NAME,
+        token,
+        max_age=CSRF_MAX_AGE,
+        secure=True,
+        httponly=False,
+        samesite="None",
+    )
+    return token
+
+
+def _validate_csrf(request: Request) -> bool:
+    token = request.cookies.get(CSRF_COOKIE_NAME)
+    header = request.headers.get(CSRF_HEADER_NAME)
+    if not token or not header:
+        return False
+    try:
+        return secrets.compare_digest(token, header)
+    except Exception:
+        return False
+
+
+def _csrf_failure():
+    return JSONResponse({"error": "CSRF validation failed."}, status_code=403)
+
+
+def _rate_limit_key(user: Optional[dict], ip: str, scope: str) -> tuple[str, int]:
+    plan = (user or {}).get("plan", "guest")
+    if plan == "premium":
+        limit = 5000
+    elif plan == "free":
+        limit = 200
+    else:
+        limit = 50
+    key = f"rate:{scope}:{plan}:{ip}"
+    return key, limit
+
+
+def _enforce_rate_limit(user: Optional[dict], request: Request, scope: str) -> Optional[JSONResponse]:
+    ip = _get_client_ip(request)
+    try:
+        r = _redis_client()
+    except Exception as exc:
+        return JSONResponse({"error": f"Rate limit backend unavailable: {exc}"}, status_code=503)
+
+    key, limit = _rate_limit_key(user, ip, scope)
+    count = r.incr(key)
+    if count == 1:
+        r.expire(key, 86400)
+
+    # Exponential backoff delay after limit exceeded
+    if count > limit:
+        delay = min(2 ** (count - limit), 30)
+        r.setex(f"rate:block:{ip}", delay, "1")
+        return JSONResponse(
+            {"error": "Too many requests. Slow down.", "retry_after": delay, "captcha_required": True},
+            status_code=429,
+        )
+
+    # Soft warning near threshold
+    if count > int(limit * 0.8):
+        return JSONResponse(
+            {
+                "error": "Rate limit nearly reached. Complete CAPTCHA to continue.",
+                "remaining": max(limit - count, 0),
+                "captcha_required": True,
+            },
+            status_code=429,
+        )
+    return None
+
+
+def _login_fail_key(email: str, ip: str) -> str:
+    return f"login:fail:{email.lower()}:{ip}"
+
+
+def _check_bruteforce(email: str, ip: str) -> Optional[JSONResponse]:
+    try:
+        r = _redis_client()
+    except Exception as exc:
+        return JSONResponse({"error": f"Auth backend unavailable: {exc}"}, status_code=503)
+    key = _login_fail_key(email, ip)
+    fail_count = r.get(key)
+    fail_count = int(fail_count) if fail_count else 0
+    if fail_count >= 5:
+        ttl = r.ttl(key)
+        return JSONResponse(
+            {"error": "Account temporarily locked due to failed attempts.", "retry_after": max(ttl, 0)},
+            status_code=423,
+        )
+    return None
+
+
+def _record_login_failure(email: str, ip: str) -> int:
+    r = _redis_client()
+    key = _login_fail_key(email, ip)
+    count = r.incr(key)
+    if count == 1:
+        r.expire(key, 900)
+    delay = min(0.5 * (2 ** max(count - 1, 0)), 8)
+    return delay
+
+
+def _clear_login_failures(email: str, ip: str) -> None:
+    r = _redis_client()
+    r.delete(_login_fail_key(email, ip))
+
+
+def _set_task_status(task_id: str, status: str, result: dict | None = None, error: str | None = None):
+    r = _redis_client()
+    payload = {"status": status}
+    if result is not None:
+        payload["result"] = result
+    if error:
+        payload["error"] = error
+    r.setex(f"task:{task_id}", 86400, json.dumps(payload))
+
+
+def _enqueue_task(name: str, func, *args, **kwargs) -> str:
+    task_id = secrets.token_hex(12)
+    _set_task_status(task_id, "queued")
+
+    def runner():
+        try:
+            result = func(*args, **kwargs)
+            _set_task_status(task_id, "finished", result=result)
+        except Exception as exc:
+            _set_task_status(task_id, "failed", error=str(exc))
+
+    TASK_EXECUTOR.submit(runner)
+    return task_id
+
+
+def _analyze_task(mode: str, content: str, user_id: Optional[str]):
+    if mode == "text" or mode == "auto":
+        raw = analyze_text(content) or {}
+        base_score = raw.get("score", 0)
+        score = _normalize_score(base_score)
+        verdict = raw.get("verdict")
+        explanation = raw.get("explanation") or "Scam text analysis."
+        reasons = raw.get("reasons", [])
+        details = raw.get("details", {})
+        resp = build_response(
+            score=score,
+            category="text",
+            reasons=reasons,
+            explanation=explanation,
+            verdict=verdict,
+            details=details,
+        )
+        return resp
+    return {"error": "Unsupported task mode."}
 
 
 def _compute_error_rate() -> float:
@@ -483,28 +698,25 @@ def build_response(
 
 
 GUEST_DAILY_LIMIT = int(os.getenv("GUEST_DAILY_LIMIT", "3"))
-_guest_usage: dict = {"date": "", "counts": {}}
 
 
 def _check_guest_limit(request: Request) -> tuple[bool, int, int]:
     """
-    Simple per-IP daily limit for guests. Not perfect, but prevents infinite use without auth.
+    Redis-backed per-IP guest limit.
     """
-    global _guest_usage
-    today = datetime.utcnow().strftime("%Y-%m-%d")
-    host = request.client.host if request.client else "unknown"
-
-    if _guest_usage.get("date") != today:
-        _guest_usage = {"date": today, "counts": {}}
-
-    counts = _guest_usage["counts"]
-    used = counts.get(host, 0)
-
-    if used >= GUEST_DAILY_LIMIT:
+    host = _get_client_ip(request)
+    try:
+        r = _redis_client()
+    except Exception:
+        # Fallback to allow to avoid false positives
+        return True, GUEST_DAILY_LIMIT, GUEST_DAILY_LIMIT
+    key = f"guest:limit:{host}"
+    used = r.incr(key)
+    if used == 1:
+        r.expire(key, 86_400)
+    if used > GUEST_DAILY_LIMIT:
         return False, 0, GUEST_DAILY_LIMIT
-
-    counts[host] = used + 1
-    remaining = max(0, GUEST_DAILY_LIMIT - counts[host])
+    remaining = max(GUEST_DAILY_LIMIT - used, 0)
     return True, remaining, GUEST_DAILY_LIMIT
 
 
@@ -594,6 +806,27 @@ def _apply_subscription_update(
         stripe_customer_id=customer_id,
         stripe_subscription_id=subscription_id,
     )
+
+
+def mask_emails(text: str) -> str:
+    return re.sub(r"([A-Za-z0-9._%+-])[^@\\s]*@([^@\\s]{2})[^\\s]{0,20}", r"\\1***@\\2***", text)
+
+
+def mask_phone_numbers(text: str) -> str:
+    return re.sub(r"(\\+?\\d{1,3}[-.\\s]?)?(\\(?\\d{3}\\)?[-.\\s]?)(\\d{3})([-.\\s]?)(\\d{4})", r"(***) ***-\\5", text)
+
+
+def mask_names(text: str) -> str:
+    return re.sub(r"\b([A-Z][a-z]+)\s([A-Z][a-z]+)\b", r"\1 ***", text)
+
+
+def sanitize_pii(text: str) -> str:
+    if not text:
+        return text
+    masked = mask_emails(text)
+    masked = mask_phone_numbers(masked)
+    masked = mask_names(masked)
+    return masked
 
 
 def _create_checkout_session_for_user(user: dict, cycle: str):
@@ -686,6 +919,8 @@ def account_dashboard(request: Request, limit: int = 25):
 
 @app.post("/create-checkout-session")
 def create_checkout_session(body: CheckoutSessionRequest, request: Request):
+    if not _validate_csrf(request):
+        return _csrf_failure()
     user = get_current_user(request)
     if not user:
         return JSONResponse({"error": "Authentication required."}, status_code=401)
@@ -708,6 +943,8 @@ def create_checkout_session(body: CheckoutSessionRequest, request: Request):
 
 @app.post("/billing-portal")
 def billing_portal(request: Request):
+    if not _validate_csrf(request):
+        return _csrf_failure()
     user = get_current_user(request)
     if not user:
         return JSONResponse({"error": "Authentication required."}, status_code=401)
@@ -738,7 +975,9 @@ def billing_portal(request: Request):
 # USER ACCOUNT SYSTEM
 # ---------------------------------------------------------
 @app.post("/signup")
-def signup(body: UserSignupRequest):
+def signup(body: UserSignupRequest, request: Request):
+    if not _validate_csrf(request):
+        return _csrf_failure()
     if CRISIS_MODE:
         return JSONResponse(
             {"error": "Signups are temporarily frozen during an incident. Please try later."},
@@ -755,8 +994,7 @@ def signup(body: UserSignupRequest):
     resp = JSONResponse(
         {
             **_user_response(user),
-            "access_token": access,
-            "refresh_token": refresh,
+            "message": "Signed up successfully.",
         }
     )
     resp.set_cookie(
@@ -764,22 +1002,32 @@ def signup(body: UserSignupRequest):
         access,
         max_age=ACCESS_TOKEN_MAX_AGE,
         httponly=True,
-        samesite="lax",
+        secure=True,
+        samesite="None",
     )
     resp.set_cookie(
         USER_REFRESH_COOKIE,
         refresh,
         max_age=REFRESH_TOKEN_MAX_AGE,
         httponly=True,
-        samesite="lax",
+        secure=True,
+        samesite="None",
     )
     return resp
 
 
 @app.post("/login")
 def user_login(body: UserLoginRequest, request: Request):
+    if not _validate_csrf(request):
+        return _csrf_failure()
+    ip = _get_client_ip(request)
+    locked = _check_bruteforce(body.email, ip)
+    if locked:
+        return locked
     user = verify_user_credentials(body.email, body.password)
     if not user:
+        delay = _record_login_failure(body.email, ip)
+        time.sleep(delay)
         return JSONResponse({"error": "Invalid email or password."}, status_code=401)
 
     # Enforce TOTP for admin if configured
@@ -793,14 +1041,15 @@ def user_login(body: UserLoginRequest, request: Request):
                 status_code=401,
             )
 
+    _clear_login_failures(body.email, ip)
+
     access = create_access_token(user)
     refresh = create_refresh_token(user)
 
     resp = JSONResponse(
         {
             **_user_response(user),
-            "access_token": access,
-            "refresh_token": refresh,
+            "message": "Logged in.",
         }
     )
     resp.set_cookie(
@@ -808,14 +1057,16 @@ def user_login(body: UserLoginRequest, request: Request):
         access,
         max_age=ACCESS_TOKEN_MAX_AGE,
         httponly=True,
-        samesite="lax",
+        secure=True,
+        samesite="None",
     )
     resp.set_cookie(
         USER_REFRESH_COOKIE,
         refresh,
         max_age=REFRESH_TOKEN_MAX_AGE,
         httponly=True,
-        samesite="lax",
+        secure=True,
+        samesite="None",
     )
 
     if user.get("is_admin"):
@@ -833,9 +1084,16 @@ def user_login(body: UserLoginRequest, request: Request):
 
 
 @app.post("/auth/google")
-def google_auth(body: GoogleAuthRequest):
+def google_auth(body: GoogleAuthRequest, request: Request):
     if not body.credential:
         return JSONResponse({"error": "Missing credential."}, status_code=400)
+
+    if not _validate_csrf(request):
+        return _csrf_failure()
+    ip = _get_client_ip(request)
+    locked = _check_bruteforce("google_oauth", ip)
+    if locked:
+        return locked
 
     if "google" not in globals() or google is None:  # type: ignore
         return JSONResponse(
@@ -851,13 +1109,17 @@ def google_auth(body: GoogleAuthRequest):
         idinfo = google.oauth2.id_token.verify_oauth2_token(  # type: ignore
             body.credential,
             request_adapter,
-            GOOGLE_CLIENT_ID or None,
+            GOOGLE_CLIENT_ID,
         )
         email = idinfo.get("email")
         sub = idinfo.get("sub")
+        aud = idinfo.get("aud")
+        if aud != GOOGLE_CLIENT_ID:
+            raise ValueError("Invalid audience.")
         if not email or not sub:
             raise ValueError("Missing email or sub.")
     except Exception:
+        _record_login_failure("google_oauth", ip)
         return JSONResponse({"error": "Invalid Google token."}, status_code=401)
 
     user = get_or_create_google_user(email=email, google_sub=sub)
@@ -868,8 +1130,7 @@ def google_auth(body: GoogleAuthRequest):
     resp = JSONResponse(
         {
             **_user_response(user),
-            "access_token": access,
-            "refresh_token": refresh,
+            "message": "Google auth success.",
         }
     )
     resp.set_cookie(
@@ -877,20 +1138,24 @@ def google_auth(body: GoogleAuthRequest):
         access,
         max_age=ACCESS_TOKEN_MAX_AGE,
         httponly=True,
-        samesite="lax",
+        secure=True,
+        samesite="None",
     )
     resp.set_cookie(
         USER_REFRESH_COOKIE,
         refresh,
         max_age=REFRESH_TOKEN_MAX_AGE,
         httponly=True,
-        samesite="lax",
+        secure=True,
+        samesite="None",
     )
     return resp
 
 
 @app.post("/logout")
-def user_logout():
+def user_logout(request: Request):
+    if not _validate_csrf(request):
+        return _csrf_failure()
     resp = JSONResponse({"success": True})
     resp.delete_cookie(USER_ACCESS_COOKIE)
     resp.delete_cookie(USER_REFRESH_COOKIE)
@@ -907,6 +1172,8 @@ def me(request: Request):
 
 @app.post("/refresh-token")
 def refresh_token(body: RefreshTokenRequest, request: Request):
+    if not _validate_csrf(request):
+        return _csrf_failure()
     token = body.refresh_token or request.cookies.get(USER_REFRESH_COOKIE)
     if not token:
         return JSONResponse({"error": "No refresh token provided."}, status_code=400)
@@ -929,8 +1196,7 @@ def refresh_token(body: RefreshTokenRequest, request: Request):
     resp = JSONResponse(
         {
             **_user_response(user),
-            "access_token": new_access,
-            "refresh_token": new_refresh,
+            "message": "Token refreshed.",
         }
     )
     resp.set_cookie(
@@ -938,14 +1204,16 @@ def refresh_token(body: RefreshTokenRequest, request: Request):
         new_access,
         max_age=ACCESS_TOKEN_MAX_AGE,
         httponly=True,
-        samesite="lax",
+        secure=True,
+        samesite="None",
     )
     resp.set_cookie(
         USER_REFRESH_COOKIE,
         new_refresh,
         max_age=REFRESH_TOKEN_MAX_AGE,
         httponly=True,
-        samesite="lax",
+        secure=True,
+        samesite="None",
     )
     return resp
 
@@ -983,25 +1251,10 @@ async def log_scan(request: Request):
     return {"success": True}
 
 
-@app.post("/update-subscription-status")
-def update_subscription(body: SubscriptionUpdateRequest):
-    if body.secret != SUBSCRIPTION_WEBHOOK_SECRET:
-        return JSONResponse({"error": "Unauthorized."}, status_code=401)
-
-    user = update_user_plan_by_email(
-        body.email,
-        body.plan,
-        billing_cycle=body.billing_cycle,
-        status="active" if body.plan == "premium" else "inactive",
-    )
-    if not user:
-        return JSONResponse({"error": "User not found."}, status_code=404)
-
-    return {"success": True, **_user_response(user)}
-
-
 @app.post("/account/subscribe")
 def account_subscribe(body: SelfSubscriptionRequest, request: Request):
+    if not _validate_csrf(request):
+        return _csrf_failure()
     user = get_current_user(request)
     if not user:
         return JSONResponse({"error": "Authentication required."}, status_code=401)
@@ -1034,6 +1287,8 @@ def account_subscribe(body: SelfSubscriptionRequest, request: Request):
 
 @app.post("/account/downgrade")
 def account_downgrade(request: Request):
+    if not _validate_csrf(request):
+        return _csrf_failure()
     user = get_current_user(request)
     if not user:
         return JSONResponse({"error": "Authentication required."}, status_code=401)
@@ -1128,6 +1383,8 @@ async def stripe_webhook(request: Request):
 
 @app.post("/account/change-password")
 def account_change_password(body: ChangePasswordRequest, request: Request):
+    if not _validate_csrf(request):
+        return _csrf_failure()
     user = get_current_user(request)
     if not user:
         return JSONResponse({"error": "Authentication required."}, status_code=401)
@@ -1146,6 +1403,8 @@ def account_change_password(body: ChangePasswordRequest, request: Request):
 
 @app.post("/account/delete")
 def account_delete(body: DeleteAccountRequest, request: Request):
+    if not _validate_csrf(request):
+        return _csrf_failure()
     user = get_current_user(request)
     if not user:
         return JSONResponse({"error": "Authentication required."}, status_code=401)
@@ -1181,13 +1440,22 @@ def account_delete(body: DeleteAccountRequest, request: Request):
 # Admin login + analytics
 # ---------------------------------------------------------
 @app.post("/admin/login")
-def admin_login(body: AdminLoginRequest):
+def admin_login(body: AdminLoginRequest, request: Request):
+    if not _validate_csrf(request):
+        return _csrf_failure()
+    ip = _get_client_ip(request)
+    locked = _check_bruteforce("admin", ip)
+    if locked:
+        return locked
     password = body.password or ""
     if not ADMIN_PASSWORD:
-        return JSONResponse({"error": "ADMIN_PASSWORD is not configured."}, status_code=503)
+        return JSONResponse({"error": "ADMIN_SECRET is not configured."}, status_code=503)
     if password != ADMIN_PASSWORD:
+        delay = _record_login_failure("admin", ip)
+        time.sleep(delay)
         return JSONResponse({"error": "Invalid admin password."}, status_code=401)
 
+    _clear_login_failures("admin", ip)
     token = create_admin_token()
     resp = JSONResponse({"success": True, "admin": True})
     resp.set_cookie(
@@ -1195,8 +1463,8 @@ def admin_login(body: AdminLoginRequest):
         token,
         max_age=ADMIN_MAX_AGE,
         httponly=True,
-        samesite="lax",
-        secure=False,
+        samesite="Strict",
+        secure=True,
     )
     _admin_log("Admin password login succeeded", "info")
     return resp
@@ -1270,126 +1538,6 @@ def admin_health(request: Request):
         "engine": ENGINE_CONFIG,
         "last_event": last_ts,
         "timestamp": now,
-    }
-
-
-@app.post("/admin/control")
-def admin_control(request: Request, body: AdminControlRequest):
-    global MAINTENANCE_MODE, CRISIS_MODE
-    user = get_current_user(request)
-    if not user or not user.get("is_admin"):
-        return JSONResponse({"error": "Unauthorized"}, status_code=401)
-
-    action = body.action.lower()
-    dry_run = bool(body.dry_run)
-    confirm = body.confirm_token or ""
-
-    destructive_actions = {"restart", "cache", "lockdown", "crisis"}
-    if action in destructive_actions and ADMIN_CONFIRM_TOKEN:
-        if confirm != ADMIN_CONFIRM_TOKEN:
-            return JSONResponse({"error": "Confirmation token required"}, status_code=401)
-
-    def _run_command(cmd: str):
-        if dry_run:
-            return {"dry_run": True, "command": cmd}
-        subprocess.run(cmd, shell=True, check=True, timeout=20)
-        return {"dry_run": False, "command": cmd}
-
-    def _call_cache_api():
-        if dry_run:
-            return {"dry_run": True, "endpoint": CACHE_ENDPOINT}
-        headers = {"Authorization": f"Bearer {CONTROL_TOKEN}"} if CONTROL_TOKEN else {}
-        resp = requests.post(CACHE_ENDPOINT, headers=headers, timeout=10)
-        if resp.status_code >= 400:
-            raise RuntimeError(f"Cache API failed: {resp.text}")
-        return {"status": resp.status_code}
-
-    audit_risk = 10
-    audit_meta = {"action": action, "dry_run": dry_run}
-
-    try:
-        if action == "restart":
-            _admin_log("Restart requested", "warn")
-            _run_command(RESTART_COMMAND)
-            audit_risk = 70
-        elif action == "cache":
-            _admin_log("Cache flush requested", "info")
-            if CACHE_ENDPOINT:
-                _call_cache_api()
-            else:
-                _run_command(FLUSH_CACHE_COMMAND)
-            audit_risk = 40
-        elif action == "maintenance":
-            MAINTENANCE_MODE = not MAINTENANCE_MODE
-            _admin_log(f"Maintenance toggled to {MAINTENANCE_MODE}", "warn")
-            _snapshot_state("maintenance-toggle")
-            audit_risk = 30
-        elif action == "alerts":
-            _admin_log("Alerts silenced temporarily", "info")
-            audit_risk = 10
-        elif action == "sync":
-            _admin_log("Force data sync requested", "info")
-            audit_risk = 20
-        elif action.startswith("flag-"):
-            name = action.replace("flag-", "")
-            FEATURE_FLAGS[name] = not FEATURE_FLAGS.get(name, False)
-            _admin_log(f"Flag {name} toggled to {FEATURE_FLAGS[name]}", "info")
-            _snapshot_state(f"flag-{name}")
-            audit_meta["flag"] = name
-            audit_risk = 20
-        elif action in {"override-safe", "override-block"}:
-            _admin_log(f"Override action: {action}", "warn")
-            audit_risk = 30
-        elif action == "save-engine":
-            _admin_log("Engine config saved", "info")
-            audit_risk = 20
-        elif action == "save-settings":
-            _admin_log("Settings saved", "info")
-            audit_risk = 20
-        elif action == "lockdown":
-            MAINTENANCE_MODE = True
-            _admin_log("Emergency lockdown enabled", "danger")
-            _snapshot_state("lockdown")
-            audit_risk = 90
-        elif action == "crisis":
-            CRISIS_MODE = not CRISIS_MODE
-            if CRISIS_MODE:
-                MAINTENANCE_MODE = False
-                _admin_log("Crisis mode enabled: signups frozen, strict detection, verbose logging", "danger")
-                _snapshot_state("crisis-on")
-                audit_risk = 90
-            else:
-                _admin_log("Crisis mode disabled", "warn")
-                _snapshot_state("crisis-off")
-                audit_risk = 40
-        else:
-            return JSONResponse({"error": "Unknown action"}, status_code=400)
-    except Exception as exc:
-        _admin_log(f"Control action {action} failed: {exc}", "danger")
-        _log_audit(
-            admin_id=user.get("id"),
-            action=f"control:{action}",
-            target=None,
-            risk_score=80,
-            metadata={"error": str(exc), **audit_meta},
-            request=request,
-        )
-        return JSONResponse({"error": f"Action failed: {exc}"}, status_code=500)
-
-    _log_audit(
-        admin_id=user.get("id"),
-        action=f"control:{action}",
-        target=None,
-        risk_score=audit_risk,
-        metadata=audit_meta,
-        request=request,
-    )
-
-    return {
-        "success": True,
-        "maintenance": MAINTENANCE_MODE,
-        "crisis": CRISIS_MODE,
-        "feature_flags": FEATURE_FLAGS,
     }
 
 
@@ -1630,6 +1778,18 @@ def admin_analytics(request: Request):
     return get_analytics()
 
 
+@app.get("/tasks/status/{task_id}")
+def task_status(task_id: str):
+    try:
+        r = _redis_client()
+        raw = r.get(f"task:{task_id}")
+    except Exception as exc:
+        return JSONResponse({"error": f"Task backend unavailable: {exc}"}, status_code=503)
+    if not raw:
+        return JSONResponse({"error": "Task not found"}, status_code=404)
+    return json.loads(raw)
+
+
 @app.get("/admin/feedback")
 def admin_feedback(request: Request):
     if not _require_admin(request):
@@ -1723,10 +1883,22 @@ async def api_feedback(request: Request):
 # ---------------------------------------------------------
 @app.post("/analyze")
 def analyze(req: AnalyzeRequest, request: Request):
+    if not _validate_csrf(request):
+        return _csrf_failure()
+    current_user = get_current_user(request)
+    rl = _enforce_rate_limit(current_user, request, "scan")
+    if rl:
+        return rl
     record_event("request")
 
     content = req.content.strip()
     mode = req.mode.lower()
+
+    if len(content) > 10000 and mode != "qr":
+        return JSONResponse({"error": "Input too large. Max 10,000 characters."}, status_code=413)
+
+    sanitized_content = sanitize_pii(content)
+    content = sanitized_content
 
     if MAINTENANCE_MODE:
         return JSONResponse(
@@ -1770,7 +1942,7 @@ def analyze(req: AnalyzeRequest, request: Request):
             status_code=402,
         )
 
-    # --------------------- TEXT (auto) --------------------
+    # --------------------- TEXT (auto) via async --------------------
     if mode == "text" or (mode == "auto" and not url_like):
         if user:
             allowed, remaining, limit = register_scan_attempt(user_id)
@@ -1785,42 +1957,8 @@ def analyze(req: AnalyzeRequest, request: Request):
                     status_code=429,
                 )
 
-        raw = analyze_text(content) or {}
-        base_score = raw.get("score", 0)
-        score = _normalize_score(base_score)
-
-        verdict = raw.get("verdict")
-        explanation = raw.get("explanation") or "Scam text analysis."
-        reasons = raw.get("reasons", [])
-        details = raw.get("details", {})
-
-        resp = build_response(
-            score=score,
-            category="text",
-            reasons=reasons,
-            explanation=explanation,
-            verdict=verdict,
-            details=details,
-        )
-        if CRISIS_MODE:
-            resp["score"] = min(100, resp["score"] + 15)
-
-        if resp["verdict"] == "SAFE":
-            record_event("safe")
-        else:
-            record_event("scam")
-
-        add_scan_log(
-            user_id=user_id,
-            category="text",
-            mode=mode,
-            verdict=resp["verdict"],
-            score=resp["score"],
-            content_snippet=content,
-            details=resp.get("details"),
-        )
-
-        return resp
+        task_id = _enqueue_task("analyze_text", _analyze_task, "text", content, user_id)
+        return {"task_id": task_id, "queued": True}
 
     # --------------------- URL (auto) ---------------------
     if mode == "url" or (mode == "auto" and url_like):
@@ -1968,8 +2106,21 @@ def analyze(req: AnalyzeRequest, request: Request):
 
 
 @app.post("/qr")
-async def qr(request: Request, image: UploadFile = File(...)):
+async def qr(request: Request, image: UploadFile = File(...), async_job: bool = False):
+    if not _validate_csrf(request):
+        return _csrf_failure()
+    rl = _enforce_rate_limit(get_current_user(request), request, "qr")
+    if rl:
+        return rl
     record_event("request")
+
+    max_qr_bytes = 5 * 1024 * 1024
+    content_length = request.headers.get("content-length")
+    try:
+        if content_length and int(content_length) > max_qr_bytes:
+            return JSONResponse({"error": "Image too large. Max 5MB."}, status_code=413)
+    except Exception:
+        pass
 
     user = get_current_user(request)
     user_id = user["id"] if user else None
@@ -1989,6 +2140,8 @@ async def qr(request: Request, image: UploadFile = File(...)):
             )
 
     img_bytes = await image.read()
+    if len(img_bytes) > max_qr_bytes:
+        return JSONResponse({"error": "Image too large. Max 5MB."}, status_code=413)
     result = process_qr_image(img_bytes)
 
     verdict = result.get("overall", {}).get("combined_verdict", "SAFE")

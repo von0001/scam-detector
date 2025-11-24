@@ -1,44 +1,58 @@
+from __future__ import annotations
+
 import time
-import json
-from pathlib import Path
+from typing import Dict, Any
 
-ANALYTICS_FILE = Path("analytics/data.json")
+from backend.db import get_cursor
 
-# Make sure the file exists
-if not ANALYTICS_FILE.exists():
-    ANALYTICS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    ANALYTICS_FILE.write_text(json.dumps({
-        "total_requests": 0,
-        "scam_detections": 0,
-        "safe_detections": 0,
-        "ocr_uses": 0,
-        "timestamp_log": []
-    }, indent=4))
+RETENTION_SECONDS = 90 * 24 * 60 * 60
 
 
-def load_data():
-    return json.loads(ANALYTICS_FILE.read_text())
+def record_event(event_type: str, metadata: Dict[str, Any] | None = None) -> None:
+    now = int(time.time())
+    with get_cursor() as (_, cur):
+        cur.execute(
+            """
+            INSERT INTO analytics_events (event_type, ts, metadata)
+            VALUES (%s, to_timestamp(%s), %s::jsonb)
+            """,
+            (event_type, now, metadata or {}),
+        )
+    # lightweight retention check
+    if now % 100 == 0:
+        cleanup_old_events()
 
 
-def save_data(data):
-    ANALYTICS_FILE.write_text(json.dumps(data, indent=4))
+def get_analytics(window_seconds: int = 86_400) -> Dict[str, Any]:
+    """
+    Return counts for the recent window (default 24h) and total lifetime aggregates.
+    """
+    with get_cursor() as (_, cur):
+        cur.execute(
+            """
+            SELECT
+                COUNT(*) FILTER (WHERE event_type = 'request') AS total_requests,
+                COUNT(*) FILTER (WHERE event_type = 'scam') AS scam_detections,
+                COUNT(*) FILTER (WHERE event_type = 'safe') AS safe_detections,
+                COUNT(*) FILTER (WHERE event_type = 'ocr') AS ocr_uses,
+                json_agg(ts ORDER BY ts DESC) FILTER (WHERE ts >= NOW() - INTERVAL '24 hours') AS timestamp_log
+            FROM analytics_events
+            WHERE ts >= NOW() - INTERVAL '90 days'
+            """
+        )
+        row = cur.fetchone() or {}
+    return {
+        "total_requests": row.get("total_requests", 0),
+        "scam_detections": row.get("scam_detections", 0),
+        "safe_detections": row.get("safe_detections", 0),
+        "ocr_uses": row.get("ocr_uses", 0),
+        "timestamp_log": row.get("timestamp_log") or [],
+    }
 
 
-def record_event(event_type: str):
-    data = load_data()
-
-    if event_type == "request":
-        data["total_requests"] += 1
-    elif event_type == "scam":
-        data["scam_detections"] += 1
-    elif event_type == "safe":
-        data["safe_detections"] += 1
-    elif event_type == "ocr":
-        data["ocr_uses"] += 1
-
-    data["timestamp_log"].append(int(time.time()))
-    save_data(data)
-
-
-def get_analytics():
-    return load_data()
+def cleanup_old_events() -> None:
+    """Retention cleanup to keep analytics lean."""
+    with get_cursor() as (_, cur):
+        cur.execute(
+            "DELETE FROM analytics_events WHERE ts < NOW() - INTERVAL '90 days';"
+        )

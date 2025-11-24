@@ -4,11 +4,16 @@ from __future__ import annotations
 import os
 from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
 
-# Core secret for signing tokens (user + admin)
-SECRET_KEY = os.getenv("APP_SECRET_KEY", "change-this-in-production")
+# Core secret for signing tokens (user + admin) — must be provided via env
+SECRET_KEY = os.getenv("SECRET_KEY")
+if not SECRET_KEY or len(SECRET_KEY) < 32:
+    raise RuntimeError("FATAL: SECRET_KEY NOT SET or too short (32+ chars required).")
 
-# Admin password (for /admin login page)
-ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "supersecret-admin-password")
+# Admin password/secret (for /admin login page) — no defaults
+ADMIN_SECRET = os.getenv("ADMIN_SECRET")
+if not ADMIN_SECRET or len(ADMIN_SECRET) < 32:
+    raise RuntimeError("FATAL: ADMIN_SECRET NOT SET or too short (32+ chars required).")
+ADMIN_PASSWORD = ADMIN_SECRET  # alias retained for existing imports
 
 _admin_serializer = URLSafeTimedSerializer(SECRET_KEY, salt="sd-admin-v1")
 ADMIN_COOKIE_NAME = "sd_admin"

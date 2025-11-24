@@ -263,6 +263,13 @@
       if (type) statusEl.classList.add(type);
     }
 
+    function getCookie(name) {
+      const value = `; ${document.cookie}`;
+      const parts = value.split(`; ${name}=`);
+      if (parts.length === 2) return parts.pop().split(";").shift();
+      return null;
+    }
+
     backBtn.addEventListener("click", () => {
       window.location.href = "/";
     });
@@ -275,9 +282,12 @@
       const otp = document.getElementById("otp").value.trim();
 
       try {
+        const headers = { "Content-Type": "application/json", "x-admin-fingerprint": getDeviceUUID() };
+        const csrf = getCookie("sd_csrf");
+        if (csrf) headers["x-csrf-token"] = csrf;
         const res = await fetch("/admin/login", {
           method: "POST",
-          headers: { "Content-Type": "application/json", "x-admin-fingerprint": getDeviceUUID() },
+          headers,
           credentials: "include",
           body: JSON.stringify({ password })
         });
@@ -289,7 +299,9 @@
           return;
         }
 
-        fetch("/admin/logs", { headers: { "x-admin-fingerprint": getDeviceUUID() } }).catch(() => {});
+        const logHeaders = { "x-admin-fingerprint": getDeviceUUID() };
+        if (csrf) logHeaders["x-csrf-token"] = csrf;
+        fetch("/admin/logs", { headers: logHeaders, credentials: "include" }).catch(() => {});
         setStatus("Access granted. Redirecting…", "success");
         setTimeout(() => (window.location.href = "/admin"), 400);
       } catch (err) {

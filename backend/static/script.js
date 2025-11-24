@@ -45,6 +45,21 @@ function storeFeedbackContext(ctx) {
   }
 }
 
+function getCookie(name) {
+  const value = `; ${document.cookie}`;
+  const parts = value.split(`; ${name}=`);
+  if (parts.length === 2) return parts.pop().split(";").shift();
+  return null;
+}
+
+function csrfHeaders(additional = {}) {
+  const token = getCookie("sd_csrf");
+  if (token) {
+    additional["x-csrf-token"] = token;
+  }
+  return additional;
+}
+
 // Auth / account elements (shared)
 const accountBtn = document.getElementById("account-button");
 const planPill = document.getElementById("plan-pill");
@@ -528,6 +543,7 @@ async function loadAccountDashboard(force = false) {
     const res = await fetch(`${API_BASE_URL}/account/dashboard?limit=50`, {
       method: "GET",
       credentials: "include",
+      headers: csrfHeaders(),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -589,7 +605,7 @@ async function triggerSubscription(billingCycle = "monthly") {
   try {
     const res = await fetch(`${API_BASE_URL}/create-checkout-session`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: csrfHeaders({ "Content-Type": "application/json" }),
       credentials: "include",
       body: JSON.stringify({
         plan: billingCycle === "yearly" ? "yearly" : "monthly",
@@ -627,6 +643,7 @@ async function triggerDowngrade() {
     const res = await fetch(`${API_BASE_URL}/account/downgrade`, {
       method: "POST",
       credentials: "include",
+      headers: csrfHeaders(),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -662,7 +679,7 @@ function handleGoogleCredential(response) {
 
   fetch(`${API_BASE_URL}/auth/google`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: csrfHeaders({ "Content-Type": "application/json" }),
     credentials: "include",
     body: JSON.stringify({ credential: response.credential }),
   })
@@ -734,6 +751,7 @@ async function loadSession() {
     const res = await fetch(`${API_BASE_URL}/me`, {
       method: "GET",
       credentials: "include",
+      headers: csrfHeaders(),
     });
 
     if (!res.ok) {
@@ -781,7 +799,7 @@ if (authForm && authEmail && authPassword && authStatus) {
     try {
       const res = await fetch(`${API_BASE_URL}${endpoint}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: csrfHeaders({ "Content-Type": "application/json" }),
         credentials: "include",
         body: JSON.stringify({
           email: authEmail.value.trim(),
@@ -837,7 +855,7 @@ async function analyzeContent() {
   try {
     const response = await fetch(`${API_BASE_URL}/analyze`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: csrfHeaders({ "Content-Type": "application/json" }),
       credentials: "include",
       body: JSON.stringify({ content, mode }),
     });
@@ -920,6 +938,7 @@ async function analyzeQR(file) {
       method: "POST",
       body: form,
       credentials: "include",
+      headers: csrfHeaders(),
     });
     const result = await response.json();
 
@@ -1088,6 +1107,7 @@ if (accountLogoutBtn) {
       await fetch(`${API_BASE_URL}/logout`, {
         method: "POST",
         credentials: "include",
+        headers: csrfHeaders(),
       });
     } catch (e) {
       // ignore
@@ -1164,7 +1184,7 @@ if (passwordForm && passwordStatus) {
     try {
       const res = await fetch(`${API_BASE_URL}/account/change-password`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: csrfHeaders({ "Content-Type": "application/json" }),
         credentials: "include",
         body: JSON.stringify({
           current_password: passwordCurrent.value,
@@ -1205,6 +1225,7 @@ if (historyBtn && historyStatus) {
         {
           method: "GET",
           credentials: "include",
+          headers: csrfHeaders(),
         }
       );
       const data = await res.json();
@@ -1261,7 +1282,7 @@ if (deleteForm && deleteStatus) {
     try {
       const res = await fetch(`${API_BASE_URL}/account/delete`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: csrfHeaders({ "Content-Type": "application/json" }),
         credentials: "include",
         body: JSON.stringify({
           password: deletePassword.value || null,
