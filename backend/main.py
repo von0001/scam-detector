@@ -1977,41 +1977,41 @@ def analyze(req: AnalyzeRequest, request: Request):
         # Run synchronously to avoid queue failures for user-facing scans
         try:
             result = analyze_text(content) or {}
-            base_score = result.get("score", 0)
-            score = _normalize_score(base_score)
-            verdict = result.get("verdict")
-            explanation = result.get("explanation") or "Scam text analysis."
-            reasons = result.get("reasons", [])
-            details = result.get("details", {})
+        except Exception:
+            return JSONResponse({"error": "Scanner unavailable. Please try again later."}, status_code=503)
+        base_score = result.get("score", 0)
+        score = _normalize_score(base_score)
+        verdict = result.get("verdict")
+        explanation = result.get("explanation") or "Scam text analysis."
+        reasons = result.get("reasons", [])
+        details = result.get("details", {})
 
-            resp = build_response(
-                score=score,
-                category="text",
-                reasons=reasons,
-                explanation=explanation,
-                verdict=verdict,
-                details=details,
-            )
-            if CRISIS_MODE:
-                resp["score"] = min(100, resp["score"] + 15)
+        resp = build_response(
+            score=score,
+            category="text",
+            reasons=reasons,
+            explanation=explanation,
+            verdict=verdict,
+            details=details,
+        )
+        if CRISIS_MODE:
+            resp["score"] = min(100, resp["score"] + 15)
 
-            if resp["verdict"] == "SAFE":
-                record_event("safe")
-            else:
-                record_event("scam")
+        if resp["verdict"] == "SAFE":
+            record_event("safe")
+        else:
+            record_event("scam")
 
-            add_scan_log(
-                user_id=user_id,
-                category="text",
-                mode=mode,
-                verdict=resp["verdict"],
-                score=resp["score"],
-                content_snippet=content,
-                details=resp.get("details"),
-            )
-            return resp
-        except Exception as exc:
-            return JSONResponse({"error": f"Scan failed: {exc}"}, status_code=500)
+        add_scan_log(
+            user_id=user_id,
+            category="text",
+            mode=mode,
+            verdict=resp["verdict"],
+            score=resp["score"],
+            content_snippet=content,
+            details=resp.get("details"),
+        )
+        return resp
 
     # --------------------- URL (auto) ---------------------
     if mode == "url" or (mode == "auto" and url_like):
@@ -2028,7 +2028,10 @@ def analyze(req: AnalyzeRequest, request: Request):
                     status_code=429,
                 )
 
-        raw = analyze_url(content) or {}
+        try:
+            raw = analyze_url(content) or {}
+        except Exception:
+            return JSONResponse({"error": "URL scanner unavailable. Please try again later."}, status_code=503)
         base_score = raw.get("score", 0)
         score = _normalize_score(base_score)
 
@@ -2080,7 +2083,10 @@ def analyze(req: AnalyzeRequest, request: Request):
                     status_code=429,
                 )
 
-        result = analyze_actor(content)
+        try:
+            result = analyze_actor(content)
+        except Exception:
+            return JSONResponse({"error": "AI detector unavailable. Please try again later."}, status_code=503)
         score = _normalize_score(result.get("ai_probability", 0))
         explanation = f"Detected actor type: {result.get('actor_type')}"
         reasons = result.get("signals", [])
@@ -2121,7 +2127,10 @@ def analyze(req: AnalyzeRequest, request: Request):
                     status_code=429,
                 )
 
-        result = analyze_manipulation(content)
+        try:
+            result = analyze_manipulation(content)
+        except Exception:
+            return JSONResponse({"error": "Manipulation profiler unavailable. Please try again later."}, status_code=503)
         score = _normalize_score(result.get("risk_score", 0))
         profile = result.get("scam_profile", "unclear")
 
@@ -2195,7 +2204,10 @@ async def qr(request: Request, image: UploadFile = File(...), async_job: bool = 
     img_bytes = await image.read()
     if len(img_bytes) > max_qr_bytes:
         return JSONResponse({"error": "Image too large. Max 5MB."}, status_code=413)
-    result = process_qr_image(img_bytes)
+    try:
+        result = process_qr_image(img_bytes)
+    except Exception:
+        return JSONResponse({"error": "QR scanner unavailable. Try again later."}, status_code=503)
 
     verdict = result.get("overall", {}).get("combined_verdict", "SAFE")
     score = result.get("overall", {}).get("combined_risk_score", 0)
