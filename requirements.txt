@@ -20,3 +20,4 @@ psutil
 pyotp
 requests
 sentry-sdk
+redis
