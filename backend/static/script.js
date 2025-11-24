@@ -882,12 +882,19 @@ async function analyzeContent() {
       body: JSON.stringify({ content, mode }),
     });
 
-    const result = await response.json();
+    let result = {};
+    try {
+      result = await response.json();
+    } catch (parseErr) {
+      // Fallback to text to surface useful errors
+      const text = await response.text().catch(() => "");
+      result = { error: text || "Parse error" };
+    }
     if (!response.ok) {
-    statusEl.textContent =
-      result.error || "Something went wrong during analysis.";
-    return;
-  }
+      statusEl.textContent =
+        result.error || "Something went wrong during analysis.";
+      return;
+    }
 
     if (result.task_id) {
       statusEl.textContent = "Waiting for verdict...";
@@ -923,11 +930,11 @@ function renderAnalyzeResult(result, content, mode) {
   explanationEl.textContent = result.explanation || "";
 
   reasonsList.innerHTML = "";
-  (result.reasons || []).forEach((r) => {
-    const li = document.createElement("li");
-    li.textContent = r;
-    reasonsList.appendChild(li);
-  });
+    (result.reasons || []).forEach((r) => {
+      const li = document.createElement("li");
+      li.textContent = r;
+      reasonsList.appendChild(li);
+    });
 
   if (detailsPre) {
     detailsPre.hidden = true;
@@ -962,7 +969,13 @@ async function pollTask(taskId, content, mode) {
         credentials: "include",
         headers: csrfHeaders(),
       });
-      const data = await resp.json().catch(() => ({}));
+      let data = {};
+      try {
+        data = await resp.json();
+      } catch {
+        const text = await resp.text().catch(() => "");
+        data = { error: text || "Parse error" };
+      }
       if (data?.status === "finished") {
         renderAnalyzeResult(data.result || {}, content, mode);
         return;
