@@ -52,6 +52,27 @@ function getCookie(name) {
   return null;
 }
 
+// Auto-attach CSRF token on same-site authenticated calls
+const _origFetch = window.fetch.bind(window);
+window.fetch = (url, options = {}) => {
+  const opts = { ...options };
+  opts.headers = new Headers(opts.headers || {});
+  if (opts.credentials === "include") {
+    const csrf = getCookie("sd_csrf");
+    if (csrf) {
+      opts.headers.set("x-csrf-token", csrf);
+    }
+  }
+  return _origFetch(url, opts);
+};
+
+function getCookie(name) {
+  const value = `; ${document.cookie}`;
+  const parts = value.split(`; ${name}=`);
+  if (parts.length === 2) return parts.pop().split(";").shift();
+  return null;
+}
+
 function csrfHeaders(additional = {}) {
   const token = getCookie("sd_csrf");
   if (token) {
