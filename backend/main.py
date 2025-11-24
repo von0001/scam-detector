@@ -14,12 +14,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from collections import deque
 import copy
-
 import sentry_sdk
-
-# Init Sentry if configured
-if SENTRY_DSN:
-    sentry_sdk.init(dsn=SENTRY_DSN, traces_sample_rate=0.2)
 
 from fastapi import FastAPI, UploadFile, File, Request
 from fastapi.responses import FileResponse, JSONResponse
@@ -123,6 +118,10 @@ if stripe and STRIPE_SECRET_KEY:
 
 AI_ASSISTANT_KEY = os.getenv("AI_ASSISTANT_KEY", "")
 AI_ASSISTANT_MODEL = os.getenv("AI_ASSISTANT_MODEL", "gpt-4o")
+
+# Init Sentry if configured
+if SENTRY_DSN:
+    sentry_sdk.init(dsn=SENTRY_DSN, traces_sample_rate=0.2)
 
 # ---------------------------------------------------------
 # FastAPI + static
