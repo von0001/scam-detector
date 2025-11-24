@@ -105,7 +105,6 @@ STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "")
 FRONTEND_URL = os.getenv("FRONTEND_URL", "https://scamdetectorapp.com")
 REDIS_URL = os.getenv("REDIS_URL")
 SENTRY_DSN = os.getenv("SENTRY_DSN", "")
-AI_FORWARDING_ENABLED = os.getenv("AI_FORWARDING_ENABLED", "false").lower() == "true"
 
 STRIPE_PRICE_MONTHLY = os.getenv(
     "STRIPE_PRICE_MONTHLY", "price_1SWh0pLSwRqmFbmS16yHTkBQ"
@@ -345,7 +344,6 @@ ERROR_EVENTS: deque = deque()
 CSRF_COOKIE_NAME = "sd_csrf"
 CSRF_HEADER_NAME = "x-csrf-token"
 CSRF_MAX_AGE = REFRESH_TOKEN_MAX_AGE
-AI_FORWARDING_FLAG = "ai_forwarding_enabled"
 TASK_EXECUTOR = ThreadPoolExecutor(max_workers=4)
 
 
