@@ -19,3 +19,4 @@ PyJWT
 psutil
 pyotp
 requests
+sentry-sdk
