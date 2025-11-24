@@ -207,6 +207,32 @@ def build_response(
     }
 
 
+GUEST_DAILY_LIMIT = int(os.getenv("GUEST_DAILY_LIMIT", "3"))
+_guest_usage: dict = {"date": "", "counts": {}}
+
+
+def _check_guest_limit(request: Request) -> tuple[bool, int, int]:
+    """
+    Simple per-IP daily limit for guests. Not perfect, but prevents infinite use without auth.
+    """
+    global _guest_usage
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    host = request.client.host if request.client else "unknown"
+
+    if _guest_usage.get("date") != today:
+        _guest_usage = {"date": today, "counts": {}}
+
+    counts = _guest_usage["counts"]
+    used = counts.get(host, 0)
+
+    if used >= GUEST_DAILY_LIMIT:
+        return False, 0, GUEST_DAILY_LIMIT
+
+    counts[host] = used + 1
+    remaining = max(0, GUEST_DAILY_LIMIT - counts[host])
+    return True, remaining, GUEST_DAILY_LIMIT
+
+
 def get_current_user(request: Request) -> Optional[dict]:
     token = None
 
@@ -915,6 +941,20 @@ def analyze(req: AnalyzeRequest, request: Request):
     user_id = user["id"] if user else None
     plan = user.get("plan", "free") if user else "guest"
     is_premium = plan == "premium"
+
+    # Guest limit: simple per-IP daily cap
+    if not user:
+        allowed, remaining, limit = _check_guest_limit(request)
+        if not allowed:
+            return JSONResponse(
+                {
+                    "error": "Guest limit reached. Create a free account to continue scanning.",
+                    "plan": "guest",
+                    "limit": limit,
+                    "remaining": 0,
+                },
+                status_code=429,
+            )
 
     url_like = is_url_like(content)
 
