@@ -6,7 +6,12 @@ from pathlib import Path
 from typing import Optional, Literal, List
 
 import os
-from datetime import datetime
+import time
+import json
+import subprocess
+from datetime import datetime, timedelta
+from collections import deque
+import copy
 
 from fastapi import FastAPI, UploadFile, File, Request
 from fastapi.responses import FileResponse, JSONResponse
@@ -36,6 +41,7 @@ from backend.users import (
     delete_user,
     build_account_snapshot,
 )
+from backend.db import get_cursor, init_db
 from backend.user_auth import (
     create_access_token,
     create_refresh_token,
@@ -57,6 +63,19 @@ try:
     import stripe  # type: ignore
 except Exception:  # pragma: no cover
     stripe = None  # type: ignore
+
+# Optional telemetry + orchestration
+try:
+    import psutil  # type: ignore
+except Exception:  # pragma: no cover
+    psutil = None  # type: ignore
+
+try:
+    import pyotp  # type: ignore
+except Exception:  # pragma: no cover
+    pyotp = None  # type: ignore
+
+import requests  # type: ignore
 
 # Optional: Google ID token verification
 try:
@@ -80,6 +99,14 @@ STRIPE_PRICE_YEARLY = os.getenv(
 if stripe and STRIPE_SECRET_KEY:
     stripe.api_key = STRIPE_SECRET_KEY
 
+RESTART_COMMAND = os.getenv("RESTART_COMMAND", "./scripts/restart.sh")
+FLUSH_CACHE_COMMAND = os.getenv("FLUSH_CACHE_COMMAND", "./scripts/flush_cache.sh")
+CACHE_ENDPOINT = os.getenv("CACHE_ENDPOINT", "")
+CONTROL_TOKEN = os.getenv("CONTROL_TOKEN", "")
+ADMIN_CONFIRM_TOKEN = os.getenv("ADMIN_CONFIRM_TOKEN", "")
+AI_ASSISTANT_KEY = os.getenv("AI_ASSISTANT_KEY", "")
+AI_ASSISTANT_MODEL = os.getenv("AI_ASSISTANT_MODEL", "gpt-4o")
+
 # ---------------------------------------------------------
 # FastAPI + static
 # ---------------------------------------------------------
@@ -98,6 +125,23 @@ app.add_middleware(
 )
 
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+
+@app.middleware("http")
+async def capture_errors(request: Request, call_next):
+    start = time.time()
+    status = 500
+    try:
+        response = await call_next(request)
+        status = response.status_code
+        return response
+    finally:
+        duration = time.time() - start
+        now = time.time()
+        ERROR_EVENTS.append((now, status >= 500, duration))
+        # prune window
+        while ERROR_EVENTS and now - ERROR_EVENTS[0][0] > ERROR_WINDOW_SECONDS:
+            ERROR_EVENTS.popleft()
 
 # ---------------------------------------------------------
 # Models
@@ -121,6 +165,7 @@ class UserSignupRequest(BaseModel):
 class UserLoginRequest(BaseModel):
     email: EmailStr
     password: str
+    otp_code: Optional[str] = None
 
 
 class RefreshTokenRequest(BaseModel):
@@ -161,7 +206,57 @@ class DeleteAccountRequest(BaseModel):
     confirm: str
 
 
+class AdminControlRequest(BaseModel):
+    action: str
+    dry_run: Optional[bool] = False
+    confirm_token: Optional[str] = None
+
+
+class FeatureFlagRequest(BaseModel):
+    name: str
+    value: Optional[bool] = None
+
+
+class EngineConfigRequest(BaseModel):
+    sensitivity: Optional[int] = None
+    confidence: Optional[int] = None
+    model: Optional[str] = None
+    pipeline: Optional[str] = None
+
+
+class SimulationRequest(BaseModel):
+    scenario: str = "default"
+
+
+class AdminTotpVerifyRequest(BaseModel):
+    code: str
+
+
 SUBSCRIPTION_WEBHOOK_SECRET = os.getenv("SUBSCRIPTION_WEBHOOK_SECRET", "change-this")
+
+MAINTENANCE_MODE = False
+CRISIS_MODE = False
+FEATURE_FLAGS = {
+    "beta_ui": False,
+    "ai_mode": False,
+    "active_blocking": False,
+}
+ENGINE_CONFIG = {
+    "sensitivity": 65,
+    "confidence": 60,
+    "model": "Default v1",
+    "pipeline": "Standard",
+}
+SYSTEM_HEALTH = {
+    "api_status": "unknown",
+    "server_load": None,
+    "error_rate": None,
+    "db_latency": None,
+}
+ADMIN_LOGS: deque = deque(maxlen=200)
+CHANGE_SNAPSHOTS: deque = deque(maxlen=50)
+ERROR_WINDOW_SECONDS = 300
+ERROR_EVENTS: deque = deque()
 
 
 # ---------------------------------------------------------
@@ -179,6 +274,154 @@ def _normalize_score(score: int | float) -> int:
     except Exception:
         return 0
     return int(max(0, min(100, s)))
+
+
+def _admin_log(event: str, level: str = "info") -> None:
+    ADMIN_LOGS.append(
+        {
+            "timestamp": int(datetime.utcnow().timestamp()),
+            "event": event,
+            "level": level,
+        }
+    )
+
+
+def _snapshot_state(reason: str = "") -> None:
+    CHANGE_SNAPSHOTS.append(
+        {
+            "timestamp": int(datetime.utcnow().timestamp()),
+            "reason": reason or "config-change",
+            "maintenance": MAINTENANCE_MODE,
+            "crisis": CRISIS_MODE,
+            "engine": copy.deepcopy(ENGINE_CONFIG),
+            "flags": copy.deepcopy(FEATURE_FLAGS),
+        }
+    )
+
+
+def _compute_error_rate() -> float:
+    now = time.time()
+    total = 0
+    errors = 0
+    for ts, is_error, _ in list(ERROR_EVENTS):
+        if now - ts <= ERROR_WINDOW_SECONDS:
+            total += 1
+            errors += 1 if is_error else 0
+    if total == 0:
+        return 0.0
+    return round((errors / total) * 100, 2)
+
+
+def _db_ping_latency_ms() -> Optional[float]:
+    try:
+        start = time.time()
+        with get_cursor() as (conn, cur):
+            cur.execute("SELECT 1;")
+            _ = cur.fetchone()
+        return round((time.time() - start) * 1000, 2)
+    except Exception:
+        return None
+
+
+def _system_health_snapshot() -> dict:
+    cpu = psutil.cpu_percent(interval=0.1) if psutil else None
+    mem = psutil.virtual_memory().percent if psutil else None
+    db_latency = _db_ping_latency_ms()
+    error_rate = _compute_error_rate()
+
+    SYSTEM_HEALTH.update(
+        {
+            "cpu_percent": cpu,
+            "mem_percent": mem,
+            "db_latency_ms": db_latency,
+            "error_rate_pct": error_rate,
+        }
+    )
+    return SYSTEM_HEALTH
+
+
+def _log_audit(
+    *,
+    admin_id: Optional[str],
+    action: str,
+    target: Optional[str],
+    risk_score: int,
+    metadata: Optional[dict],
+    request: Optional[Request] = None,
+) -> None:
+    ip = request.client.host if request and request.client else None
+    ua = request.headers.get("user-agent") if request else None
+    device_uuid = request.headers.get("x-admin-fingerprint") if request else None
+    with get_cursor() as (_, cur):
+        cur.execute(
+            """
+            INSERT INTO admin_audit (admin_id, action, target, risk_score, metadata, device_uuid, user_agent, ip)
+            VALUES (%s, %s, %s, %s, %s::jsonb, %s, %s, %s)
+            """,
+            (
+                admin_id,
+                action,
+                target,
+                risk_score,
+                json.dumps(metadata or {}),
+                device_uuid,
+                ua,
+                ip,
+            ),
+        )
+
+
+def _record_device(admin_id: str, request: Request) -> bool:
+    device_uuid = request.headers.get("x-admin-fingerprint")
+    if not device_uuid:
+        return False
+    ua = request.headers.get("user-agent", "")
+    ip = request.client.host if request and request.client else ""
+    is_new = False
+    with get_cursor() as (_, cur):
+        cur.execute(
+            "SELECT 1 FROM admin_devices WHERE admin_id = %s AND device_uuid = %s",
+            (admin_id, device_uuid),
+        )
+        is_new = cur.fetchone() is None
+        cur.execute(
+            """
+            INSERT INTO admin_devices (admin_id, device_uuid, user_agent, ip, last_seen)
+            VALUES (%s, %s, %s, %s, NOW())
+            ON CONFLICT (admin_id, device_uuid)
+            DO UPDATE SET user_agent = EXCLUDED.user_agent, ip = EXCLUDED.ip, last_seen = NOW();
+            """,
+            (admin_id, device_uuid, ua, ip),
+        )
+    return is_new
+
+
+def _cleanup_devices():
+    with get_cursor() as (_, cur):
+        cur.execute("DELETE FROM admin_devices WHERE last_seen < NOW() - INTERVAL '90 days';")
+
+
+def _add_fp_case(user_id: Optional[str], verdict: str, reason: str):
+    with get_cursor() as (_, cur):
+        cur.execute(
+            """
+            INSERT INTO false_positive_queue (user_id, verdict, reason, status)
+            VALUES (%s, %s, %s, 'pending')
+            """,
+            (user_id, verdict, reason),
+        )
+
+
+def _resolve_fp_case(case_id: int, status: str):
+    with get_cursor() as (_, cur):
+        cur.execute(
+            """
+            UPDATE false_positive_queue
+            SET status = %s
+            WHERE id = %s
+            """,
+            (status, case_id),
+        )
 
 
 def build_response(
@@ -378,7 +621,10 @@ def contact_page():
 
 @app.get("/login-admin")
 def login_admin_page():
-    # Optional separate URL to load login.html
+    # Dedicated admin login surface
+    admin_login = STATIC_DIR / "admin_login.html"
+    if admin_login.exists():
+        return FileResponse(admin_login)
     return FileResponse(STATIC_DIR / "login.html")
 
 
@@ -387,6 +633,7 @@ def admin_page(request: Request):
     user = get_current_user(request)
     if not user or not user.get("is_admin"):
         return FileResponse(STATIC_DIR / "login.html")
+    _admin_log("Admin console viewed", "info")
     return FileResponse(STATIC_DIR / "admin.html")
 
 
@@ -462,6 +709,11 @@ def billing_portal(request: Request):
 # ---------------------------------------------------------
 @app.post("/signup")
 def signup(body: UserSignupRequest):
+    if CRISIS_MODE:
+        return JSONResponse(
+            {"error": "Signups are temporarily frozen during an incident. Please try later."},
+            status_code=503,
+        )
     try:
         user = create_user(body.email, body.password)
     except ValueError as e:
@@ -495,10 +747,21 @@ def signup(body: UserSignupRequest):
 
 
 @app.post("/login")
-def user_login(body: UserLoginRequest):
+def user_login(body: UserLoginRequest, request: Request):
     user = verify_user_credentials(body.email, body.password)
     if not user:
         return JSONResponse({"error": "Invalid email or password."}, status_code=401)
+
+    # Enforce TOTP for admin if configured
+    if user.get("is_admin") and user.get("totp_secret"):
+        if not pyotp:
+            return JSONResponse({"error": "2FA library missing"}, status_code=500)
+        totp = pyotp.TOTP(user["totp_secret"])
+        if not body.otp_code or not totp.verify(body.otp_code, valid_window=1):
+            return JSONResponse(
+                {"error": "TOTP code required or invalid.", "requires_totp": True},
+                status_code=401,
+            )
 
     access = create_access_token(user)
     refresh = create_refresh_token(user)
@@ -524,6 +787,18 @@ def user_login(body: UserLoginRequest):
         httponly=True,
         samesite="lax",
     )
+
+    if user.get("is_admin"):
+        is_new_device = _record_device(user["id"], request)
+        _cleanup_devices()
+        _log_audit(
+            admin_id=user["id"],
+            action="admin_login",
+            target=None,
+            risk_score=60 if is_new_device else 10,
+            metadata={"email": user["email"]},
+            request=request,
+        )
     return resp
 
 
@@ -890,6 +1165,416 @@ def _require_admin(request: Request) -> bool:
     return bool(user and user.get("is_admin"))
 
 
+@app.post("/admin/2fa/setup")
+def admin_2fa_setup(request: Request):
+    user = get_current_user(request)
+    if not user or not user.get("is_admin"):
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    if not pyotp:
+        return JSONResponse({"error": "pyotp not installed"}, status_code=500)
+    secret = pyotp.random_base32()
+    uri = pyotp.totp.TOTP(secret).provisioning_uri(name=user["email"], issuer_name="ScamDetector Admin")
+    with get_cursor() as (_, cur):
+        cur.execute("UPDATE users SET totp_secret = %s WHERE id = %s", (secret, user["id"]))
+    _admin_log("Admin 2FA secret generated", "warn")
+    _log_audit(
+        admin_id=user["id"],
+        action="2fa_setup",
+        target=None,
+        risk_score=30,
+        metadata={},
+        request=request,
+    )
+    return {"secret": secret, "provisioning_uri": uri}
+
+
+@app.post("/admin/2fa/verify")
+def admin_2fa_verify(request: Request, body: AdminTotpVerifyRequest):
+    user = get_current_user(request)
+    if not user or not user.get("is_admin"):
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    if not pyotp or not user.get("totp_secret"):
+        return JSONResponse({"error": "2FA not configured"}, status_code=400)
+    totp = pyotp.TOTP(user["totp_secret"])
+    if not totp.verify(body.code, valid_window=1):
+        return JSONResponse({"error": "Invalid code"}, status_code=401)
+    return {"success": True}
+
+
+@app.get("/admin/health")
+def admin_health(request: Request):
+    if not _require_admin(request):
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    data = get_analytics()
+    now = datetime.utcnow().timestamp()
+    last_ts = data["timestamp_log"][-1] if data.get("timestamp_log") else None
+    api_status = "up" if last_ts else "unknown"
+
+    health = _system_health_snapshot()
+    health["api_status"] = api_status
+
+    return {
+        "health": health,
+        "maintenance": MAINTENANCE_MODE,
+        "crisis": CRISIS_MODE,
+        "feature_flags": FEATURE_FLAGS,
+        "engine": ENGINE_CONFIG,
+        "last_event": last_ts,
+        "timestamp": now,
+    }
+
+
+@app.post("/admin/control")
+def admin_control(request: Request, body: AdminControlRequest):
+    global MAINTENANCE_MODE, CRISIS_MODE
+    user = get_current_user(request)
+    if not user or not user.get("is_admin"):
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+
+    action = body.action.lower()
+    dry_run = bool(body.dry_run)
+    confirm = body.confirm_token or ""
+
+    destructive_actions = {"restart", "cache", "lockdown", "crisis"}
+    if action in destructive_actions and ADMIN_CONFIRM_TOKEN:
+        if confirm != ADMIN_CONFIRM_TOKEN:
+            return JSONResponse({"error": "Confirmation token required"}, status_code=401)
+
+    def _run_command(cmd: str):
+        if dry_run:
+            return {"dry_run": True, "command": cmd}
+        subprocess.run(cmd, shell=True, check=True, timeout=20)
+        return {"dry_run": False, "command": cmd}
+
+    def _call_cache_api():
+        if dry_run:
+            return {"dry_run": True, "endpoint": CACHE_ENDPOINT}
+        headers = {"Authorization": f"Bearer {CONTROL_TOKEN}"} if CONTROL_TOKEN else {}
+        resp = requests.post(CACHE_ENDPOINT, headers=headers, timeout=10)
+        if resp.status_code >= 400:
+            raise RuntimeError(f"Cache API failed: {resp.text}")
+        return {"status": resp.status_code}
+
+    audit_risk = 10
+    audit_meta = {"action": action, "dry_run": dry_run}
+
+    try:
+        if action == "restart":
+            _admin_log("Restart requested", "warn")
+            _run_command(RESTART_COMMAND)
+            audit_risk = 70
+        elif action == "cache":
+            _admin_log("Cache flush requested", "info")
+            if CACHE_ENDPOINT:
+                _call_cache_api()
+            else:
+                _run_command(FLUSH_CACHE_COMMAND)
+            audit_risk = 40
+        elif action == "maintenance":
+            MAINTENANCE_MODE = not MAINTENANCE_MODE
+            _admin_log(f"Maintenance toggled to {MAINTENANCE_MODE}", "warn")
+            _snapshot_state("maintenance-toggle")
+            audit_risk = 30
+        elif action == "alerts":
+            _admin_log("Alerts silenced temporarily", "info")
+            audit_risk = 10
+        elif action == "sync":
+            _admin_log("Force data sync requested", "info")
+            audit_risk = 20
+        elif action.startswith("flag-"):
+            name = action.replace("flag-", "")
+            FEATURE_FLAGS[name] = not FEATURE_FLAGS.get(name, False)
+            _admin_log(f"Flag {name} toggled to {FEATURE_FLAGS[name]}", "info")
+            _snapshot_state(f"flag-{name}")
+            audit_meta["flag"] = name
+            audit_risk = 20
+        elif action in {"override-safe", "override-block"}:
+            _admin_log(f"Override action: {action}", "warn")
+            audit_risk = 30
+        elif action == "save-engine":
+            _admin_log("Engine config saved", "info")
+            audit_risk = 20
+        elif action == "save-settings":
+            _admin_log("Settings saved", "info")
+            audit_risk = 20
+        elif action == "lockdown":
+            MAINTENANCE_MODE = True
+            _admin_log("Emergency lockdown enabled", "danger")
+            _snapshot_state("lockdown")
+            audit_risk = 90
+        elif action == "crisis":
+            CRISIS_MODE = not CRISIS_MODE
+            if CRISIS_MODE:
+                MAINTENANCE_MODE = False
+                _admin_log("Crisis mode enabled: signups frozen, strict detection, verbose logging", "danger")
+                _snapshot_state("crisis-on")
+                audit_risk = 90
+            else:
+                _admin_log("Crisis mode disabled", "warn")
+                _snapshot_state("crisis-off")
+                audit_risk = 40
+        else:
+            return JSONResponse({"error": "Unknown action"}, status_code=400)
+    except Exception as exc:
+        _admin_log(f"Control action {action} failed: {exc}", "danger")
+        _log_audit(
+            admin_id=user.get("id"),
+            action=f"control:{action}",
+            target=None,
+            risk_score=80,
+            metadata={"error": str(exc), **audit_meta},
+            request=request,
+        )
+        return JSONResponse({"error": f"Action failed: {exc}"}, status_code=500)
+
+    _log_audit(
+        admin_id=user.get("id"),
+        action=f"control:{action}",
+        target=None,
+        risk_score=audit_risk,
+        metadata=audit_meta,
+        request=request,
+    )
+
+    return {
+        "success": True,
+        "maintenance": MAINTENANCE_MODE,
+        "crisis": CRISIS_MODE,
+        "feature_flags": FEATURE_FLAGS,
+    }
+
+
+@app.get("/admin/flags")
+def admin_flags(request: Request):
+    if not _require_admin(request):
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    return {"feature_flags": FEATURE_FLAGS}
+
+
+@app.post("/admin/flags")
+def admin_update_flag(request: Request, body: FeatureFlagRequest):
+    if not _require_admin(request):
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    name = body.name
+    if not name:
+        return JSONResponse({"error": "Missing name"}, status_code=400)
+    FEATURE_FLAGS[name] = bool(body.value)
+    _admin_log(f"Flag {name} set to {FEATURE_FLAGS[name]}", "info")
+    return {"success": True, "feature_flags": FEATURE_FLAGS}
+
+
+@app.post("/admin/engine")
+def admin_engine(request: Request, body: EngineConfigRequest):
+    if not _require_admin(request):
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    if body.sensitivity is not None:
+        ENGINE_CONFIG["sensitivity"] = int(max(0, min(100, body.sensitivity)))
+    if body.confidence is not None:
+        ENGINE_CONFIG["confidence"] = int(max(0, min(100, body.confidence)))
+    if body.model:
+        ENGINE_CONFIG["model"] = body.model
+    if body.pipeline:
+        ENGINE_CONFIG["pipeline"] = body.pipeline
+    _admin_log("Engine config updated", "info")
+    _snapshot_state("engine-update")
+    return {"success": True, "engine": ENGINE_CONFIG}
+
+
+@app.get("/admin/logs")
+def admin_logs(request: Request):
+    if not _require_admin(request):
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    return {"logs": list(ADMIN_LOGS)}
+
+
+@app.get("/admin/audit")
+def admin_audit(request: Request, limit: int = 50, offset: int = 0):
+    if not _require_admin(request):
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    with get_cursor() as (_, cur):
+        cur.execute(
+            """
+            SELECT * FROM admin_audit
+            ORDER BY ts DESC
+            LIMIT %s OFFSET %s
+            """,
+            (limit, offset),
+        )
+        rows = cur.fetchall() or []
+    return {"items": rows}
+
+
+@app.get("/admin/changes")
+def admin_changes(request: Request):
+    if not _require_admin(request):
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    return {"changes": list(CHANGE_SNAPSHOTS)}
+
+
+@app.post("/admin/rollback")
+def admin_rollback(request: Request):
+    global MAINTENANCE_MODE, CRISIS_MODE
+    if not _require_admin(request):
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    if not CHANGE_SNAPSHOTS:
+        return JSONResponse({"error": "No snapshots to rollback"}, status_code=400)
+
+    snap = CHANGE_SNAPSHOTS.pop()
+    MAINTENANCE_MODE = snap.get("maintenance", False)
+    CRISIS_MODE = snap.get("crisis", False)
+    ENGINE_CONFIG.update(snap.get("engine", {}))
+    FEATURE_FLAGS.update(snap.get("flags", {}))
+    _admin_log("Rolled back to previous config snapshot", "warn")
+    return {
+        "success": True,
+        "maintenance": MAINTENANCE_MODE,
+        "crisis": CRISIS_MODE,
+        "engine": ENGINE_CONFIG,
+        "feature_flags": FEATURE_FLAGS,
+    }
+
+
+@app.post("/admin/simulate")
+def admin_simulate(request: Request, body: SimulationRequest):
+    if not _require_admin(request):
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    data = get_analytics()
+    total = data.get("total_requests", 0)
+    scam = data.get("scam_detections", 0)
+    safe = data.get("safe_detections", 0)
+
+    projected_fp = int(scam * 0.08)
+    affected = int(total * 0.12)
+    return {
+        "scenario": body.scenario,
+        "projected_false_positive_increase": projected_fp,
+        "affected_verdicts": affected,
+        "note": "Simulation uses historical aggregates. Wire to detailed replay for accuracy.",
+    }
+
+
+@app.get("/admin/assistant")
+def admin_assistant(request: Request):
+    if not _require_admin(request):
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    if not AI_ASSISTANT_KEY:
+        return {"available": False, "message": "Assistant unavailable"}
+
+    data = get_analytics()
+    feedback = load_feedback()
+    logs = list(ADMIN_LOGS)[-20:]
+
+    prompt = (
+        "You are an internal admin assistant. Summarize anomalies, suggest optimizations, "
+        "and recommend actions with confidence (0-100). Be concise.\n\n"
+        f"Analytics: {json.dumps(data)}\n"
+        f"Crisis: {CRISIS_MODE}\n"
+        f"Recent logs: {json.dumps(logs)}\n"
+        f"Recent feedback: {json.dumps(feedback[-10:] if feedback else [])}\n"
+    )
+
+    try:
+        resp = requests.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers={
+                "Authorization": f"Bearer {AI_ASSISTANT_KEY}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": AI_ASSISTANT_MODEL,
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.2,
+            },
+            timeout=20,
+        )
+        if resp.status_code >= 400:
+            return JSONResponse({"error": "Assistant call failed"}, status_code=resp.status_code)
+        data = resp.json()
+        content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+        return {"available": True, "analysis": content}
+    except Exception as exc:
+        return JSONResponse({"error": f"Assistant unavailable: {exc}"}, status_code=500)
+
+
+@app.get("/admin/system-map")
+def admin_system_map(request: Request):
+    if not _require_admin(request):
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    health = _system_health_snapshot()
+    nodes = [
+        {"id": "api", "load": health.get("cpu_percent"), "errors": _compute_error_rate()},
+        {"id": "db", "load": health.get("db_latency_ms"), "errors": 0},
+        {"id": "detection", "load": ENGINE_CONFIG.get("sensitivity"), "errors": 0},
+    ]
+    edges = [
+        {"from": "user", "to": "api", "latency_ms": health.get("db_latency_ms") or 0},
+        {"from": "api", "to": "detection", "latency_ms": 40},
+        {"from": "detection", "to": "db", "latency_ms": health.get("db_latency_ms") or 0},
+    ]
+    return {"nodes": nodes, "edges": edges}
+
+
+@app.get("/admin/fp")
+def admin_fp(request: Request):
+    if not _require_admin(request):
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    with get_cursor() as (_, cur):
+        cur.execute(
+            "SELECT * FROM false_positive_queue ORDER BY created_at DESC LIMIT 100"
+        )
+        rows = cur.fetchall() or []
+    return {"items": rows}
+
+
+@app.post("/admin/fp/add")
+async def admin_fp_add(request: Request):
+    if not _require_admin(request):
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    body = await request.json()
+    user_id = body.get("user_id")
+    verdict = body.get("verdict", "")
+    reason = body.get("reason", "")
+    if not verdict or not reason:
+        return JSONResponse({"error": "verdict and reason required"}, status_code=400)
+    _add_fp_case(user_id, verdict, reason)
+    _admin_log("False positive case added", "info")
+    _log_audit(
+        admin_id=(get_current_user(request) or {}).get("id"),
+        action="fp_add",
+        target=user_id,
+        risk_score=20,
+        metadata={"verdict": verdict, "reason": reason},
+        request=request,
+    )
+    return {"success": True}
+
+
+@app.post("/admin/fp/resolve")
+async def admin_fp_resolve(request: Request):
+    if not _require_admin(request):
+        return JSONResponse({"error": "Unauthorized"}, status_code=401)
+    body = await request.json()
+    case_id = body.get("id")
+    status = body.get("status", "").lower()
+    if status not in {"approved", "rejected"}:
+        return JSONResponse({"error": "Invalid status"}, status_code=400)
+    try:
+        _resolve_fp_case(int(case_id), status)
+    except Exception:
+        return JSONResponse({"error": "Unable to resolve"}, status_code=400)
+    _admin_log(f"False positive case {case_id} set to {status}", "info")
+    _log_audit(
+        admin_id=(get_current_user(request) or {}).get("id"),
+        action="fp_resolve",
+        target=str(case_id),
+        risk_score=30,
+        metadata={"status": status},
+        request=request,
+    )
+    return {"success": True}
+
+
 @app.get("/admin/analytics")
 def admin_analytics(request: Request):
     if not _require_admin(request):
@@ -935,6 +1620,11 @@ def analyze(req: AnalyzeRequest, request: Request):
     content = req.content.strip()
     mode = req.mode.lower()
 
+    if MAINTENANCE_MODE:
+        return JSONResponse(
+            {"error": "Maintenance mode is active. Please try again later."}, status_code=503
+        )
+
     if not content and mode != "qr":
         return JSONResponse({"error": "content is empty"}, status_code=400)
 
@@ -942,6 +1632,9 @@ def analyze(req: AnalyzeRequest, request: Request):
     user_id = user["id"] if user else None
     plan = user.get("plan", "free") if user else "guest"
     is_premium = plan == "premium"
+
+    if CRISIS_MODE:
+        _admin_log("Scan during crisis mode", "warn")
 
     # Guest limit: simple per-IP daily cap
     if not user:
@@ -1001,6 +1694,8 @@ def analyze(req: AnalyzeRequest, request: Request):
             verdict=verdict,
             details=details,
         )
+        if CRISIS_MODE:
+            resp["score"] = min(100, resp["score"] + 15)
 
         if resp["verdict"] == "SAFE":
             record_event("safe")
@@ -1051,6 +1746,8 @@ def analyze(req: AnalyzeRequest, request: Request):
             verdict=verdict,
             details=details,
         )
+        if CRISIS_MODE:
+            resp["score"] = min(100, resp["score"] + 15)
 
         if resp["verdict"] == "SAFE":
             record_event("safe")

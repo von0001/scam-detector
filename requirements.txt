@@ -16,3 +16,6 @@ google-auth-oauthlib
 psycopg2-binary
 bcrypt
 PyJWT
+psutil
+pyotp
+requests

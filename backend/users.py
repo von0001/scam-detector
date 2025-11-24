@@ -85,6 +85,7 @@ def _strip_sensitive(row: Dict[str, Any]) -> Dict[str, Any]:
         "stripe_customer_id": row.get("stripe_customer_id"),
         "stripe_subscription_id": row.get("stripe_subscription_id"),
         "is_admin": bool(row.get("is_admin")),
+        "totp_secret": row.get("totp_secret"),
     }
 
 

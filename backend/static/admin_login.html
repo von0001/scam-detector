@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ScamDetector Admin Access</title>
+  <style>
+    :root {
+      --bg: #030712;
+      --panel: rgba(10, 18, 36, 0.85);
+      --accent: #38bdf8;
+      --accent-2: #22c55e;
+      --danger: #ef4444;
+      --text: #e5e7eb;
+      --muted: #9ca3af;
+      --border: rgba(59, 130, 246, 0.35);
+      --glow: 0 18px 70px rgba(0, 255, 200, 0.12);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      background: radial-gradient(circle at 20% 20%, rgba(56, 189, 248, 0.12), transparent 40%),
+        radial-gradient(circle at 80% 0%, rgba(34, 197, 94, 0.14), transparent 45%),
+        linear-gradient(135deg, #020617, #030712 50%, #020617);
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    .shell {
+      width: min(1100px, 100%);
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 18px;
+      align-items: stretch;
+    }
+
+    .hero {
+      background: linear-gradient(145deg, rgba(15, 23, 42, 0.9), rgba(30, 58, 138, 0.85));
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 18px;
+      box-shadow: var(--glow), 0 0 0 1px rgba(59, 130, 246, 0.2);
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .badge {
+      width: 42px;
+      height: 42px;
+      border-radius: 14px;
+      background: radial-gradient(circle at 30% 0, #22c55e, #38bdf8 60%, #0ea5e9 100%);
+      display: grid;
+      place-items: center;
+      font-weight: 800;
+      color: #020617;
+      box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
+    }
+
+    .title {
+      margin: 0;
+      font-size: 20px;
+      letter-spacing: -0.02em;
+    }
+
+    .eyebrow {
+      margin: 0;
+      font-size: 12px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+    }
+
+    .grid-meta {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 10px;
+    }
+
+    .pill {
+      border-radius: 12px;
+      padding: 10px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(15, 23, 42, 0.55);
+      font-size: 13px;
+      color: var(--text);
+    }
+
+    .pill strong { color: var(--accent); }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      box-shadow: 0 16px 50px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(59, 130, 246, 0.16);
+      border-radius: 18px;
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .panel h2 {
+      margin: 0;
+      font-size: 16px;
+      letter-spacing: -0.01em;
+    }
+
+    label {
+      display: block;
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+
+    input {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(15, 23, 42, 0.7);
+      color: var(--text);
+      font-size: 14px;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    input:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.15);
+    }
+
+    .actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      justify-content: space-between;
+    }
+
+    button {
+      border: none;
+      border-radius: 12px;
+      padding: 12px 14px;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      color: #030712;
+      background: linear-gradient(135deg, #22c55e, #38bdf8);
+      box-shadow: 0 10px 28px rgba(34, 197, 94, 0.35);
+      transition: transform 0.12s ease, box-shadow 0.18s ease;
+      flex: 1;
+    }
+
+    button:hover { transform: translateY(-1px); }
+    button:active { transform: translateY(0); }
+
+    .ghost {
+      background: rgba(15, 23, 42, 0.9);
+      color: var(--text);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: none;
+      flex: 0 0 auto;
+    }
+
+    .status {
+      font-size: 13px;
+      color: var(--muted);
+      min-height: 18px;
+    }
+
+    .status.error { color: var(--danger); }
+    .status.success { color: var(--accent-2); }
+
+    .list {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 10px;
+    }
+
+    .list .pill small { display: block; color: var(--muted); margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <section class="hero">
+      <div class="brand">
+        <div class="badge">SD</div>
+        <div>
+          <p class="eyebrow">Admin Access</p>
+          <h1 class="title">ScamDetector Command Login</h1>
+        </div>
+      </div>
+      <div class="grid-meta">
+        <div class="pill">
+          Single-operator mode
+          <small style="color: var(--muted); display: block;">Owner credentials required</small>
+        </div>
+        <div class="pill">
+          Encrypted session
+          <small style="color: var(--muted); display: block;">We never store raw content</small>
+        </div>
+      </div>
+      <div class="list">
+        <div class="pill"><strong>Tip:</strong> Use your owner email. Regular accounts are blocked.</div>
+        <div class="pill"><strong>Scope:</strong> Full system control, analytics, flags, overrides.</div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Authenticate</h2>
+      <form id="admin-login-form">
+        <div>
+          <label for="email">Owner email</label>
+          <input type="email" id="email" required autocomplete="username" placeholder="you@company.com" />
+        </div>
+        <div>
+          <label for="password">Password</label>
+          <input type="password" id="password" required autocomplete="current-password" placeholder="••••••••" />
+        </div>
+        <div>
+          <label for="otp">TOTP (if enabled)</label>
+          <input type="text" id="otp" inputmode="numeric" autocomplete="one-time-code" placeholder="123456" />
+        </div>
+        <div class="actions">
+          <button type="submit">Enter Command Center</button>
+          <button type="button" class="ghost" id="back-btn">Back to site</button>
+        </div>
+        <div id="status" class="status"></div>
+      </form>
+    </section>
+  </div>
+
+  <script>
+    const form = document.getElementById("admin-login-form");
+    const statusEl = document.getElementById("status");
+    const backBtn = document.getElementById("back-btn");
+    const deviceKey = "admin_device_uuid";
+
+    function getDeviceUUID() {
+      let id = localStorage.getItem(deviceKey);
+      if (!id) {
+        id = crypto.randomUUID();
+        localStorage.setItem(deviceKey, id);
+      }
+      return id;
+    }
+
+    function setStatus(text, type = "") {
+      statusEl.textContent = text || "";
+      statusEl.className = "status";
+      if (type) statusEl.classList.add(type);
+    }
+
+    backBtn.addEventListener("click", () => {
+      window.location.href = "/";
+    });
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      setStatus("Verifying credentials…");
+
+      const email = document.getElementById("email").value.trim();
+      const password = document.getElementById("password").value;
+      const otp = document.getElementById("otp").value.trim();
+
+      try {
+        const res = await fetch("/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-admin-fingerprint": getDeviceUUID() },
+          credentials: "include",
+          body: JSON.stringify({ email, password, otp_code: otp || null })
+        });
+
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok) {
+          setStatus(data.error || "Invalid credentials.", "error");
+          return;
+        }
+
+        const isAdmin = data?.user?.is_admin;
+        if (!isAdmin) {
+          setStatus("This account is not admin-enabled.", "error");
+          return;
+        }
+
+        // Send fingerprint ping
+        fetch("/admin/logs", { headers: { "x-admin-fingerprint": getDeviceUUID() } }).catch(() => {});
+        setStatus("Access granted. Redirecting…", "success");
+        setTimeout(() => (window.location.href = "/admin"), 400);
+      } catch (err) {
+        setStatus("Network error. Try again.", "error");
+      }
+    });
+  </script>
+</body>
+</html>

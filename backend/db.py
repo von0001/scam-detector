@@ -61,7 +61,8 @@ def init_db() -> None:
                 stripe_customer_id TEXT,
                 stripe_subscription_id TEXT,
                 subscription_renewal TIMESTAMPTZ NULL,
-                last_plan_change TIMESTAMPTZ NULL
+                last_plan_change TIMESTAMPTZ NULL,
+                totp_secret TEXT
             );
             """
         )
@@ -75,6 +76,12 @@ def init_db() -> None:
             """
             ALTER TABLE users
             ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT FALSE;
+            """
+        )
+        cur.execute(
+            """
+            ALTER TABLE users
+            ADD COLUMN IF NOT EXISTS totp_secret TEXT;
             """
         )
         cur.execute(
@@ -96,5 +103,56 @@ def init_db() -> None:
             """
             CREATE INDEX IF NOT EXISTS idx_scan_logs_user_ts
             ON scan_logs (user_id, timestamp DESC);
+            """
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS admin_audit (
+                id BIGSERIAL PRIMARY KEY,
+                ts TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                admin_id UUID NULL REFERENCES users(id) ON DELETE SET NULL,
+                action TEXT NOT NULL,
+                target TEXT,
+                metadata JSONB DEFAULT '{}'::jsonb,
+                risk_score INTEGER DEFAULT 0,
+                device_uuid TEXT,
+                user_agent TEXT,
+                ip TEXT
+            );
+            """
+        )
+        cur.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_admin_audit_ts ON admin_audit (ts DESC);
+            """
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS false_positive_queue (
+                id BIGSERIAL PRIMARY KEY,
+                user_id UUID NULL REFERENCES users(id) ON DELETE SET NULL,
+                verdict TEXT,
+                reason TEXT,
+                status TEXT NOT NULL DEFAULT 'pending',
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            );
+            """
+        )
+        cur.execute(
+            """
+            CREATE TABLE IF NOT EXISTS admin_devices (
+                id BIGSERIAL PRIMARY KEY,
+                admin_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                device_uuid TEXT NOT NULL,
+                user_agent TEXT,
+                ip TEXT,
+                last_seen TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            );
+            """
+        )
+        cur.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_admin_devices_unique
+            ON admin_devices (admin_id, device_uuid);
             """
         )

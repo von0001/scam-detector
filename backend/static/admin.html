@@ -1,426 +1,1374 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>ScamDetector — Admin Control Panel</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ScamDetector Admin Command</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <link rel="stylesheet" href="/static/style.css"/>
-
   <style>
+    :root {
+      --bg: #050815;
+      --panel: #0b1020;
+      --muted: #9ca3af;
+      --text: #e5e7eb;
+      --accent: #38bdf8;
+      --accent-2: #22c55e;
+      --danger: #ef4444;
+      --warn: #f59e0b;
+      --border: rgba(148, 163, 184, 0.16);
+      --card: linear-gradient(145deg, rgba(10, 18, 36, 0.96), rgba(16, 24, 48, 0.9));
+      --shadow: 0 20px 70px rgba(0, 0, 0, 0.55);
+    }
+
+    * { box-sizing: border-box; }
+
     body {
       margin: 0;
-      padding: 28px 16px 32px;
+      min-height: 100vh;
+      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+      color: var(--text);
       background:
-        radial-gradient(circle at top, #020617 0, #020617 45%, #020617 100%),
-        radial-gradient(circle at top left, rgba(37, 99, 235, 0.18), transparent 55%);
-      color: #f9fafb;
-      font-family: system-ui, -apple-system, Segoe UI, Roboto;
+        radial-gradient(circle at 20% 20%, rgba(56, 189, 248, 0.12), transparent 45%),
+        radial-gradient(circle at 80% 0%, rgba(34, 197, 94, 0.1), transparent 50%),
+        linear-gradient(135deg, #020617, #050815 45%, #020617);
       display: flex;
-      justify-content: center;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      width: 100%;
       min-height: 100vh;
     }
 
-    .admin-shell {
-      width: 100%;
-      max-width: 1120px;
-      background: radial-gradient(circle at top left, #020617, #020617 40%, #020617 100%);
-      border-radius: 24px;
-      padding: 22px 22px 26px;
-      box-shadow:
-        0 24px 80px rgba(15, 23, 42, 0.92),
-        0 0 0 1px rgba(148, 163, 184, 0.12);
-      position: relative;
-      overflow: hidden;
+    .sidebar {
+      background: rgba(7, 12, 26, 0.9);
+      border-right: 1px solid var(--border);
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.04);
     }
 
-    .admin-shell::before {
-      content: "";
-      position: absolute;
-      inset: -40%;
-      background:
-        radial-gradient(circle at 10% -20%, rgba(56,189,248,0.12), transparent 50%),
-        radial-gradient(circle at 110% 0%, rgba(37,99,235,0.18), transparent 55%);
-      opacity: 0.8;
-      pointer-events: none;
-    }
-
-    .admin-shell > * {
-      position: relative;
-      z-index: 1;
-    }
-
-    .admin-top {
+    .brand {
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      gap: 14px;
-      padding-bottom: 8px;
-      border-bottom: 1px solid rgba(30,64,175,0.6);
+      gap: 12px;
     }
 
-    .admin-brand {
+    .brand-badge {
+      width: 42px;
+      height: 42px;
+      border-radius: 12px;
+      background: radial-gradient(circle at 30% 0, #22c55e, #38bdf8 60%, #0ea5e9 100%);
+      display: grid;
+      place-items: center;
+      font-weight: 800;
+      color: #050815;
+      box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
+    }
+
+    .brand-text h1 {
+      margin: 0;
+      font-size: 18px;
+      letter-spacing: -0.02em;
+    }
+
+    .brand-text p {
+      margin: 2px 0 0;
+      font-size: 12px;
+      color: var(--muted);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .nav {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .nav a {
+      text-decoration: none;
+      color: var(--text);
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid transparent;
+      background: rgba(255, 255, 255, 0.02);
       display: flex;
       align-items: center;
       gap: 10px;
+      transition: border-color 0.18s ease, background 0.18s ease;
+      font-size: 14px;
     }
 
-    .admin-badge {
-      width: 32px;
-      height: 32px;
-      border-radius: 999px;
+    .nav a:hover {
+      border-color: rgba(56, 189, 248, 0.35);
+      background: rgba(56, 189, 248, 0.06);
+    }
+
+    .sidebar .pill {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+      background: rgba(255, 255, 255, 0.02);
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .sidebar .pill strong { color: var(--accent); }
+
+    main {
+      padding: 18px 20px 28px;
+      overflow: auto;
+    }
+
+    .topbar {
       display: flex;
       align-items: center;
-      justify-content: center;
-      background: radial-gradient(circle at 30% 0%, #38bdf8, #1d4ed8);
-      box-shadow:
-        0 0 0 1px rgba(191, 219, 254, 0.35),
-        0 10px 30px rgba(15, 23, 42, 0.9);
-      font-size: 18px;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 16px;
     }
 
-    .admin-title-block {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-    }
-
-    .admin-title-text {
-      font-size: 1.1rem;
-      font-weight: 700;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
-    }
-
-    .admin-subtitle-text {
-      font-size: 0.74rem;
-      color: #9ca3af;
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-    }
-
-    .admin-meta {
-      text-align: right;
-      font-size: 0.75rem;
-      color: #9ca3af;
-    }
-
-    .admin-meta strong {
-      color: #e5e7eb;
-    }
-
-    .dashboard {
-      margin-top: 20px;
-      display: flex;
-      flex-direction: column;
-      gap: 24px;
-    }
-
-    .stats-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 16px;
-    }
-
-    .stat-card {
-      background: linear-gradient(135deg, #020617, #020617 60%, #020617 100%);
-      border-radius: 16px;
-      padding: 18px 18px 16px;
-      border: 1px solid rgba(31,41,55,0.9);
-      box-shadow: 0 14px 30px rgba(15,23,42,0.8);
-      position: relative;
-      overflow: hidden;
-    }
-
-    .stat-card::before {
-      content: "";
-      position: absolute;
-      inset: -40%;
-      background: radial-gradient(circle at top left, rgba(56,189,248,0.14), transparent 60%);
-      opacity: 0.7;
-      pointer-events: none;
-    }
-
-    .stat-card > * {
-      position: relative;
-      z-index: 1;
-    }
-
-    .stat-card h2 {
-      font-size: 0.78rem;
-      color: #9ca3af;
-      text-transform: uppercase;
-      letter-spacing: 0.14em;
-      margin-bottom: 6px;
-    }
-
-    .stat-card p {
-      font-size: 2rem;
-      font-weight: 700;
+    .topbar .title {
       margin: 0;
-      color: #38bdf8;
+      font-size: 22px;
+      letter-spacing: -0.02em;
     }
 
-    .stat-hint {
-      margin-top: 4px;
-      font-size: 0.72rem;
-      color: #6b7280;
+    .topbar .subtitle {
+      margin: 4px 0 0;
+      color: var(--muted);
+      font-size: 13px;
     }
 
-    .chart-card {
-      background: radial-gradient(circle at top left, #020617, #020617 50%, #020617 100%);
-      border-radius: 18px;
-      padding: 18px 18px 20px;
-      border: 1px solid #1e293b;
-      box-shadow: 0 18px 40px rgba(0,0,0,0.8);
-    }
-
-    .chart-card h2 {
-      font-size: 0.98rem;
-      color: #cbd5f1;
-      margin-bottom: 14px;
+    .quick-search {
+      flex: 1;
       display: flex;
+      gap: 10px;
+      align-items: center;
+      justify-content: flex-end;
+    }
+
+    .quick-search input {
+      width: 220px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.04);
+      color: var(--text);
+      font-size: 14px;
+    }
+
+    .status-pill {
+      border-radius: 999px;
+      padding: 8px 12px;
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      background: rgba(56, 189, 248, 0.12);
+      color: var(--text);
+      font-weight: 700;
+      font-size: 13px;
+      display: inline-flex;
       align-items: center;
       gap: 6px;
     }
 
-    .chart-card h2 span.icon {
-      font-size: 1.1rem;
+    .grid {
+      display: grid;
+      gap: 14px;
     }
 
-    canvas {
-      max-width: 100%;
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 14px;
     }
 
-    footer {
-      margin-top: 20px;
-      text-align: center;
-      font-size: 0.74rem;
-      color: #6b7280;
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px;
+      box-shadow: var(--shadow);
+      position: relative;
+      overflow: hidden;
     }
 
-    footer span {
-      color: #9ca3af;
-    }
-
-    .feedback-section-title {
-      margin-top: 32px;
-      font-size: 1rem;
-      color: #e5e7eb;
+    .card h3 {
+      margin: 0 0 6px;
+      font-size: 13px;
+      color: var(--muted);
       letter-spacing: 0.06em;
       text-transform: uppercase;
     }
 
-    #feedbackList {
-      margin-top: 12px;
+    .card .value {
+      font-size: 24px;
+      font-weight: 800;
     }
 
-    #feedbackList .stat-card h2 {
-      font-size: 0.8rem;
-      color: #a5b4fc;
-      margin-bottom: 4px;
-      letter-spacing: 0.06em;
-      text-transform: uppercase;
+    .muted { color: var(--muted); }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 8px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      font-size: 12px;
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.02);
     }
 
-    #feedbackList .stat-card p {
-      font-size: 0.8rem;
-      line-height: 1.6;
-      color: #e5e7eb;
-      font-weight: 400;
+    .tag.warn { border-color: rgba(245, 158, 11, 0.45); color: #fbbf24; }
+    .tag.danger { border-color: rgba(239, 68, 68, 0.55); color: #fecaca; }
+
+    .section {
+      margin-top: 8px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px;
+      background: rgba(255, 255, 255, 0.03);
+      box-shadow: var(--shadow);
     }
 
-    #feedbackList strong {
-      color: #93c5fd;
-      font-weight: 600;
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 10px;
     }
 
-    @media (max-width: 768px) {
-      .admin-shell {
-        border-radius: 18px;
-        padding: 18px 16px 22px;
-      }
+    .section-header h2 {
+      margin: 0;
+      font-size: 16px;
+      letter-spacing: -0.01em;
+    }
 
-      .admin-top {
-        flex-direction: column;
-        align-items: flex-start;
-      }
+    .actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
 
-      .admin-meta {
-        text-align: left;
-      }
+    button {
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      padding: 10px 12px;
+      background: rgba(56, 189, 248, 0.12);
+      color: var(--text);
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.12s ease, box-shadow 0.18s ease, background 0.18s ease;
+    }
+
+    button:hover { transform: translateY(-1px); box-shadow: 0 10px 30px rgba(56, 189, 248, 0.2); }
+    button:active { transform: translateY(0); }
+
+    .btn-danger { border-color: rgba(239, 68, 68, 0.6); background: rgba(239, 68, 68, 0.12); }
+    .btn-ghost { background: rgba(255, 255, 255, 0.04); }
+
+    .timeline {
+      display: grid;
+      gap: 10px;
+      max-height: 320px;
+      overflow: auto;
+      padding-right: 4px;
+    }
+
+    .event {
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.03);
+      padding: 10px;
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+    }
+
+    .event .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--accent);
+      margin-top: 4px;
+    }
+
+    .event .body {
+      flex: 1;
+    }
+
+    .table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .table th,
+    .table td {
+      text-align: left;
+      padding: 10px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+      font-size: 13px;
+    }
+
+    .controls-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .range {
+      width: 100%;
+    }
+
+    .log-panel {
+      background: rgba(7, 11, 24, 0.75);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 12px;
+      max-height: 220px;
+      overflow: auto;
+      color: #cbd5f5;
+    }
+
+    .chart-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 12px;
+    }
+
+    .chart-card {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+      background: rgba(255, 255, 255, 0.03);
+      box-shadow: var(--shadow);
+    }
+
+    .toast {
+      position: fixed;
+      bottom: 16px;
+      right: 16px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px solid rgba(56, 189, 248, 0.4);
+      background: rgba(5, 8, 21, 0.95);
+      color: var(--text);
+      box-shadow: var(--shadow);
+      min-width: 220px;
+      display: none;
+    }
+
+    .badges-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .banner {
+      border-radius: 12px;
+      padding: 10px 12px;
+      background: rgba(239, 68, 68, 0.12);
+      border: 1px solid rgba(239, 68, 68, 0.35);
+      color: #fecaca;
+      font-weight: 700;
+      margin-bottom: 10px;
+      display: none;
+    }
+
+    .command-palette {
+      position: fixed;
+      inset: 0;
+      background: rgba(5, 8, 21, 0.72);
+      backdrop-filter: blur(6px);
+      display: none;
+      align-items: flex-start;
+      justify-content: center;
+      padding-top: 80px;
+      z-index: 50;
+    }
+
+    .command-panel {
+      width: min(680px, 92vw);
+      background: #0b1020;
+      border-radius: 16px;
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .command-panel input {
+      width: 100%;
+      padding: 14px;
+      background: rgba(255, 255, 255, 0.04);
+      border: none;
+      color: var(--text);
+      font-size: 14px;
+    }
+
+    .command-list {
+      max-height: 320px;
+      overflow: auto;
+    }
+
+    .command-item {
+      padding: 12px 14px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .command-item:hover {
+      background: rgba(56, 189, 248, 0.08);
+    }
+
+    .grid-two {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 12px;
     }
   </style>
 </head>
-
 <body>
-
-<div class="admin-shell">
-
-  <header class="admin-top">
-    <div class="admin-brand">
-      <div class="admin-badge">🛡</div>
-      <div class="admin-title-block">
-        <span class="admin-title-text">ScamDetector Admin</span>
-        <span class="admin-subtitle-text">Threat Telemetry & Feedback Monitor</span>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-badge">SD</div>
+        <div class="brand-text">
+          <h1>Admin Command</h1>
+          <p>Threat Ops & Telemetry</p>
+        </div>
       </div>
-    </div>
+      <div class="nav">
+        <a href="#overview">Dashboard</a>
+        <a href="#intelligence">Detection Intelligence</a>
+        <a href="#users">Users</a>
+        <a href="#engine">Engine Control</a>
+        <a href="#logs">Logs & Debug</a>
+        <a href="#flags">Feature Flags</a>
+        <a href="#analytics">Analytics</a>
+        <a href="#settings">Settings</a>
+      </div>
+      <div class="pill">
+        <strong>Single-operator mode.</strong><br />
+        Everything routes here: scans, feedback, overrides, and feature flags.
+      </div>
+      <div class="pill">
+        Encrypted session · We never store raw content.
+      </div>
+    </aside>
 
-    <div class="admin-meta">
-      <div><strong>Visibility:</strong> Internal Only</div>
-      <div>Monitor scan traffic, scam detection rates, and user reports in real time.</div>
-    </div>
-  </header>
-
-  <div class="dashboard">
-
-    <div class="stats-grid">
-      <div class="stat-card">
-        <h2>Total Requests</h2>
-        <p id="total">0</p>
-        <div class="stat-hint">All scans across web, extension, and mobile.</div>
+    <main>
+      <div id="incident-banner" class="banner">Security Incident Under Review</div>
+      <div class="topbar">
+        <div>
+          <h1 class="title">Command Center</h1>
+          <p class="subtitle">Decide fast. Act fast. No guesswork.</p>
+        </div>
+        <div class="quick-search">
+          <input type="search" id="cmd-search" placeholder="Command search (Ctrl + K)" />
+          <span id="api-status" class="status-pill">API: Checking…</span>
+        </div>
       </div>
 
-      <div class="stat-card">
-        <h2>Scam Detections</h2>
-        <p id="scam">0</p>
-        <div class="stat-hint">Requests flagged as suspicious or dangerous.</div>
-      </div>
+      <section id="overview" class="grid">
+        <div class="cards">
+          <div class="card">
+            <h3>API Status</h3>
+            <div class="value" id="api-up">—</div>
+            <div class="muted">Health of /admin/analytics.</div>
+          </div>
+          <div class="card">
+            <h3>Server Load</h3>
+            <div class="value" id="server-load">N/A</div>
+            <div class="muted">Wire to infra metrics.</div>
+          </div>
+          <div class="card">
+            <h3>Error Rate (1h)</h3>
+            <div class="value" id="error-rate">N/A</div>
+            <div class="muted">Not tracked yet.</div>
+          </div>
+          <div class="card">
+            <h3>DB Response</h3>
+            <div class="value" id="db-latency">N/A</div>
+            <div class="muted">Hook to DB telemetry.</div>
+          </div>
+        </div>
 
-      <div class="stat-card">
-        <h2>Safe Results</h2>
-        <p id="safe">0</p>
-        <div class="stat-hint">Requests cleared with no major red flags.</div>
-      </div>
+        <div class="cards">
+          <div class="card">
+            <h3>Total Users</h3>
+            <div class="value" id="total-users">N/A</div>
+            <div class="muted">Add user count when available.</div>
+          </div>
+          <div class="card">
+            <h3>Active (24h)</h3>
+            <div class="value" id="active-users">N/A</div>
+            <div class="muted">Wire to activity service.</div>
+          </div>
+          <div class="card">
+            <h3>New Signups (7d)</h3>
+            <div class="value" id="new-signups">N/A</div>
+            <div class="muted">Coming from auth analytics.</div>
+          </div>
+          <div class="card">
+            <h3>Scans Processed</h3>
+            <div class="value" id="total-scans">0</div>
+            <div class="muted">All surfaces combined.</div>
+          </div>
+        </div>
 
-      <div class="stat-card">
-        <h2>OCR / Screenshot Scans</h2>
-        <p id="ocr">0</p>
-        <div class="stat-hint">Images processed for text or QR content.</div>
-      </div>
-    </div>
+        <div class="section">
+          <div class="section-header">
+            <h2>Quick Actions</h2>
+            <div class="tag">2-click rule</div>
+          </div>
+          <div class="actions">
+            <button onclick="quickAction('restart')">Restart Services</button>
+            <button onclick="quickAction('maintenance')" class="btn-ghost">Toggle Maintenance</button>
+            <button onclick="quickAction('cache')" class="btn-ghost">Flush Cache</button>
+            <button onclick="quickAction('experiment')" class="btn-ghost">Toggle Experimental</button>
+          </div>
+          <div class="actions" style="margin-top: 8px;">
+            <button onclick="quickAction('alerts')">Silence Alerts (15m)</button>
+            <button onclick="quickAction('sync')">Force Data Sync</button>
+          </div>
+        </div>
 
-    <div class="chart-card">
-      <h2><span class="icon">📈</span>Activity Timeline</h2>
-      <canvas id="trafficChart"></canvas>
-    </div>
+        <div class="section">
+          <div class="section-header">
+            <h2>Timeline Feed</h2>
+            <div class="badges-row">
+              <span class="tag">Scans</span>
+              <span class="tag">Feedback</span>
+              <span class="tag warn">Warnings</span>
+            </div>
+          </div>
+          <div id="timeline" class="timeline"></div>
+        </div>
+      </section>
 
-    <div class="chart-card">
-      <h2><span class="icon">📊</span>Detection Distribution</h2>
-      <canvas id="pieChart"></canvas>
-    </div>
+      <section id="intelligence" class="section">
+        <div class="section-header">
+          <h2>Detection Intelligence</h2>
+          <div class="badges-row">
+            <span class="tag">Live</span>
+            <span class="tag warn">High-Risk</span>
+            <span class="tag">False Positives</span>
+          </div>
+        </div>
+        <div class="cards">
+          <div class="card">
+            <h3>Scans Today</h3>
+            <div class="value" id="scans-today">0</div>
+            <div class="muted">Last 24h.</div>
+          </div>
+          <div class="card">
+            <h3>High-Risk Flags</h3>
+            <div class="value" id="high-risk">0</div>
+            <div class="muted">Scam detections.</div>
+          </div>
+          <div class="card">
+            <h3>False Positives</h3>
+            <div class="value" id="false-positive">N/A</div>
+            <div class="muted">Hook to review queue.</div>
+          </div>
+          <div class="card">
+            <h3>Top Patterns</h3>
+            <div class="value" id="top-patterns">Not tracked</div>
+            <div class="muted">Add pattern telemetry feed.</div>
+          </div>
+        </div>
+        <div class="chart-grid">
+          <div class="chart-card">
+            <h3>Risk Trend</h3>
+            <canvas id="trendChart"></canvas>
+          </div>
+          <div class="chart-card">
+            <h3>Detection Distribution</h3>
+            <canvas id="distChart"></canvas>
+          </div>
+        </div>
+      </section>
 
+      <section id="users" class="section">
+        <div class="section-header">
+          <h2>User Management</h2>
+          <div class="badges-row">
+            <span class="tag">Search</span>
+            <span class="tag warn">Risk Filters</span>
+          </div>
+        </div>
+        <div class="controls-row">
+          <input type="search" id="user-search" placeholder="Search users (email, id)" />
+          <select id="user-filter">
+            <option value="">Filter by risk level</option>
+            <option>High</option>
+            <option>Medium</option>
+            <option>Low</option>
+          </select>
+          <select id="user-tier">
+            <option value="">Subscription tier</option>
+            <option>Free</option>
+            <option>Premium</option>
+          </select>
+        </div>
+        <table class="table" id="user-table">
+          <thead>
+            <tr><th>User</th><th>Plan</th><th>Risk Avg</th><th>Last Seen</th><th>Actions</th></tr>
+          </thead>
+          <tbody>
+            <tr><td colspan="5" class="muted">Wire to user service. Use filters above to narrow.</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="engine" class="section">
+        <div class="section-header">
+          <h2>Detection Engine Control</h2>
+          <div class="badges-row">
+            <span class="tag">Sensitivity</span>
+            <span class="tag">Models</span>
+            <span class="tag warn">Overrides</span>
+          </div>
+        </div>
+        <div class="controls-row">
+          <div>
+            <label>Sensitivity</label>
+            <input class="range" type="range" min="0" max="100" value="65" id="sensitivity" />
+          </div>
+          <div>
+            <label>Confidence Threshold</label>
+            <input class="range" type="range" min="0" max="100" value="60" id="confidence" />
+          </div>
+          <div>
+            <label>AI Model</label>
+            <select id="model-select">
+              <option>Default v1</option>
+              <option>Precision v2</option>
+              <option>Recall-Heavy v3</option>
+            </select>
+          </div>
+          <div>
+            <label>Pipeline</label>
+            <select id="pipeline-select">
+              <option>Standard</option>
+              <option>High scrutiny</option>
+              <option>Latency optimized</option>
+            </select>
+          </div>
+        </div>
+        <div class="actions">
+            <button onclick="quickAction('override-safe')" class="btn-ghost">Whitelist Domain</button>
+            <button onclick="quickAction('override-block')" class="btn-danger">Blacklist Domain</button>
+            <button onclick="saveEngineConfig()">Save Engine Config</button>
+        </div>
+      </section>
+
+      <section id="simulation" class="section">
+        <div class="section-header">
+          <h2>Rule Simulation</h2>
+          <div class="badges-row">
+            <span class="tag warn">Preview Only</span>
+          </div>
+        </div>
+        <div class="controls-row">
+          <input type="text" id="sim-scenario" placeholder="Scenario name" />
+          <button onclick="runSimulation()">Run Simulation</button>
+        </div>
+        <div class="cards">
+          <div class="card">
+            <h3>Projected False Positives</h3>
+            <div class="value" id="sim-fp">—</div>
+            <div class="muted">Increase vs current baseline.</div>
+          </div>
+          <div class="card">
+            <h3>Affected Verdicts</h3>
+            <div class="value" id="sim-affected">—</div>
+            <div class="muted">Past scans impacted by rule changes.</div>
+          </div>
+          <div class="card">
+            <h3>Notes</h3>
+            <div class="muted" id="sim-note">Awaiting simulation.</div>
+          </div>
+        </div>
+      </section>
+
+      <section id="assistant" class="section">
+        <div class="section-header">
+          <h2>AI Admin Assistant</h2>
+          <div class="badges-row">
+            <span class="tag">Advisor</span>
+            <span class="tag warn">Suggestions</span>
+          </div>
+        </div>
+        <div class="grid-two">
+          <div class="card">
+            <h3>Anomalies</h3>
+            <div class="muted" id="ai-anomalies">Waiting for data…</div>
+          </div>
+          <div class="card">
+            <h3>Recommendations</h3>
+            <div class="muted" id="ai-reco">Waiting for data…</div>
+          </div>
+        </div>
+      </section>
+
+      <section id="system-map" class="section">
+        <div class="section-header">
+          <h2>System Map</h2>
+          <div class="badges-row">
+            <span class="tag">Topology</span>
+            <span class="tag warn">Live</span>
+          </div>
+        </div>
+        <div class="cards">
+          <div class="card">
+            <h3>Flow</h3>
+            <div class="muted">User → API → Detection → Database</div>
+            <div class="muted" id="map-status">All nodes nominal.</div>
+          </div>
+          <div class="card">
+            <h3>Bottlenecks</h3>
+            <div class="muted" id="map-bottleneck">Not detected.</div>
+          </div>
+          <div class="card">
+            <h3>Error Hotspots</h3>
+            <div class="muted" id="map-errors">None reported.</div>
+          </div>
+        </div>
+      </section>
+
+      <section id="false-positive" class="section">
+        <div class="section-header">
+          <h2>False Positive Resolution</h2>
+          <div class="badges-row">
+            <span class="tag warn">Review</span>
+            <span class="tag">Training Loop</span>
+          </div>
+        </div>
+        <table class="table">
+          <thead>
+            <tr><th>Case</th><th>Reason</th><th>User</th><th>Actions</th></tr>
+          </thead>
+          <tbody id="fp-table">
+            <tr><td colspan="4" class="muted">No appeals yet. Wire to review queue.</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="logs" class="section">
+        <div class="section-header">
+          <h2>Logs & Debug</h2>
+          <div class="badges-row">
+            <span class="tag">Live</span>
+            <span class="tag warn">Warnings</span>
+            <span class="tag">Export</span>
+          </div>
+        </div>
+        <div class="controls-row">
+          <select>
+            <option>Errors</option>
+            <option>Warnings</option>
+            <option>Auth</option>
+            <option>Detection</option>
+          </select>
+          <div class="actions" style="gap:6px;">
+            <button onclick="exportLogs()">Export CSV</button>
+            <button onclick="quickAction('stream')">Start Stream</button>
+          </div>
+        </div>
+        <div class="log-panel" id="log-panel">
+          No logs yet. Hook to your log pipeline.
+        </div>
+      </section>
+
+      <section id="flags" class="section">
+        <div class="section-header">
+          <h2>Feature Flags & Environment</h2>
+          <div class="badges-row">
+            <span class="tag">Switchboard</span>
+            <span class="tag warn">Beta</span>
+          </div>
+        </div>
+        <div class="cards">
+          <div class="card">
+            <h3>Feature Flags</h3>
+            <div class="badges-row">
+              <button onclick="toggleFlag('beta_ui')">Toggle Beta UI</button>
+              <button onclick="toggleFlag('ai_mode')">Toggle AI Mode</button>
+              <button onclick="toggleFlag('active_blocking')">Toggle Active Blocking</button>
+            </div>
+          </div>
+          <div class="card">
+            <h3>Environment</h3>
+            <div class="badges-row">
+              <span class="tag">Live Mode</span>
+              <span class="tag warn">Maintenance</span>
+              <span class="tag">Debug</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="analytics" class="section">
+        <div class="section-header">
+          <h2>Analytics & Reporting</h2>
+          <div class="badges-row">
+            <span class="tag">Exports</span>
+            <span class="tag warn">Weekly Reports</span>
+          </div>
+        </div>
+        <div class="chart-grid">
+          <div class="chart-card">
+            <h3>Scan Volume</h3>
+            <canvas id="volumeChart"></canvas>
+          </div>
+          <div class="chart-card">
+            <h3>User Retention (placeholder)</h3>
+            <div class="muted">Hook to retention data.</div>
+          </div>
+          <div class="chart-card">
+            <h3>Subscription Churn (placeholder)</h3>
+            <div class="muted">Add churn feed.</div>
+          </div>
+        </div>
+      </section>
+
+      <section id="settings" class="section">
+        <div class="section-header">
+          <h2>Global Settings</h2>
+          <div class="badges-row">
+            <span class="tag">Keys</span>
+            <span class="tag">Integrations</span>
+          </div>
+        </div>
+        <div class="controls-row">
+          <input type="text" placeholder="Platform name" />
+          <input type="text" placeholder="Detection threshold" />
+          <input type="text" placeholder="Payment processor key" />
+          <input type="text" placeholder="AI provider key" />
+        </div>
+        <div class="actions">
+          <button onclick="quickAction('save-settings')">Save Settings</button>
+          <button class="btn-danger" onclick="quickAction('lockdown')">Lockdown Mode</button>
+        </div>
+      </section>
+    </main>
   </div>
 
-  <footer>
-    <span>Restricted Area — ScamDetector Admin Monitoring System.</span>
-    <br/>Use this panel to improve protection, not to identify individual users.
-  </footer>
+  <div id="toast" class="toast"></div>
+  <div id="cmd-palette" class="command-palette">
+    <div class="command-panel">
+      <input type="search" id="cmd-input" placeholder="Type a command…" />
+      <div id="cmd-list" class="command-list"></div>
+    </div>
+  </div>
 
-  <h2 class="feedback-section-title">📩 Live User Feedback</h2>
-  <div id="feedbackList" class="stats-grid"></div>
+  <script>
+    const apiStatusEl = document.getElementById("api-status");
+    const timelineEl = document.getElementById("timeline");
+    const toastEl = document.getElementById("toast");
+    const bannerEl = document.getElementById("incident-banner");
+    const cmdPalette = document.getElementById("cmd-palette");
+    const cmdInput = document.getElementById("cmd-input");
+    const cmdList = document.getElementById("cmd-list");
 
-</div>
+    let trendChart, distChart, volumeChart;
+    let timelineEvents = [];
 
-<script>
-  async function loadData() {
-    const res = await fetch("/admin/analytics");
-    const data = await res.json();
-
-    if (!res.ok) {
-      alert(data.error || "Failed to load analytics.");
-      return;
+    const deviceKey = "admin_device_uuid";
+    function getDeviceUUID() {
+      let id = localStorage.getItem(deviceKey);
+      if (!id) {
+        id = crypto.randomUUID();
+        localStorage.setItem(deviceKey, id);
+      }
+      return id;
     }
 
-    document.getElementById("total").innerText = data.total_requests;
-    document.getElementById("scam").innerText = data.scam_detections;
-    document.getElementById("safe").innerText = data.safe_detections;
-    document.getElementById("ocr").innerText = data.ocr_uses;
+    function showToast(message) {
+      toastEl.textContent = message;
+      toastEl.style.display = "block";
+      setTimeout(() => (toastEl.style.display = "none"), 2200);
+    }
 
-    const labels = data.timestamp_log.map(t => {
-      const d = new Date(t * 1000);
-      return d.toLocaleTimeString();
-    });
+    async function quickAction(action) {
+      const destructive = ["restart", "cache", "lockdown", "crisis"];
+      let confirmToken = "";
+      if (destructive.includes(action)) {
+        confirmToken = prompt("Enter admin confirmation token to proceed:") || "";
+      }
+      try {
+        const res = await fetch("/admin/control", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-admin-fingerprint": getDeviceUUID() },
+          credentials: "include",
+          body: JSON.stringify({ action, confirm_token: confirmToken })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          showToast(data.error || "Control failed");
+          return;
+        }
+        showToast(`Action: ${action} executed`);
+        if (data.maintenance !== undefined) {
+          setApiStatus(data.maintenance ? "Maintenance" : "Up", data.maintenance ? "warn" : "ok");
+        }
+        loadLogs();
+      } catch {
+        showToast("Network error triggering action");
+      }
+    }
 
-    const ctx1 = document.getElementById("trafficChart");
-    new Chart(ctx1, {
-      type: "line",
-      data: {
-        labels,
-        datasets: [{
-          label: "Requests over time",
-          data: labels.map(() => 1),
-          borderColor: "#38bdf8",
-          borderWidth: 3,
-          fill: false,
-          tension: 0.35
-        }]
-      },
-      options: {
-        plugins: {
-          legend: {
-            labels: { color: "#e5e7eb" }
-          }
+    function setApiStatus(label, variant = "ok") {
+      apiStatusEl.textContent = `API: ${label}`;
+      apiStatusEl.style.borderColor = variant === "ok" ? "rgba(34,197,94,0.5)" : "rgba(239,68,68,0.6)";
+      apiStatusEl.style.background = variant === "ok" ? "rgba(34,197,94,0.14)" : "rgba(239,68,68,0.14)";
+    }
+
+    async function loadHealth() {
+      try {
+        const res = await fetch("/admin/health", { credentials: "include", headers: { "x-admin-fingerprint": getDeviceUUID() } });
+        const data = await res.json();
+        if (!res.ok) {
+          setApiStatus("Down", "warn");
+          return;
+        }
+
+        const health = data.health || {};
+        setApiStatus(health.api_status || "Unknown", health.api_status === "up" ? "ok" : "warn");
+        setText("server-load", health.server_load != null ? `${health.server_load}%` : "N/A");
+        setText("error-rate", health.error_rate != null ? `${health.error_rate}%` : "N/A");
+        setText("db-latency", health.db_latency != null ? `${health.db_latency} ms` : "N/A");
+
+        if (data.engine) {
+          document.getElementById("sensitivity").value = data.engine.sensitivity ?? 65;
+          document.getElementById("confidence").value = data.engine.confidence ?? 60;
+          document.getElementById("model-select").value = data.engine.model || "Default v1";
+          document.getElementById("pipeline-select").value = data.engine.pipeline || "Standard";
+        }
+
+        if (data.crisis) {
+          bannerEl.style.display = "block";
+        } else {
+          bannerEl.style.display = "none";
+        }
+      } catch {
+        setApiStatus("Down", "warn");
+      }
+    }
+
+    function setText(id, value) {
+      const el = document.getElementById(id);
+      if (el) el.textContent = value;
+    }
+
+    function formatTime(tsMs) {
+      return new Date(tsMs).toLocaleString();
+    }
+
+    function renderTimeline(events) {
+      timelineEl.innerHTML = "";
+      if (!events.length) {
+        timelineEl.innerHTML = '<div class="muted">No events yet.</div>';
+        return;
+      }
+      events.slice(-30).reverse().forEach((e) => {
+        const div = document.createElement("div");
+        div.className = "event";
+        const dot = document.createElement("div");
+        dot.className = "dot";
+        if (e.level === "danger") dot.style.background = "var(--danger)";
+        if (e.level === "warn") dot.style.background = "var(--warn)";
+        div.appendChild(dot);
+
+        const body = document.createElement("div");
+        body.className = "body";
+        body.innerHTML = `<strong>${e.title}</strong><div class="muted">${e.detail}</div><div class="muted" style="margin-top:4px;">${formatTime(e.time)}</div>`;
+        div.appendChild(body);
+        timelineEl.appendChild(div);
+      });
+    }
+
+    function buildCharts(timestamps, safe, scam) {
+      const ctxTrend = document.getElementById("trendChart");
+      const ctxDist = document.getElementById("distChart");
+      const ctxVolume = document.getElementById("volumeChart");
+
+      const labels = timestamps.map((t) => new Date(t * 1000).toLocaleTimeString());
+      const values = labels.map(() => 1);
+
+      if (trendChart) trendChart.destroy();
+      trendChart = new Chart(ctxTrend, {
+        type: "line",
+        data: {
+          labels,
+          datasets: [
+            {
+              label: "Scan events",
+              data: values,
+              borderColor: "#38bdf8",
+              borderWidth: 3,
+              tension: 0.35,
+              fill: false
+            }
+          ]
         },
-        scales: {
-          x: {
-            ticks: { color: "#9ca3af" },
-            grid: { color: "rgba(55,65,81,0.4)" }
-          },
-          y: {
-            ticks: { color: "#9ca3af" },
-            grid: { color: "rgba(55,65,81,0.3)" }
+        options: {
+          plugins: { legend: { labels: { color: "#e5e7eb" } } },
+          scales: {
+            x: { ticks: { color: "#9ca3af" }, grid: { color: "rgba(55,65,81,0.4)" } },
+            y: { ticks: { color: "#9ca3af" }, grid: { color: "rgba(55,65,81,0.3)" } }
           }
         }
+      });
+
+      if (distChart) distChart.destroy();
+      distChart = new Chart(ctxDist, {
+        type: "doughnut",
+        data: {
+          labels: ["Safe", "Scam"],
+          datasets: [{ data: [safe, scam], backgroundColor: ["#22c55e", "#ef4444"] }]
+        },
+        options: { plugins: { legend: { labels: { color: "#e5e7eb" } } } }
+      });
+
+      if (volumeChart) volumeChart.destroy();
+      volumeChart = new Chart(ctxVolume, {
+        type: "bar",
+        data: {
+          labels,
+          datasets: [
+            {
+              label: "Volume",
+              data: values,
+              backgroundColor: "#38bdf8"
+            }
+          ]
+        },
+        options: {
+          plugins: { legend: { labels: { color: "#e5e7eb" } } },
+          scales: {
+            x: { ticks: { color: "#9ca3af" }, grid: { color: "rgba(55,65,81,0.2)" } },
+            y: { ticks: { color: "#9ca3af" }, grid: { color: "rgba(55,65,81,0.2)" } }
+          }
+        }
+      });
+    }
+
+    async function loadAnalytics() {
+      try {
+        const res = await fetch("/admin/analytics", { headers: { "x-admin-fingerprint": getDeviceUUID() } });
+        const data = await res.json();
+        if (!res.ok) {
+          setApiStatus("Degraded", "warn");
+          showToast(data.error || "Failed to load analytics");
+          return;
+        }
+
+        setApiStatus("Up", "ok");
+
+        const total = data.total_requests || 0;
+        const scam = data.scam_detections || 0;
+        const safe = data.safe_detections || 0;
+        const ocr = data.ocr_uses || 0;
+        const timestamps = Array.isArray(data.timestamp_log) ? data.timestamp_log : [];
+        const now = Date.now() / 1000;
+        const scansToday = timestamps.filter((t) => now - t < 86400).length;
+
+        setText("total-scans", total);
+        setText("high-risk", scam);
+        setText("scans-today", scansToday);
+        setText("false-positive", "N/A");
+        setText("top-patterns", "Connect pattern feed");
+
+        buildCharts(timestamps, safe, scam);
+
+        const events = timestamps.map((t) => ({
+          time: t * 1000,
+          title: "Scan event",
+          detail: "Scan processed across surfaces.",
+          level: "info"
+        }));
+        timelineEvents = events;
+        renderTimeline(timelineEvents);
+
+        document.getElementById("log-panel").textContent =
+          "Recent scans: " + scansToday + " today · Safe: " + safe + " · Scam: " + scam + " · OCR: " + ocr;
+      } catch (err) {
+        setApiStatus("Down", "warn");
+        showToast("Network error loading analytics.");
+      }
+    }
+
+    async function loadFeedback() {
+      try {
+        const res = await fetch("/admin/feedback", { headers: { "x-admin-fingerprint": getDeviceUUID() } });
+        const data = await res.json();
+        if (!res.ok) return;
+
+        const events =
+          data.map((item) => ({
+            time: item.timestamp * 1000,
+            title: "User feedback",
+            detail: `${item.page || "Unknown page"} · ${item.message}`,
+            level: "warn"
+          })) || [];
+
+        timelineEvents = timelineEvents.concat(events);
+        renderTimeline(timelineEvents);
+      } catch {
+        // ignore
+      }
+    }
+
+    function exportLogs() {
+      const content = document.getElementById("log-panel").textContent || "";
+      const blob = new Blob([content], { type: "text/plain" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "admin-logs.txt";
+      a.click();
+      URL.revokeObjectURL(url);
+      showToast("Logs exported.");
+    }
+
+    document.addEventListener("keydown", (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        document.getElementById("cmd-search").focus();
+        openPalette();
+      }
+      if (e.key === "Escape" && cmdPalette.style.display === "flex") {
+        closePalette();
       }
     });
 
-    const ctx2 = document.getElementById("pieChart");
-    new Chart(ctx2, {
-      type: "pie",
-      data: {
-        labels: ["Safe", "Scam"],
-        datasets: [{
-          data: [data.safe_detections, data.scam_detections],
-          backgroundColor: ["#22c55e", "#ef4444"]
-        }]
+    async function toggleFlag(name) {
+      try {
+        const res = await fetch("/admin/flags", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-admin-fingerprint": getDeviceUUID() },
+          credentials: "include",
+          body: JSON.stringify({ name, value: true }) // backend toggles; value is ignored
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          showToast(data.error || "Flag update failed");
+          return;
+        }
+        showToast(`Flag ${name} updated`);
+        loadLogs();
+      } catch {
+        showToast("Network error updating flag");
       }
+    }
+
+    async function saveEngineConfig() {
+      try {
+        const payload = {
+          sensitivity: parseInt(document.getElementById("sensitivity").value || "65", 10),
+          confidence: parseInt(document.getElementById("confidence").value || "60", 10),
+          model: document.getElementById("model-select").value,
+          pipeline: document.getElementById("pipeline-select").value
+        };
+        const res = await fetch("/admin/engine", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-admin-fingerprint": getDeviceUUID() },
+          credentials: "include",
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          showToast(data.error || "Failed to save engine config");
+          return;
+        }
+        showToast("Engine configuration saved");
+        loadLogs();
+      } catch {
+        showToast("Network error saving engine config");
+      }
+    }
+
+    async function runSimulation() {
+      const scenario = document.getElementById("sim-scenario").value || "default";
+      try {
+        const res = await fetch("/admin/simulate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-admin-fingerprint": getDeviceUUID() },
+          credentials: "include",
+          body: JSON.stringify({ scenario })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          showToast(data.error || "Simulation failed");
+          return;
+        }
+        setText("sim-fp", data.projected_false_positive_increase ?? "—");
+        setText("sim-affected", data.affected_verdicts ?? "—");
+        document.getElementById("sim-note").textContent = data.note || "Simulation complete.";
+      } catch {
+        showToast("Network error running simulation");
+      }
+    }
+
+    function populateAssistant() {
+      const anomalies = timelineEvents.length > 10 ? "Spike detected in scan volume." : "No anomalies.";
+      const recommendations = bannerEl.style.display === "block"
+        ? "Keep crisis mode until metrics stabilize."
+        : "Consider running simulation before adjusting sensitivity.";
+      document.getElementById("ai-anomalies").textContent = anomalies;
+      document.getElementById("ai-reco").textContent = recommendations;
+    }
+
+    async function loadAssistant() {
+      try {
+        const res = await fetch("/admin/assistant", { headers: { "x-admin-fingerprint": getDeviceUUID() } });
+        const data = await res.json();
+        if (!res.ok || data.available === false) {
+          return;
+        }
+        document.getElementById("ai-anomalies").textContent = data.analysis || "Assistant response unavailable.";
+        document.getElementById("ai-reco").textContent = "See assistant analysis above.";
+      } catch {
+        // ignore
+      }
+    }
+
+    async function loadFPQueue() {
+      try {
+        const res = await fetch("/admin/fp", { credentials: "include", headers: { "x-admin-fingerprint": getDeviceUUID() } });
+        const data = await res.json();
+        if (!res.ok) return;
+        const tbody = document.getElementById("fp-table");
+        tbody.innerHTML = "";
+        if (!data.items || !data.items.length) {
+          tbody.innerHTML = '<tr><td colspan="4" class="muted">No appeals yet.</td></tr>';
+          return;
+        }
+        data.items.forEach((item) => {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td>${item.id}</td>
+            <td>${item.reason || ""}</td>
+            <td>${item.user_id || "N/A"}</td>
+            <td>
+              <button onclick="resolveFP(${item.id}, 'approved')">Approve</button>
+              <button class="btn-ghost" onclick="resolveFP(${item.id}, 'rejected')">Reject</button>
+            </td>
+          `;
+          tbody.appendChild(tr);
+        });
+      } catch {
+        // ignore
+      }
+    }
+
+    async function resolveFP(id, status) {
+      try {
+        const res = await fetch("/admin/fp/resolve", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-admin-fingerprint": getDeviceUUID() },
+          credentials: "include",
+          body: JSON.stringify({ id, status })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          showToast(data.error || "Unable to resolve");
+          return;
+        }
+        showToast(`Case ${id} marked ${status}`);
+        loadFPQueue();
+        loadLogs();
+      } catch {
+        showToast("Network error updating case");
+      }
+    }
+
+    const commands = [
+      { label: "Enable maintenance mode", action: "maintenance" },
+      { label: "Restart detection engine", action: "restart" },
+      { label: "Show high-risk users", action: "show-high-risk" },
+      { label: "Flush cache", action: "cache" },
+      { label: "Lockdown system", action: "lockdown" },
+      { label: "Enable crisis mode", action: "crisis" }
+    ];
+
+    function openPalette() {
+      cmdPalette.style.display = "flex";
+      renderCommandList(commands);
+      setTimeout(() => cmdInput.focus(), 10);
+    }
+
+    function closePalette() {
+      cmdPalette.style.display = "none";
+      cmdInput.value = "";
+    }
+
+    function renderCommandList(list) {
+      cmdList.innerHTML = "";
+      list.forEach((cmd) => {
+        const div = document.createElement("div");
+        div.className = "command-item";
+        div.textContent = cmd.label;
+        div.addEventListener("click", () => {
+          closePalette();
+          if (cmd.action === "show-high-risk") {
+            document.getElementById("intelligence").scrollIntoView({ behavior: "smooth" });
+          } else {
+            quickAction(cmd.action);
+          }
+        });
+        cmdList.appendChild(div);
+      });
+    }
+
+    cmdInput?.addEventListener("input", (e) => {
+      const q = e.target.value.toLowerCase();
+      const filtered = commands.filter((c) => c.label.toLowerCase().includes(q));
+      renderCommandList(filtered);
     });
-  }
 
-  loadData();
-</script>
+    async function loadLogs() {
+      try {
+        const res = await fetch("/admin/logs", { credentials: "include", headers: { "x-admin-fingerprint": getDeviceUUID() } });
+        const data = await res.json();
+        if (!res.ok) return;
+        const logs = data.logs || [];
+        const logPanel = document.getElementById("log-panel");
+        logPanel.textContent = logs
+          .slice()
+          .reverse()
+          .map((l) => {
+            const level = (l.level || "INFO").toString().toUpperCase();
+            return `[${formatTime(l.timestamp * 1000)}] ${level} - ${l.event}`;
+          })
+          .join("\n");
+      } catch {
+        // ignore
+      }
+    }
 
-<script>
-async function loadFeedback(){
-  const res = await fetch("/admin/feedback");
-  const data = await res.json();
-
-  if (!res.ok) {
-    return;
-  }
-
-  const container = document.getElementById("feedbackList");
-  container.innerHTML = "";
-
-  data.reverse().forEach(item => {
-    const date = new Date(item.timestamp * 1000).toLocaleString();
-
-    container.innerHTML += `
-      <div class="stat-card">
-        <h2>${date}</h2>
-        <p>
-          <strong>Page:</strong> ${item.page}<br>
-          <strong>Email:</strong> ${item.email || "Not provided"}<br><br>
-          ${item.message}
-        </p>
-      </div>
-    `;
-  })
-}
-
-loadFeedback();
-</script>
-
+    loadAnalytics();
+    loadFeedback();
+    loadHealth();
+    loadLogs();
+    loadAssistant();
+    loadFPQueue();
+    setInterval(loadHealth, 30000);
+    setInterval(loadAnalytics, 45000);
+    setInterval(loadLogs, 45000);
+  </script>
 </body>
 </html>
