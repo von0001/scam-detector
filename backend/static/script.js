@@ -12,6 +12,7 @@ const verdictBadge = document.getElementById("verdict-badge");
 const explanationEl = document.getElementById("explanation");
 const reasonsList = document.getElementById("reasons-list");
 const detailsPre = document.getElementById("details-json");
+const reasonBlock = document.querySelector(".reason-block");
 
 const ocrBtn = document.getElementById("ocr-btn");
 const fileInput = document.getElementById("ocr-file");
@@ -991,6 +992,25 @@ function pullFieldsFromJsonish(text) {
   return cleaned;
 }
 
+function stripReasonsFromText(text) {
+  if (typeof text !== "string") return "";
+  let cleaned = text;
+
+  cleaned = cleaned.replace(/,\s*"reasons"\s*:\s*\[[\s\S]*?\](?=\s*[}\]])/gi, "");
+  cleaned = cleaned.replace(/"reasons"\s*:\s*\[[\s\S]*?\]/gi, "");
+  cleaned = cleaned.replace(/,\s*'reasons'\s*:\s*\[[\s\S]*?\](?=\s*[}\]])/gi, "");
+  cleaned = cleaned.replace(/'reasons'\s*:\s*\[[\s\S]*?\]/gi, "");
+
+  cleaned = cleaned.replace(/\s{2,}/g, " ").trim();
+  cleaned = cleaned.replace(/^["']|["']$/g, "");
+  return cleaned.trim();
+}
+
+function shouldShowReasons(verdict) {
+  const v = (verdict || "").toUpperCase();
+  return v === "SUSPICIOUS" || v === "DANGEROUS";
+}
+
 function normalizeResultForDisplay(rawResult) {
   const base = typeof rawResult === "string" ? { explanation: rawResult } : { ...(rawResult || {}) };
   const explanationText = typeof base.explanation === "string" ? base.explanation.trim() : "";
@@ -1025,7 +1045,8 @@ function normalizeResultForDisplay(rawResult) {
     normalized.reasons = normalized.reasons.map((r) => String(r).trim()).filter(Boolean);
   }
 
-  normalized.explanation = typeof normalized.explanation === "string" ? normalized.explanation.trim() : "";
+  normalized.explanation =
+    typeof normalized.explanation === "string" ? stripReasonsFromText(normalized.explanation) : "";
 
   return normalized;
 }
@@ -1049,6 +1070,10 @@ function renderAnalyzeResult(result, content, mode) {
   verdictBadge.textContent = label;
   setVerdictStyle(cleanResult.verdict);
   explanationEl.textContent = cleanResult.explanation || "";
+
+  if (reasonBlock) {
+    reasonBlock.hidden = !shouldShowReasons(cleanResult.verdict);
+  }
 
   reasonsList.innerHTML = "";
   (cleanResult.reasons || []).forEach((r) => {
@@ -1160,6 +1185,9 @@ async function analyzeQR(file) {
 
     verdictBadge.textContent = label;
     setVerdictStyle(verdict);
+    if (reasonBlock) {
+      reasonBlock.hidden = !shouldShowReasons(verdict);
+    }
 
     explanationEl.textContent = `Detected ${result.count} QR code(s).`;
 
