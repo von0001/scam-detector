@@ -17,6 +17,34 @@ const ocrBtn = document.getElementById("ocr-btn");
 const fileInput = document.getElementById("ocr-file");
 const dropZone = document.getElementById("drop-zone");
 
+// Feedback replay + context capture
+const FEEDBACK_TRACE_KEY = "feedback_trace";
+const FEEDBACK_CONTEXT_KEY = "feedback_context";
+const flowStart = sessionStorage.getItem("feedback_flow_start") || Date.now().toString();
+sessionStorage.setItem("feedback_flow_start", flowStart);
+
+function recordFeedbackEvent(entry) {
+  try {
+    const trace = JSON.parse(sessionStorage.getItem(FEEDBACK_TRACE_KEY) || "[]");
+    trace.push({ ts: Date.now(), ...entry });
+    sessionStorage.setItem(FEEDBACK_TRACE_KEY, JSON.stringify(trace.slice(-12)));
+  } catch (err) {
+    // ignore capture failures
+  }
+}
+
+function storeFeedbackContext(ctx) {
+  try {
+    const base = JSON.parse(sessionStorage.getItem(FEEDBACK_CONTEXT_KEY) || "{}");
+    sessionStorage.setItem(
+      FEEDBACK_CONTEXT_KEY,
+      JSON.stringify({ ...base, ...ctx, captured_at: Date.now() })
+    );
+  } catch (err) {
+    // ignore capture failures
+  }
+}
+
 // Auth / account elements (shared)
 const accountBtn = document.getElementById("account-button");
 const planPill = document.getElementById("plan-pill");
@@ -804,6 +832,7 @@ async function analyzeContent() {
 
   statusEl.textContent = "Running scam + manipulation checks...";
   analyzeBtn.disabled = true;
+  recordFeedbackEvent({ event: "analyze_start", mode, snippet: content.slice(0, 160) });
 
   try {
     const response = await fetch(`${API_BASE_URL}/analyze`, {
@@ -848,11 +877,27 @@ async function analyzeContent() {
       detailsPre.hidden = true;
     }
 
+    storeFeedbackContext({
+      mode,
+      risk_score: result.score,
+      verdict: result.verdict,
+      risk_label: label,
+      page: window.location.pathname,
+      snippet: content.slice(0, 180),
+    });
+    recordFeedbackEvent({
+      event: "analyze_result",
+      mode,
+      verdict: result.verdict,
+      score: result.score,
+    });
+
     if (resultSection) resultSection.hidden = false;
     statusEl.textContent = "";
     loadSession();
   } catch (err) {
     statusEl.textContent = "Network error. Try again in a moment.";
+    recordFeedbackEvent({ event: "analyze_error", mode });
   } finally {
     analyzeBtn.disabled = false;
   }
@@ -865,6 +910,7 @@ async function analyzeQR(file) {
 
   statusEl.textContent = "Scanning QR code and checking destination safety...";
   analyzeBtn.disabled = true;
+  recordFeedbackEvent({ event: "qr_start", mode: "qr" });
 
   const form = new FormData();
   form.append("image", file);
@@ -915,11 +961,26 @@ async function analyzeQR(file) {
       detailsPre.hidden = true;
     }
 
+    storeFeedbackContext({
+      mode: "qr",
+      risk_score: score,
+      verdict,
+      risk_label: label,
+      page: window.location.pathname,
+    });
+    recordFeedbackEvent({
+      event: "qr_result",
+      mode: "qr",
+      verdict,
+      score,
+    });
+
     if (resultSection) resultSection.hidden = false;
     statusEl.textContent = "";
     loadSession();
   } catch (err) {
     statusEl.textContent = "Failed to analyze QR. Try a clearer image.";
+    recordFeedbackEvent({ event: "qr_error", mode: "qr" });
   } finally {
     analyzeBtn.disabled = false;
   }

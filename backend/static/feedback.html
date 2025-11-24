@@ -1,202 +1,501 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Feedback – ScamDetector</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<link rel="stylesheet" href="/static/style.css"/>
-
-<style>
-  body {
-    margin: 0;
-    padding: 40px 20px;
-    background: radial-gradient(circle at top left, #0b1020, #02040a);
-    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto;
-    display: flex;
-    justify-content: center;
-    color: #e5e7eb;
-  }
-
-  .feedback-container {
-    max-width: 720px;
-    width: 100%;
-    margin: 0 auto;
-    background: radial-gradient(circle at top left, #020617, #020617 50%, #020617 100%);
-    padding: 34px 32px 30px;
-    border-radius: 20px;
-    box-shadow:
-      0 26px 70px rgba(0,0,0,0.9),
-      0 0 0 1px rgba(37,99,235,0.6);
-    position: relative;
-    overflow: hidden;
-  }
-
-  .feedback-container::before {
-    content: "";
-    position: absolute;
-    inset: -40%;
-    background:
-      radial-gradient(circle at 0% -20%, rgba(56,189,248,0.16), transparent 55%),
-      radial-gradient(circle at 120% 0%, rgba(37,99,235,0.2), transparent 60%);
-    opacity: 0.8;
-    pointer-events: none;
-  }
-
-  .feedback-container > * {
-    position: relative;
-    z-index: 1;
-  }
-
-  .hero-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 12px;
-    border-radius: 999px;
-    font-size: 0.72rem;
-    text-transform: uppercase;
-    letter-spacing: 0.16em;
-    background: rgba(15,23,42,0.9);
-    border: 1px solid rgba(37,99,235,0.7);
-    color: #93c5fd;
-    margin-bottom: 10px;
-  }
-
-  .feedback-container h1 {
-    font-size: 26px;
-    text-align: left;
-    margin-bottom: 4px;
-  }
-
-  .feedback-container p.top-sub {
-    text-align:left;
-    font-size: 14px;
-    color: #94a3b8;
-    margin-bottom: 14px;
-  }
-
-  form label {
-    display:block;
-    margin-top:18px;
-    font-weight:600;
-    font-size: 14px;
-  }
-
-  input, textarea {
-    width:100%;
-    margin-top:6px;
-    padding:12px;
-    background:#0f172a;
-    border:1px solid #272f4f;
-    color:white;
-    border-radius:10px;
-    outline:none;
-    font-size: 14px;
-  }
-
-  input:focus,
-  textarea:focus {
-    border-color:#60a5fa;
-    box-shadow:
-      0 0 0 1px rgba(96,165,250,0.5),
-      0 10px 30px rgba(15,23,42,0.9);
-  }
-
-  textarea { min-height:120px; }
-
-  button {
-    margin-top:24px;
-    width:100%;
-    padding:14px;
-    background:linear-gradient(135deg,#4c7dff,#2563eb);
-    color:white;
-    border:none;
-    border-radius:999px;
-    font-size:0.95rem;
-    cursor:pointer;
-    font-weight:600;
-    letter-spacing:0.06em;
-    text-transform: uppercase;
-    box-shadow:
-      0 16px 40px rgba(37,99,235,0.6),
-      0 0 0 1px rgba(191,219,254,0.4);
-  }
-
-  button:hover {
-    opacity:0.95;
-    transform: translateY(-1px);
-  }
-
-  .status {
-    margin-top:15px;
-    text-align:center;
-    font-size:13px;
-    color:#38bdf8;
-    min-height: 18px;
-  }
-
-  .footer-hint {
-    margin-top: 16px;
-    font-size: 12px;
-    color: #6b7280;
-    text-align: left;
-  }
-</style>
+  <meta charset="UTF-8" />
+  <title>Feedback Control - ScamDetector</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="/static/style.css" />
+  <style>
+    @import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap");
+    :root {
+      --bg: #050915;
+      --panel: #0b1022;
+      --panel-2: #0f142a;
+      --muted: #9ca3af;
+      --text: #e5e7eb;
+      --accent: #38bdf8;
+      --accent-2: #a855f7;
+      --success: #22c55e;
+      --warn: #f59e0b;
+      --danger: #ef4444;
+      --border: rgba(255, 255, 255, 0.08);
+      --shadow: 0 25px 60px rgba(0, 0, 0, 0.55);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 28px 16px 42px;
+      background:
+        radial-gradient(circle at 18% 18%, rgba(56,189,248,0.14), transparent 34%),
+        radial-gradient(circle at 80% 0%, rgba(168,85,247,0.13), transparent 40%),
+        linear-gradient(135deg, #030712, #050915 45%, #020617);
+      font-family: "Space Grotesk", "Inter", system-ui, -apple-system, sans-serif;
+      color: var(--text);
+    }
+    .layout {
+      max-width: 1080px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 1fr 1.05fr;
+      gap: 18px;
+    }
+    @media (max-width: 900px) {
+      .layout { grid-template-columns: 1fr; }
+    }
+    .intro, .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 20px 20px 22px;
+      box-shadow: var(--shadow);
+      position: relative;
+      overflow: hidden;
+    }
+    .intro::before, .panel::before {
+      content: "";
+      position: absolute;
+      inset: -20% -30%;
+      background: radial-gradient(circle at 20% 15%, rgba(56,189,248,0.12), transparent 40%);
+      pointer-events: none;
+    }
+    .intro h1 {
+      margin: 10px 0 8px;
+      font-size: 28px;
+      letter-spacing: -0.02em;
+    }
+    .intro p {
+      margin: 0 0 12px;
+      color: var(--muted);
+      max-width: 600px;
+      line-height: 1.5;
+    }
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+      font-size: 11px;
+      background: rgba(56, 189, 248, 0.08);
+    }
+    .pill-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 12px 0 6px;
+    }
+    .pill {
+      border-radius: 12px;
+      padding: 8px 10px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border);
+      font-size: 13px;
+      color: var(--text);
+    }
+    .replay-card {
+      margin-top: 12px;
+      padding: 14px;
+      border-radius: 14px;
+      background: var(--panel-2);
+      border: 1px dashed rgba(56, 189, 248, 0.3);
+    }
+    .replay-card h3 {
+      margin: 0 0 6px;
+      font-size: 15px;
+      letter-spacing: -0.01em;
+    }
+    .replay-list {
+      margin: 0;
+      padding-left: 16px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.4;
+    }
+    form { margin: 0; }
+    .panel h2 {
+      margin: 0 0 6px;
+      font-size: 22px;
+      letter-spacing: -0.02em;
+    }
+    .panel .subtitle {
+      margin: 0 0 14px;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-top: 12px;
+    }
+    .field label {
+      font-weight: 600;
+      font-size: 14px;
+      letter-spacing: -0.01em;
+    }
+    .field small { color: var(--muted); }
+    input[type="text"],
+    input[type="email"],
+    textarea {
+      width: 100%;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px;
+      color: var(--text);
+      font-size: 14px;
+      outline: none;
+    }
+    textarea { min-height: 110px; resize: vertical; }
+    input:focus, textarea:focus {
+      border-color: rgba(56, 189, 248, 0.6);
+      box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.25);
+    }
+    .expectation {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .chip {
+      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.04);
+      padding: 8px 12px;
+      border-radius: 10px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      color: var(--text);
+      transition: border-color 0.2s ease, transform 0.2s ease;
+    }
+    .chip input { display: none; }
+    .chip:hover { border-color: rgba(56, 189, 248, 0.4); transform: translateY(-1px); }
+    .chip.active { border-color: rgba(56, 189, 248, 0.8); background: rgba(56, 189, 248, 0.08); }
+    .slider-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    input[type="range"] {
+      flex: 1;
+      accent-color: var(--accent);
+    }
+    .tags {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 6px;
+    }
+    .tag {
+      border: 1px solid var(--border);
+      padding: 8px 10px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.04);
+      cursor: pointer;
+      font-size: 12px;
+    }
+    .tag input { display: none; }
+    .tag.active {
+      border-color: rgba(168, 85, 247, 0.7);
+      background: rgba(168, 85, 247, 0.1);
+      color: #f3e8ff;
+    }
+    .status-track {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .status-step {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(255, 255, 255, 0.03);
+    }
+    .status-step.done { border-color: rgba(56, 189, 248, 0.7); color: var(--accent); }
+    .status-step.active { border-color: rgba(245, 158, 11, 0.7); color: var(--warn); }
+    .impact {
+      margin-top: 12px;
+      padding: 10px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, rgba(56, 189, 248, 0.12), rgba(168, 85, 247, 0.12));
+      border: 1px solid rgba(56, 189, 248, 0.35);
+      font-size: 14px;
+    }
+    button[type="submit"] {
+      margin-top: 14px;
+      width: 100%;
+      padding: 14px;
+      background: linear-gradient(135deg, #38bdf8, #0ea5e9);
+      color: white;
+      font-weight: 700;
+      border: none;
+      border-radius: 12px;
+      cursor: pointer;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      box-shadow: 0 18px 40px rgba(14, 165, 233, 0.4);
+    }
+    button[type="submit"]:hover { opacity: 0.95; transform: translateY(-1px); }
+    .status-message { margin-top: 10px; font-size: 13px; min-height: 18px; color: var(--accent); }
+    .auto-response {
+      margin-top: 10px;
+      font-size: 13px;
+      color: var(--success);
+    }
+    .heat {
+      margin-top: 8px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+  </style>
 </head>
 
 <body>
+  <div class="layout">
+    <section class="intro">
+      <div class="eyebrow">Feedback Intelligence</div>
+      <h1>Turn your experience into signal</h1>
+      <p>
+        Every submission is auto-tagged, clustered, and pushed through our priority engine.
+        We replay what happened, flag abuse, and forecast impact so fixes move fast.
+      </p>
+      <div class="pill-row">
+        <div class="pill">Risk-based tagging</div>
+        <div class="pill">Replay mode on</div>
+        <div class="pill">Priority scoring live</div>
+      </div>
+      <div class="replay-card" id="replayCard">
+        <h3>Context captured (no extra work)</h3>
+        <ul class="replay-list" id="replayList">
+          <li>Detecting last scan and browser context...</li>
+        </ul>
+      </div>
+    </section>
 
-<div class="feedback-container">
-  <div class="hero-pill">
-    <span>🧠</span>
-    <span>Help Train the Shield</span>
+    <section class="panel">
+      <h2>Guided feedback</h2>
+      <p class="subtitle">Help us fix the right things first. Structured answers route straight into our improvement engine.</p>
+
+      <form id="feedbackForm">
+        <div class="field">
+          <label for="email">Email (optional for updates)</label>
+          <input type="email" id="email" placeholder="you@example.com" />
+        </div>
+
+        <div class="field">
+          <label for="what">What were you trying to do?</label>
+          <input type="text" id="what" placeholder="Scan a link, verify a DM, check a QR code..." />
+        </div>
+
+        <div class="field">
+          <label>Did the system meet your expectations?</label>
+          <div class="expectation" id="expectationRow">
+            <label class="chip"><input type="radio" name="expectation" value="yes" />Yes</label>
+            <label class="chip"><input type="radio" name="expectation" value="somewhat" />Somewhat</label>
+            <label class="chip"><input type="radio" name="expectation" value="no" />No</label>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="confusion">What went wrong or felt confusing?</label>
+          <textarea id="confusion" required placeholder="What tripped you up? What felt off?"></textarea>
+        </div>
+
+        <div class="field">
+          <label>How frustrating was it? (1-10)</label>
+          <div class="slider-row">
+            <input type="range" id="frustration" min="1" max="10" value="5" />
+            <span id="frustrationValue">5</span>
+          </div>
+        </div>
+
+        <div class="field">
+          <label for="perfect">What would make this perfect?</label>
+          <textarea id="perfect" placeholder="Describe the fix, UX tweak, or signal you expected."></textarea>
+        </div>
+
+        <div class="field">
+          <label>Select any tags that fit (optional)</label>
+          <div class="tags" id="tagsRow">
+            <label class="tag"><input type="checkbox" value="Bug" />Bug</label>
+            <label class="tag"><input type="checkbox" value="False Positive" />False Positive</label>
+            <label class="tag"><input type="checkbox" value="False Negative" />False Negative</label>
+            <label class="tag"><input type="checkbox" value="UI/UX Issue" />UI/UX Issue</label>
+            <label class="tag"><input type="checkbox" value="Performance Issue" />Performance Issue</label>
+            <label class="tag"><input type="checkbox" value="Feature Request" />Feature Request</label>
+            <label class="tag"><input type="checkbox" value="Confusing Result" />Confusing Result</label>
+          </div>
+        </div>
+
+        <div class="impact" id="impactBox">
+          <div id="impactMessage">Your feedback helps improve scam protection accuracy. Priority and impact will populate after submission.</div>
+          <div class="status-track" id="statusTrack">
+            <div class="status-step done">Submitted</div>
+            <div class="status-step">Under Review</div>
+            <div class="status-step">Improved</div>
+          </div>
+        </div>
+
+        <button type="submit">Submit to priority queue</button>
+        <div id="status" class="status-message"></div>
+        <div id="autoResponse" class="auto-response"></div>
+        <div class="heat" id="abuseHint"></div>
+      </form>
+    </section>
   </div>
-  <h1>Submit Feedback</h1>
-  <p class="top-sub">
-    Bug, false positive, or a scan that felt off? Send it here — real humans review this and use it to harden ScamDetector.
-  </p>
 
-  <form id="feedbackForm">
-    <label>Your Email</label>
-    <input type="email" id="email" required placeholder="you@example.com">
+  <script>
+    const startTime = performance.now();
+    const flowStartRaw = sessionStorage.getItem("feedback_flow_start") || Date.now().toString();
+    sessionStorage.setItem("feedback_flow_start", flowStartRaw);
 
-    <label>Feedback Message</label>
-    <textarea id="message" required placeholder="Describe the issue, what you scanned, and what felt wrong or missing..."></textarea>
+    const expectationRow = document.getElementById("expectationRow");
+    const tagsRow = document.getElementById("tagsRow");
+    const replayList = document.getElementById("replayList");
+    const statusTrack = document.getElementById("statusTrack");
+    const statusEl = document.getElementById("status");
+    const autoResponseEl = document.getElementById("autoResponse");
+    const abuseHint = document.getElementById("abuseHint");
+    const frustration = document.getElementById("frustration");
+    const frustrationValue = document.getElementById("frustrationValue");
 
-    <button type="submit">Send Feedback</button>
-    <div id="status" class="status"></div>
-  </form>
+    function setActiveChips(row) {
+      row.querySelectorAll(".chip, .tag").forEach((chip) => {
+        chip.addEventListener("click", () => chip.classList.toggle("active"));
+      });
+    }
+    setActiveChips(expectationRow);
+    setActiveChips(tagsRow);
 
-  <p class="footer-hint">
-    We may use anonymized feedback to improve detection patterns, but we do not attach it to your identity or sell it.
-  </p>
-</div>
+    frustration.addEventListener("input", (e) => {
+      frustrationValue.textContent = e.target.value;
+    });
 
-<script>
-document.getElementById("feedbackForm").addEventListener("submit", async (e) => {
-  e.preventDefault();
+    function parseBrowser(ua) {
+      if (/edg/i.test(ua)) return "Edge";
+      if (/chrome/i.test(ua)) return "Chrome";
+      if (/safari/i.test(ua)) return "Safari";
+      if (/firefox/i.test(ua)) return "Firefox";
+      return "Unknown";
+    }
 
-  const status = document.getElementById("status");
-  status.textContent = "Sending feedback…";
+    function loadReplay() {
+      const trace = JSON.parse(sessionStorage.getItem("feedback_trace") || "[]");
+      const context = JSON.parse(sessionStorage.getItem("feedback_context") || "{}");
+      replayList.innerHTML = "";
+      if (trace.length === 0 && !context.verdict) {
+        replayList.innerHTML = "<li>No recent scans found. Submit anyway - context will still be captured.</li>";
+        return context;
+      }
+      if (context.verdict) {
+        const li = document.createElement("li");
+        li.textContent = `Last verdict: ${context.verdict || "N/A"} (score ${context.risk_score ?? "?"}) in ${context.mode || "unknown"} mode.`;
+        replayList.appendChild(li);
+      }
+      trace.slice(-3).forEach((item) => {
+        const li = document.createElement("li");
+        li.textContent = `${new Date(item.ts).toLocaleTimeString()} - ${item.event} (${item.mode || "n/a"})`;
+        replayList.appendChild(li);
+      });
+      return context;
+    }
 
-  const res = await fetch("/api/feedback", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      email: document.getElementById("email").value,
-      message: document.getElementById("message").value,
-      page: window.location.pathname
-    })
-  });
+    const cachedContext = loadReplay();
 
-  if(res.ok){
-    status.textContent = "✅ Feedback submitted — thanks for helping protect the next person.";
-    e.target.reset();
-  } else {
-    status.textContent = "❌ Failed to submit feedback. Try again in a moment.";
-  }
-});
-</script>
+    function updateStatusTrack(stage) {
+      const steps = statusTrack.querySelectorAll(".status-step");
+      steps.forEach((step, idx) => {
+        step.classList.remove("active", "done");
+        if (idx === 0 || (stage > 0 && idx === 1)) step.classList.add("done");
+        if (stage === 1 && idx === 1) step.classList.add("active");
+        if (stage >= 2 && idx === 2) step.classList.add("done");
+      });
+    }
 
+    document.getElementById("feedbackForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      statusEl.textContent = "Sending structured feedback...";
+      autoResponseEl.textContent = "";
+      abuseHint.textContent = "";
+      updateStatusTrack(0);
+
+      const expectation = document.querySelector('input[name="expectation"]:checked');
+      const tags = Array.from(tagsRow.querySelectorAll('input[type="checkbox"]:checked')).map((c) => c.value);
+      const trace = JSON.parse(sessionStorage.getItem("feedback_trace") || "[]");
+
+      const payload = {
+        email: document.getElementById("email").value || null,
+        what: document.getElementById("what").value,
+        expectation: expectation ? expectation.value : "unknown",
+        confusion: document.getElementById("confusion").value,
+        frustration: parseInt(document.getElementById("frustration").value || "5", 10),
+        perfect: document.getElementById("perfect").value,
+        page: window.location.pathname,
+        tags,
+        context: {
+          page: cachedContext.page || window.location.pathname,
+          mode: cachedContext.mode || "unknown",
+          risk_score: cachedContext.risk_score,
+          verdict: cachedContext.verdict,
+          risk_label: cachedContext.risk_label,
+          time_on_page: Math.round((performance.now() - startTime) / 1000),
+          device: /Mobi/i.test(navigator.userAgent) ? "mobile" : "desktop",
+          browser: parseBrowser(navigator.userAgent),
+          time_on_flow: Math.round((Date.now() - parseInt(flowStartRaw, 10)) / 1000),
+        },
+        replay: {
+          trace,
+          last_scan: cachedContext,
+        },
+      };
+
+      try {
+        const res = await fetch("/api/feedback", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          statusEl.textContent = data.error || "Failed to submit feedback.";
+          return;
+        }
+
+        statusEl.textContent = "Feedback captured. Routing to priority engine...";
+        updateStatusTrack(1);
+        setTimeout(() => updateStatusTrack(2), 900);
+
+        if (data.score_impact_prediction) {
+          document.getElementById("impactMessage").textContent =
+            `Score impact prediction: +${data.score_impact_prediction} trust points if fixed.`;
+        }
+        if (Array.isArray(data.abuse_flags) && data.abuse_flags.length) {
+          abuseHint.textContent = "Spam/abuse filters flagged: " + data.abuse_flags.join(", ");
+        }
+        if (data.auto_response) {
+          autoResponseEl.textContent = data.auto_response;
+        } else {
+          autoResponseEl.textContent = "Thanks. We will notify when this influences an update.";
+        }
+        e.target.reset();
+        frustrationValue.textContent = "5";
+        Array.from(tagsRow.querySelectorAll(".tag")).forEach((t) => t.classList.remove("active"));
+        Array.from(expectationRow.querySelectorAll(".chip")).forEach((c) => c.classList.remove("active"));
+      } catch (err) {
+        statusEl.textContent = "Network error. Try again shortly.";
+      }
+    });
+  </script>
 </body>
 </html>

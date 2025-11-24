@@ -436,6 +436,13 @@
       grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
       gap: 12px;
     }
+
+    .status-message {
+      color: var(--accent);
+      font-size: 13px;
+      min-height: 16px;
+      margin-top: 8px;
+    }
   </style>
 </head>
 <body>
@@ -455,6 +462,7 @@
         <a href="#engine">Engine Control</a>
         <a href="#logs">Logs & Debug</a>
         <a href="#flags">Feature Flags</a>
+        <a href="#feedback-intel">Feedback Intel</a>
         <a href="#analytics">Analytics</a>
         <a href="#settings">Settings</a>
       </div>
@@ -820,6 +828,112 @@
         </div>
       </section>
 
+      <section id="feedback-intel" class="section">
+        <div class="section-header">
+          <h2>Feedback Intelligence Dashboard</h2>
+          <div class="badges-row">
+            <span class="tag">Clustering</span>
+            <span class="tag warn">High Frustration</span>
+            <span class="tag">Priority Engine</span>
+          </div>
+        </div>
+        <div class="cards">
+          <div class="card">
+            <h3>Total Feedback</h3>
+            <div class="value" id="feedback-total">0</div>
+            <div class="muted">All structured submissions.</div>
+          </div>
+          <div class="card">
+            <h3>Avg Frustration</h3>
+            <div class="value" id="feedback-frustration">0</div>
+            <div class="muted">User-reported intensity.</div>
+          </div>
+          <div class="card">
+            <h3>Spam/Toxic Flags</h3>
+            <div class="value" id="feedback-abuse">0</div>
+            <div class="muted">Filtered by abuse layer.</div>
+          </div>
+          <div class="card">
+            <h3>AI Suggestions</h3>
+            <div class="value" id="feedback-suggestion-count">0</div>
+            <div class="muted">Generated daily.</div>
+          </div>
+        </div>
+
+        <div class="grid-two">
+          <div class="card">
+            <div class="section-header">
+              <h3>Priority Queue (frustration x frequency x risk)</h3>
+              <div class="badges-row">
+                <button onclick="refreshFeedbackIntel()">Refresh</button>
+              </div>
+            </div>
+            <div id="feedback-priority" class="timeline"></div>
+          </div>
+          <div class="card">
+            <div class="section-header">
+              <h3>Clusters</h3>
+              <div class="badges-row">
+                <span class="tag">Similarity</span>
+                <span class="tag warn">Repeats</span>
+              </div>
+            </div>
+            <div id="feedback-clusters" class="timeline"></div>
+          </div>
+        </div>
+
+        <div class="grid-two">
+          <div class="card">
+            <h3>Heatmap & Trends</h3>
+            <div class="muted">Modes with the most complaints</div>
+            <div id="feedback-heatmap"></div>
+            <div class="muted" style="margin-top:8px;">Weekly / Monthly</div>
+            <div id="feedback-trends" class="badges-row"></div>
+          </div>
+          <div class="card">
+            <h3>AI Suggestions & Auto-responses</h3>
+            <ul id="feedback-suggestions" class="replay-list"></ul>
+            <div class="muted" id="feedback-replay-hint">
+              Feedback replay mode: we capture last scans, verdicts, device, and time-on-page with each submission.
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="section-header">
+            <h3>Admin Response Layer</h3>
+            <div class="badges-row">
+              <span class="tag">Respond</span>
+              <span class="tag warn">Status</span>
+              <span class="tag">Changelog</span>
+            </div>
+          </div>
+          <div class="controls-row">
+            <input type="text" id="feedback-active-id" placeholder="Select a feedback item above" />
+            <select id="feedback-status">
+              <option value="under_review">Under Review</option>
+              <option value="in_progress">In Progress</option>
+              <option value="fixed">Fixed</option>
+              <option value="improved">Improved</option>
+              <option value="not_reproducible">Not Reproducible</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Reply to user</label>
+            <textarea id="feedback-response" rows="3" placeholder="Short response to user"></textarea>
+          </div>
+          <div class="field">
+            <label>Developer notes / changelog</label>
+            <textarea id="feedback-notes" rows="3" placeholder="Root cause, fix path, or internal note"></textarea>
+            <input type="text" id="feedback-changelog" placeholder="Optional changelog link" />
+          </div>
+          <div class="actions" style="margin-top:10px;">
+            <button onclick="submitFeedbackResponse()">Push Update</button>
+          </div>
+          <div id="feedback-response-status" class="status-message"></div>
+        </div>
+      </section>
+
       <section id="analytics" class="section">
         <div class="section-header">
           <h2>Analytics & Reporting</h2>
@@ -1121,7 +1235,7 @@
           data.map((item) => ({
             time: item.timestamp * 1000,
             title: "User feedback",
-            detail: `${item.page || "Unknown page"} · ${item.message}`,
+            detail: `${item.page || "Unknown page"} - ${item.message}`,
             level: "warn"
           })) || [];
 
@@ -1129,6 +1243,172 @@
         renderTimeline(timelineEvents);
       } catch {
         // ignore
+      }
+    }
+
+    let activeFeedbackId = "";
+
+    function setActiveFeedback(id) {
+      activeFeedbackId = id;
+      const input = document.getElementById("feedback-active-id");
+      if (input) input.value = id;
+      const statusBox = document.getElementById("feedback-response-status");
+      if (statusBox) statusBox.textContent = `Responding to ${id}`;
+    }
+
+    function renderFeedbackIntel(data) {
+      setText("feedback-total", data.total ?? 0);
+      setText("feedback-frustration", data.frustration_avg ?? 0);
+      setText("feedback-abuse", data.abuse_filtered ?? 0);
+      setText("feedback-suggestion-count", (data.suggestions || []).length);
+
+      const priorityEl = document.getElementById("feedback-priority");
+      priorityEl.innerHTML = "";
+      const priority = data.high_priority || [];
+      if (!priority.length) {
+        priorityEl.innerHTML = '<div class="muted">No feedback yet.</div>';
+      } else {
+        priority.slice(0, 10).forEach((item) => {
+          const div = document.createElement("div");
+          div.className = "event";
+          const tagList = []
+            .concat(item.tags?.auto || [])
+            .concat(item.tags?.user || [])
+            .concat(item.tags?.admin || [])
+            .slice(0, 4);
+          const changelog = (item.linked_changelog || [])[0];
+          const linkHtml = changelog
+            ? `<div class="muted">Changelog: <a href="${changelog}" target="_blank">${changelog}</a></div>`
+            : "";
+          const impactHtml =
+            item.score_impact_prediction != null
+              ? `<div class="muted">Impact +${item.score_impact_prediction}</div>`
+              : "";
+          const replayHtml =
+            item.replay && Array.isArray(item.replay.trace)
+              ? `<div class="muted">Replay: ${item.replay.trace.length} events (${item.context?.mode || "n/a"})</div>`
+              : "";
+          const abuseHtml =
+            item.abuse_flags && item.abuse_flags.length
+              ? `<div class="muted">Abuse flags: ${item.abuse_flags.join(", ")}</div>`
+              : "";
+          div.innerHTML = `
+            <div class="dot"></div>
+            <div class="body">
+              <strong>${item.verdict || item.context?.verdict || "Feedback"} - P${Math.round(item.priority || 0)}</strong>
+              <div class="muted">Frustration ${item.frustration || 0}/10, Risk ${item.risk_impact || item.context?.risk_score || "?"}</div>
+              ${replayHtml}
+              <div class="muted">${(item.message || item.combined_text || "").slice(0, 140)}</div>
+              ${abuseHtml}
+              ${linkHtml}
+              ${impactHtml}
+              <div class="badges-row" style="margin-top:6px;">${tagList.map((t) => `<span class="tag">${t}</span>`).join("")}</div>
+              <button class="btn-ghost" onclick="setActiveFeedback('${item.id}')">Respond</button>
+            </div>
+          `;
+          priorityEl.appendChild(div);
+        });
+      }
+
+      const clusterEl = document.getElementById("feedback-clusters");
+      clusterEl.innerHTML = "";
+      const clusters = data.clusters || [];
+      if (!clusters.length) {
+        clusterEl.innerHTML = '<div class="muted">No clusters yet.</div>';
+      } else {
+        clusters.slice(0, 8).forEach((c) => {
+          const div = document.createElement("div");
+          div.className = "event";
+          div.innerHTML = `
+            <div class="dot" style="background: var(--warn);"></div>
+            <div class="body">
+              <strong>${c.count}x similar reports</strong>
+              <div class="muted">Frustration avg ${c.frustration_avg} - Peak P${c.priority_peak}</div>
+              <div class="muted">${(c.sample || "").slice(0, 140)}</div>
+              <div class="badges-row" style="margin-top:6px;">${(c.top_tags || []).map((t) => `<span class="tag">${t}</span>`).join("")}</div>
+            </div>
+          `;
+          clusterEl.appendChild(div);
+        });
+      }
+
+      const heatmapEl = document.getElementById("feedback-heatmap");
+      heatmapEl.innerHTML = "";
+      const heat = data.heatmap || {};
+      const modes = heat.modes || [];
+      const tags = heat.tags || [];
+      const pages = heat.pages || [];
+      const buildList = (items, label) =>
+        `<div class="muted" style="margin-top:6px;">${label}: ${items
+          .map((i) => `${i.label} (${i.count})`)
+          .join(", ")}</div>`;
+      heatmapEl.innerHTML =
+        buildList(modes, "Modes") + buildList(tags, "Tags") + buildList(pages, "Pages");
+
+      const trendsEl = document.getElementById("feedback-trends");
+      trendsEl.innerHTML = `
+        <span class="tag">Weekly: ${data.trends?.weekly_count ?? 0}</span>
+        <span class="tag">Monthly: ${data.trends?.monthly_count ?? 0}</span>
+      `;
+
+      const suggestionEl = document.getElementById("feedback-suggestions");
+      suggestionEl.innerHTML = "";
+      (data.suggestions || []).forEach((s) => {
+        const li = document.createElement("li");
+        li.textContent = s;
+        suggestionEl.appendChild(li);
+      });
+    }
+
+    async function refreshFeedbackIntel() {
+      try {
+        const res = await fetch("/admin/feedback/intel", {
+          headers: { "x-admin-fingerprint": getDeviceUUID() },
+          credentials: "include"
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          showToast(data.error || "Failed to load feedback intel");
+          return;
+        }
+        renderFeedbackIntel(data);
+      } catch (err) {
+        showToast("Network error loading feedback intel");
+      }
+    }
+
+    async function submitFeedbackResponse() {
+      const id = (document.getElementById("feedback-active-id").value || "").trim();
+      if (!id) {
+        document.getElementById("feedback-response-status").textContent = "Select a feedback item first.";
+        return;
+      }
+      const payload = {
+        id,
+        status: document.getElementById("feedback-status").value,
+        response: document.getElementById("feedback-response").value,
+        developer_notes: document.getElementById("feedback-notes").value,
+        changelog_links: (document.getElementById("feedback-changelog").value || "").trim()
+          ? [document.getElementById("feedback-changelog").value.trim()]
+          : [],
+        tags: []
+      };
+      try {
+        const res = await fetch("/admin/feedback/respond", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-admin-fingerprint": getDeviceUUID() },
+          credentials: "include",
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          document.getElementById("feedback-response-status").textContent = data.error || "Update failed.";
+          return;
+        }
+        document.getElementById("feedback-response-status").textContent = "Updated.";
+        refreshFeedbackIntel();
+      } catch {
+        document.getElementById("feedback-response-status").textContent = "Network error updating feedback.";
       }
     }
 
@@ -1366,9 +1646,11 @@
     loadLogs();
     loadAssistant();
     loadFPQueue();
+    refreshFeedbackIntel();
     setInterval(loadHealth, 30000);
     setInterval(loadAnalytics, 45000);
     setInterval(loadLogs, 45000);
+    setInterval(refreshFeedbackIntel, 60000);
   </script>
 </body>
 </html>

@@ -26,7 +26,12 @@ from backend.manipulation.profiler import analyze_manipulation
 from backend.qr_scanner.qr_engine import process_qr_image
 
 from backend.analytics.analytics import record_event, get_analytics
-from backend.analytics.feedback import add_feedback, load_feedback
+from backend.analytics.feedback import (
+    add_feedback,
+    get_feedback_intel,
+    load_feedback,
+    update_feedback_response,
+)
 from backend.users import (
     create_user,
     verify_user_credentials,
@@ -155,6 +160,31 @@ class FeedbackRequest(BaseModel):
     email: Optional[EmailStr] = None
     message: str
     page: Optional[str] = None
+
+
+class StructuredFeedbackRequest(BaseModel):
+    email: Optional[EmailStr] = None
+    what: Optional[str] = ""
+    expectation: Optional[Literal["yes", "somewhat", "no", "unknown"]] = "unknown"
+    confusion: Optional[str] = ""
+    frustration: int = Field(5, ge=1, le=10)
+    perfect: Optional[str] = ""
+    message: Optional[str] = None
+    page: Optional[str] = None
+    tags: List[str] = Field(default_factory=list)
+    context: dict = Field(default_factory=dict)
+    replay: Optional[dict] = Field(default_factory=dict)
+
+
+class FeedbackAdminUpdateRequest(BaseModel):
+    id: str
+    status: Optional[
+        Literal["submitted", "under_review", "in_progress", "fixed", "improved", "not_reproducible"]
+    ] = None
+    response: Optional[str] = None
+    developer_notes: Optional[str] = None
+    tags: List[str] = Field(default_factory=list)
+    changelog_links: List[str] = Field(default_factory=list)
 
 
 class UserSignupRequest(BaseModel):
@@ -1589,25 +1619,85 @@ def admin_feedback(request: Request):
     return load_feedback()
 
 
+@app.get("/admin/feedback/intel")
+def admin_feedback_intel(request: Request):
+    if not _require_admin(request):
+        return JSONResponse({"error": "Unauthorized."}, status_code=401)
+    return get_feedback_intel()
+
+
+@app.post("/admin/feedback/respond")
+def admin_feedback_respond(request: Request, body: FeedbackAdminUpdateRequest):
+    if not _require_admin(request):
+        return JSONResponse({"error": "Unauthorized."}, status_code=401)
+
+    updated = update_feedback_response(
+        feedback_id=body.id,
+        status=body.status,
+        admin_response=body.response,
+        developer_notes=body.developer_notes,
+        tags=body.tags,
+        changelog_links=body.changelog_links,
+    )
+    if not updated:
+        return JSONResponse({"error": "Feedback not found."}, status_code=404)
+    return updated
+
+
 # ---------------------------------------------------------
 # Feedback API (public)
 # ---------------------------------------------------------
 @app.post("/api/feedback")
 async def api_feedback(request: Request):
-    body = await request.json()
-    message = body.get("message", "").strip()
-    email = body.get("email", "")
-    page = body.get("page", "")
+    raw = await request.json()
+    try:
+        body = StructuredFeedbackRequest(**raw)
+    except Exception as exc:
+        return JSONResponse({"error": f"Invalid feedback payload: {exc}"}, status_code=400)
 
-    if not message:
+    primary_message = (body.message or body.confusion or body.what or "").strip()
+    if not primary_message:
         return JSONResponse({"error": "Message is required."}, status_code=400)
 
     ip = request.client.host if request.client else "unknown"
     user_agent = request.headers.get("user-agent", "")
 
-    add_feedback(message=message, page=page, ip=ip, user_agent=user_agent)
+    context = dict(body.context or {})
+    context.setdefault("page", body.page or request.headers.get("referer", "") or "")
+    context.setdefault("mode", context.get("mode", "unknown"))
 
-    return {"success": True}
+    record = add_feedback(
+        what=body.what or "",
+        expectation=(body.expectation or "unknown").lower(),
+        confusion=body.confusion or "",
+        frustration=body.frustration or 5,
+        perfect=body.perfect or "",
+        message=primary_message,
+        page=body.page or context.get("page") or "",
+        ip=ip,
+        user_agent=user_agent,
+        user_tags=body.tags,
+        context=context,
+        replay=body.replay or {},
+        email=body.email,
+    )
+
+    tracking = [
+        {"label": "Submitted", "state": "done"},
+        {"label": "Under Review", "state": "pending"},
+        {"label": "Improved", "state": "pending"},
+    ]
+
+    return {
+        "success": True,
+        "id": record.get("id"),
+        "priority": record.get("priority"),
+        "score_impact_prediction": record.get("score_impact_prediction"),
+        "auto_response": record.get("auto_response"),
+        "abuse_flags": record.get("abuse_flags"),
+        "status": record.get("status"),
+        "tracking": tracking,
+    }
 
 
 # ---------------------------------------------------------
