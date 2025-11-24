@@ -1962,8 +1962,44 @@ def analyze(req: AnalyzeRequest, request: Request):
                     status_code=429,
                 )
 
-        task_id = _enqueue_task("analyze_text", _analyze_task, "text", content, user_id)
-        return {"task_id": task_id, "queued": True}
+        # Run synchronously to avoid queue failures for user-facing scans
+        try:
+            result = analyze_text(content) or {}
+            base_score = result.get("score", 0)
+            score = _normalize_score(base_score)
+            verdict = result.get("verdict")
+            explanation = result.get("explanation") or "Scam text analysis."
+            reasons = result.get("reasons", [])
+            details = result.get("details", {})
+
+            resp = build_response(
+                score=score,
+                category="text",
+                reasons=reasons,
+                explanation=explanation,
+                verdict=verdict,
+                details=details,
+            )
+            if CRISIS_MODE:
+                resp["score"] = min(100, resp["score"] + 15)
+
+            if resp["verdict"] == "SAFE":
+                record_event("safe")
+            else:
+                record_event("scam")
+
+            add_scan_log(
+                user_id=user_id,
+                category="text",
+                mode=mode,
+                verdict=resp["verdict"],
+                score=resp["score"],
+                content_snippet=content,
+                details=resp.get("details"),
+            )
+            return resp
+        except Exception as exc:
+            return JSONResponse({"error": f"Scan failed: {exc}"}, status_code=500)
 
     # --------------------- URL (auto) ---------------------
     if mode == "url" or (mode == "auto" and url_like):
