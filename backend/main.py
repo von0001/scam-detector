@@ -1961,8 +1961,8 @@ async def process_scan(payload: dict, request: Request):
             status_code=402,
         )
 
-    # --------------------- TEXT (auto) --------------------
-    if mode == "text" or (mode == "auto" and not url_like):
+    # --------------------- TEXT --------------------
+    if mode == "text":
         if user:
             allowed, remaining, limit = register_scan_attempt(user_id)
             if not allowed:
@@ -1979,15 +1979,14 @@ async def process_scan(payload: dict, request: Request):
         try:
             result = analyze_text(content) or {}
         except Exception:
-            # Offline fallback if AI text analysis fails
-            fallback = {
+            result = {
                 "score": 0,
                 "verdict": "SAFE",
                 "explanation": "AI unavailable; offline fallback used.",
                 "reasons": ["Offline fallback applied"],
                 "details": {"mode": "fallback"},
+                "ai_used": False,
             }
-            result = fallback
         base_score = result.get("score", 0)
         score = _normalize_score(base_score)
         verdict = result.get("verdict")
@@ -2002,6 +2001,7 @@ async def process_scan(payload: dict, request: Request):
             explanation=explanation,
             verdict=verdict,
             details=details,
+            ai_used=bool(result.get("ai_used")),
         )
         if CRISIS_MODE:
             resp["score"] = min(100, resp["score"] + 15)
@@ -2022,44 +2022,44 @@ async def process_scan(payload: dict, request: Request):
         )
         return resp
 
-        # --------------------- URL (auto, hybrid) ---------------------
-        if mode == "url" or (mode == "auto" and url_like):
-            if user:
-                allowed, remaining, limit = register_scan_attempt(user_id)
-                if not allowed:
-                    return JSONResponse(
-                        {
+    # --------------------- URL / AUTO --------------------
+    if mode == "url" or (mode == "auto" and url_like):
+        if user:
+            allowed, remaining, limit = register_scan_attempt(user_id)
+            if not allowed:
+                return JSONResponse(
+                    {
                         "error": "Daily free limit reached. Upgrade to Premium for unlimited scans.",
                         "plan": plan,
                         "limit": limit,
-                            "remaining": 0,
-                        },
-                        status_code=429,
+                        "remaining": 0,
+                    },
+                    status_code=429,
+                )
+
+        text_scan_resp = None
+        if mode == "auto":
+            is_pure_url = url_like and not re.search(r"\s", content)
+            if not is_pure_url or len(content) > 0:
+                try:
+                    hybrid_text = analyze_text(content) or {}
+                    text_score = _normalize_score(hybrid_text.get("score", 0))
+                    text_scan_resp = build_response(
+                        score=text_score,
+                        category="text",
+                        reasons=hybrid_text.get("reasons", []),
+                        explanation=hybrid_text.get("explanation") or "Scam text analysis.",
+                        verdict=hybrid_text.get("verdict"),
+                        details=hybrid_text.get("details", {}),
+                        ai_used=bool(hybrid_text.get("ai_used")),
                     )
+                except Exception:
+                    text_scan_resp = None
 
-            # Hybrid: always attempt AI text analysis unless the input is a pure short URL
-            text_scan_resp = None
-            if mode == "auto":
-                is_pure_url = url_like and not re.search(r"\s", content)
-                if not is_pure_url or len(content) > 0:
-                    try:
-                        hybrid_text = analyze_text(content) or {}
-                        text_score = _normalize_score(hybrid_text.get("score", 0))
-                        text_scan_resp = build_response(
-                            score=text_score,
-                            category="text",
-                            reasons=hybrid_text.get("reasons", []),
-                            explanation=hybrid_text.get("explanation") or "Scam text analysis.",
-                            verdict=hybrid_text.get("verdict"),
-                            details=hybrid_text.get("details", {}),
-                        )
-                    except Exception:
-                        text_scan_resp = None
-
-            try:
-                raw = analyze_url(content) or {}
-            except Exception:
-                return JSONResponse({"error": "URL scanner unavailable. Please try again later."}, status_code=503)
+        try:
+            raw = analyze_url(content) or {}
+        except Exception:
+            return JSONResponse({"error": "URL scanner unavailable. Please try again later."}, status_code=503)
 
         base_score = raw.get("score", 0)
         score = _normalize_score(base_score)
@@ -2081,7 +2081,6 @@ async def process_scan(payload: dict, request: Request):
 
         resp = url_resp
         if text_scan_resp:
-            # pick the higher-risk response; attach both for transparency
             combined = {
                 "url": url_resp,
                 "text": text_scan_resp,
@@ -2115,11 +2114,11 @@ async def process_scan(payload: dict, request: Request):
         return resp
 
     # ----------------- AI Actor Detection -----------------
-        if mode == "chat":
-            if user:
-                allowed, remaining, limit = register_scan_attempt(user_id)
-                if not allowed:
-                    return JSONResponse(
+    if mode == "chat":
+        if user:
+            allowed, remaining, limit = register_scan_attempt(user_id)
+            if not allowed:
+                return JSONResponse(
                     {
                         "error": "Daily free limit reached. Upgrade to Premium for unlimited scans.",
                         "plan": plan,
@@ -2205,7 +2204,10 @@ async def process_scan(payload: dict, request: Request):
 
         return resp
 
-    # Unknown mode
+    # ----------------- QR (not supported in /analyze) -----------------
+    if mode == "qr":
+        return JSONResponse({"error": "QR scans require image upload via /qr."}, status_code=400)
+
     return JSONResponse({"error": "Unsupported mode."}, status_code=400)
 
 
