@@ -1011,6 +1011,56 @@ function shouldShowReasons(verdict) {
   return v === "SUSPICIOUS" || v === "DANGEROUS";
 }
 
+function deriveDisplayVerdict(verdict, explanation, reasons, mode) {
+  const v = (verdict || "").toUpperCase();
+  if (v && v !== "SAFE") return v;
+  if (mode !== "auto" && mode !== "text") return v || "SAFE";
+
+  const reasonText = Array.isArray(reasons) ? reasons.join(" ") : "";
+  const blob = `${explanation || ""} ${reasonText}`.toLowerCase();
+  if (!blob.trim()) return v || "SAFE";
+
+  const riskSignals = [
+    /scam/,
+    /fraud/,
+    /steal/,
+    /coerc/,
+    /threat/,
+    /pressure/,
+    /urgent/,
+    /pay/,
+    /money/,
+    /gift\s*card/,
+    /bank/,
+    /password/,
+    /account\s+closure/,
+    /verify/,
+    /reset/,
+    /fee/,
+    /crypto/,
+    /bitcoin/,
+    /wire/,
+    /transfer/,
+    /link/,
+    /requesting\s+payment/,
+    /asking\s+for\s+money/,
+  ];
+
+  let hits = 0;
+  for (const pattern of riskSignals) {
+    if (pattern.test(blob)) hits += 1;
+  }
+
+  if (hits >= 3 || (Array.isArray(reasons) && reasons.length >= 3)) {
+    return "DANGEROUS";
+  }
+  if (hits >= 1 || (Array.isArray(reasons) && reasons.length > 0)) {
+    return "SUSPICIOUS";
+  }
+
+  return v || "SAFE";
+}
+
 function normalizeResultForDisplay(rawResult) {
   const base = typeof rawResult === "string" ? { explanation: rawResult } : { ...(rawResult || {}) };
   const explanationText = typeof base.explanation === "string" ? base.explanation.trim() : "";
@@ -1055,24 +1105,30 @@ function renderAnalyzeResult(result, content, mode) {
   if (!verdictBadge || !explanationEl || !reasonsList) return;
 
   const cleanResult = normalizeResultForDisplay(result);
+  const displayVerdict = deriveDisplayVerdict(
+    cleanResult.verdict,
+    cleanResult.explanation,
+    cleanResult.reasons,
+    mode
+  );
 
   let label = "";
-  if (cleanResult.verdict === "SAFE") {
+  if (displayVerdict === "SAFE") {
     label = "SAFE - No major scam patterns detected";
-  } else if (cleanResult.verdict === "SUSPICIOUS") {
+  } else if (displayVerdict === "SUSPICIOUS") {
     label = "SUSPICIOUS - Some warning signs present";
-  } else if (cleanResult.verdict === "DANGEROUS") {
+  } else if (displayVerdict === "DANGEROUS") {
     label = "DANGEROUS - Strong scam or manipulation risk";
   } else {
-    label = cleanResult.verdict || "Result";
+    label = displayVerdict || "Result";
   }
 
   verdictBadge.textContent = label;
-  setVerdictStyle(cleanResult.verdict);
+  setVerdictStyle(displayVerdict);
   explanationEl.textContent = cleanResult.explanation || "";
 
   if (reasonBlock) {
-    reasonBlock.hidden = !shouldShowReasons(cleanResult.verdict);
+    reasonBlock.hidden = !shouldShowReasons(displayVerdict);
   }
 
   reasonsList.innerHTML = "";
@@ -1089,7 +1145,7 @@ function renderAnalyzeResult(result, content, mode) {
   storeFeedbackContext({
     mode,
     risk_score: cleanResult.score,
-    verdict: cleanResult.verdict,
+    verdict: displayVerdict,
     risk_label: label,
     page: window.location.pathname,
     snippet: content.slice(0, 180),
@@ -1097,7 +1153,7 @@ function renderAnalyzeResult(result, content, mode) {
   recordFeedbackEvent({
     event: "analyze_result",
     mode,
-    verdict: cleanResult.verdict,
+    verdict: displayVerdict,
     score: cleanResult.score,
   });
 
