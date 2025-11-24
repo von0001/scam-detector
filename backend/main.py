@@ -1911,7 +1911,8 @@ async def process_scan(payload: dict, request: Request):
     record_event("request")
 
     content = (payload.get("content") or "").strip()
-    mode = (payload.get("mode") or "auto").lower()
+    mode = str(payload.get("mode") or "auto").strip().lower()
+    print(f"[analyze] incoming mode={mode}")
 
     if len(content) > 10000 and mode != "qr":
         return JSONResponse({"error": "Input too large. Max 10,000 characters."}, status_code=413)
