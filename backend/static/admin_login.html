@@ -213,7 +213,7 @@
         </div>
       </div>
       <div class="list">
-        <div class="pill"><strong>Tip:</strong> Use your owner email. Regular accounts are blocked.</div>
+        <div class="pill"><strong>Tip:</strong> Owner password unlocks access. Email is optional.</div>
         <div class="pill"><strong>Scope:</strong> Full system control, analytics, flags, overrides.</div>
       </div>
     </section>
@@ -222,8 +222,8 @@
       <h2>Authenticate</h2>
       <form id="admin-login-form">
         <div>
-          <label for="email">Owner email</label>
-          <input type="email" id="email" required autocomplete="username" placeholder="you@company.com" />
+          <label for="email">Owner email (optional)</label>
+          <input type="email" id="email" autocomplete="username" placeholder="you@company.com" />
         </div>
         <div>
           <label for="password">Password</label>
@@ -271,16 +271,15 @@
       e.preventDefault();
       setStatus("Verifying credentials…");
 
-      const email = document.getElementById("email").value.trim();
       const password = document.getElementById("password").value;
       const otp = document.getElementById("otp").value.trim();
 
       try {
-        const res = await fetch("/login", {
+        const res = await fetch("/admin/login", {
           method: "POST",
           headers: { "Content-Type": "application/json", "x-admin-fingerprint": getDeviceUUID() },
           credentials: "include",
-          body: JSON.stringify({ email, password, otp_code: otp || null })
+          body: JSON.stringify({ password })
         });
 
         const data = await res.json().catch(() => ({}));
@@ -290,13 +289,6 @@
           return;
         }
 
-        const isAdmin = data?.user?.is_admin;
-        if (!isAdmin) {
-          setStatus("This account is not admin-enabled.", "error");
-          return;
-        }
-
-        // Send fingerprint ping
         fetch("/admin/logs", { headers: { "x-admin-fingerprint": getDeviceUUID() } }).catch(() => {});
         setStatus("Access granted. Redirecting…", "success");
         setTimeout(() => (window.location.href = "/admin"), 400);

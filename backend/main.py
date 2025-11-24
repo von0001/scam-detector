@@ -660,8 +660,7 @@ def login_admin_page():
 
 @app.get("/admin")
 def admin_page(request: Request):
-    user = get_current_user(request)
-    if not user or not user.get("is_admin"):
+    if not _require_admin(request):
         return FileResponse(STATIC_DIR / "login.html")
     _admin_log("Admin console viewed", "info")
     return FileResponse(STATIC_DIR / "admin.html")
@@ -1182,15 +1181,33 @@ def account_delete(body: DeleteAccountRequest, request: Request):
 # ---------------------------------------------------------
 @app.post("/admin/login")
 def admin_login(body: AdminLoginRequest):
-    return JSONResponse(
-        {
-            "error": "Admin login is reserved for the owner account. Sign in with the owner email instead."
-        },
-        status_code=403,
+    password = body.password or ""
+    if not ADMIN_PASSWORD:
+        return JSONResponse({"error": "ADMIN_PASSWORD is not configured."}, status_code=503)
+    if password != ADMIN_PASSWORD:
+        return JSONResponse({"error": "Invalid admin password."}, status_code=401)
+
+    token = create_admin_token()
+    resp = JSONResponse({"success": True, "admin": True})
+    resp.set_cookie(
+        ADMIN_COOKIE_NAME,
+        token,
+        max_age=ADMIN_MAX_AGE,
+        httponly=True,
+        samesite="lax",
+        secure=False,
     )
+    _admin_log("Admin password login succeeded", "info")
+    return resp
 
 
 def _require_admin(request: Request) -> bool:
+    # First allow admin token cookie (owner password flow)
+    admin_token = request.cookies.get(ADMIN_COOKIE_NAME)
+    if admin_token and verify_admin_token(admin_token):
+        return True
+
+    # Fallback to user-based admin accounts
     user = get_current_user(request)
     return bool(user and user.get("is_admin"))
 
