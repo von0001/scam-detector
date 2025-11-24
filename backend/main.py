@@ -556,6 +556,7 @@ def _analyze_task(mode: str, content: str, user_id: Optional[str]):
             explanation=explanation,
             verdict=verdict,
             details=details,
+            ai_used=bool(result.get("ai_used")),
         )
         return resp
     return {"error": "Unsupported task mode."}
@@ -694,6 +695,7 @@ def build_response(
     explanation: str,
     verdict: Optional[str] = None,
     details: Optional[dict] = None,
+    ai_used: bool = False,
 ):
     if verdict is None:
         if score >= 60:
@@ -710,6 +712,7 @@ def build_response(
         "explanation": explanation,
         "verdict": verdict,
         "details": details or {},
+        "ai_used": ai_used,
     }
 
 
@@ -2072,6 +2075,7 @@ async def process_scan(payload: dict, request: Request):
             explanation=explanation,
             verdict=verdict,
             details=details,
+            ai_used=False,
         )
 
         resp = url_resp
@@ -2110,11 +2114,11 @@ async def process_scan(payload: dict, request: Request):
         return resp
 
     # ----------------- AI Actor Detection -----------------
-    if mode == "chat":
-        if user:
-            allowed, remaining, limit = register_scan_attempt(user_id)
-            if not allowed:
-                return JSONResponse(
+        if mode == "chat":
+            if user:
+                allowed, remaining, limit = register_scan_attempt(user_id)
+                if not allowed:
+                    return JSONResponse(
                     {
                         "error": "Daily free limit reached. Upgrade to Premium for unlimited scans.",
                         "plan": plan,
@@ -2129,14 +2133,15 @@ async def process_scan(payload: dict, request: Request):
         explanation = f"Detected actor type: {result.get('actor_type')}"
         reasons = result.get("signals", [])
 
-        resp = build_response(
-            score=score,
-            category="ai_detector",
-            reasons=reasons,
-            explanation=explanation,
-            verdict=None,
-            details=result,
-        )
+            resp = build_response(
+                score=score,
+                category="ai_detector",
+                reasons=reasons,
+                explanation=explanation,
+                verdict=None,
+                details=result,
+                ai_used=True,
+            )
 
         add_scan_log(
             user_id=user_id,
@@ -2184,6 +2189,7 @@ async def process_scan(payload: dict, request: Request):
             explanation=explanation,
             verdict=None,
             details=result,
+            ai_used=True,
         )
 
         add_scan_log(

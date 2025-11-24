@@ -161,7 +161,7 @@ def _rule_based(text: str, urls: List[str], emojis: List[str]) -> Dict[str, Any]
         explanation = "This message shows some warning signs. Be careful."
     else:
         verdict = "SAFE"
-        explanation = "No clear scam signs found by our offline checks."
+        explanation = "Offline fallback used. No clear scam signs found by basic checks."
 
     if not reasons:
         reasons.append("No major red flags detected by offline checks.")
@@ -177,6 +177,7 @@ def _rule_based(text: str, urls: List[str], emojis: List[str]) -> Dict[str, Any]
             "emoji_count": len(emojis),
             "mode": "fallback",
         },
+        "ai_used": False,
     }
 
 
@@ -282,11 +283,11 @@ Remember: respond ONLY with JSON matching the schema described earlier.
         explanation = parsed.get("explanation") or ""
         if not isinstance(explanation, str) or not explanation.strip():
             if verdict_raw == "SAFE":
-                explanation = "We did not see clear signs of a scam in this message."
+                explanation = "✅ Analyzed using AI — No scam patterns detected in this message."
             elif verdict_raw == "SUSPICIOUS":
-                explanation = "This message has some warning signs and could be a scam."
+                explanation = "Analyzed using AI — Some warning signs detected. Review carefully."
             else:
-                explanation = "This message has strong signs of a scam or someone trying to trick you."
+                explanation = "Analyzed using AI — Strong signs of a scam. Do not engage."
 
         reasons = parsed.get("reasons") or []
         if not isinstance(reasons, list):
@@ -308,8 +309,14 @@ Remember: respond ONLY with JSON matching the schema described earlier.
                 "links_detected": urls,
                 "emoji_count": len(emojis),
             },
+            "ai_used": True,
         }
 
-    except Exception:
+    except Exception as exc:
+        try:
+            status = getattr(getattr(exc, "response", None), "status_code", None)
+            print(f"[analyze_text] AI call failed: {exc} status={status}")
+        except Exception:
+            pass
         # Offline fallback: never expose internal errors to the user.
         return _rule_based(t, urls, emojis)
