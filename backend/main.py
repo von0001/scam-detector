@@ -1972,7 +1972,18 @@ async def process_scan(payload: dict, request: Request):
                     status_code=429,
                 )
 
-        result = analyze_text(content) or {}
+        try:
+            result = analyze_text(content) or {}
+        except Exception:
+            # Offline fallback if AI text analysis fails
+            fallback = {
+                "score": 0,
+                "verdict": "SAFE",
+                "explanation": "AI unavailable; offline fallback used.",
+                "reasons": ["Offline fallback applied"],
+                "details": {"mode": "fallback"},
+            }
+            result = fallback
         base_score = result.get("score", 0)
         score = _normalize_score(base_score)
         verdict = result.get("verdict")
@@ -2007,22 +2018,45 @@ async def process_scan(payload: dict, request: Request):
         )
         return resp
 
-    # --------------------- URL (auto) ---------------------
-    if mode == "url" or (mode == "auto" and url_like):
-        if user:
-            allowed, remaining, limit = register_scan_attempt(user_id)
-            if not allowed:
-                return JSONResponse(
-                    {
+        # --------------------- URL (auto, hybrid) ---------------------
+        if mode == "url" or (mode == "auto" and url_like):
+            if user:
+                allowed, remaining, limit = register_scan_attempt(user_id)
+                if not allowed:
+                    return JSONResponse(
+                        {
                         "error": "Daily free limit reached. Upgrade to Premium for unlimited scans.",
                         "plan": plan,
                         "limit": limit,
-                        "remaining": 0,
-                    },
-                    status_code=429,
-                )
+                            "remaining": 0,
+                        },
+                        status_code=429,
+                    )
 
-        raw = analyze_url(content) or {}
+            # Hybrid: always attempt AI text analysis unless the input is a pure short URL
+            text_scan_resp = None
+            if mode == "auto":
+                is_pure_url = url_like and not re.search(r"\s", content)
+                if not is_pure_url or len(content) > 0:
+                    try:
+                        hybrid_text = analyze_text(content) or {}
+                        text_score = _normalize_score(hybrid_text.get("score", 0))
+                        text_scan_resp = build_response(
+                            score=text_score,
+                            category="text",
+                            reasons=hybrid_text.get("reasons", []),
+                            explanation=hybrid_text.get("explanation") or "Scam text analysis.",
+                            verdict=hybrid_text.get("verdict"),
+                            details=hybrid_text.get("details", {}),
+                        )
+                    except Exception:
+                        text_scan_resp = None
+
+            try:
+                raw = analyze_url(content) or {}
+            except Exception:
+                return JSONResponse({"error": "URL scanner unavailable. Please try again later."}, status_code=503)
+
         base_score = raw.get("score", 0)
         score = _normalize_score(base_score)
 
@@ -2031,7 +2065,7 @@ async def process_scan(payload: dict, request: Request):
         reasons = raw.get("reasons", [])
         details = raw.get("details", raw)
 
-        resp = build_response(
+        url_resp = build_response(
             score=score,
             category="url",
             reasons=reasons,
@@ -2039,6 +2073,22 @@ async def process_scan(payload: dict, request: Request):
             verdict=verdict,
             details=details,
         )
+
+        resp = url_resp
+        if text_scan_resp:
+            # pick the higher-risk response; attach both for transparency
+            combined = {
+                "url": url_resp,
+                "text": text_scan_resp,
+            }
+            if text_scan_resp["score"] > url_resp["score"]:
+                resp = copy.deepcopy(text_scan_resp)
+                resp["category"] = "hybrid"
+                resp["details"] = {**(resp.get("details") or {}), "sources": combined}
+            else:
+                resp = copy.deepcopy(url_resp)
+                resp["details"] = {**(resp.get("details") or {}), "sources": combined}
+
         if CRISIS_MODE:
             resp["score"] = min(100, resp["score"] + 15)
 
@@ -2049,7 +2099,7 @@ async def process_scan(payload: dict, request: Request):
 
         add_scan_log(
             user_id=user_id,
-            category="url",
+            category=resp.get("category", "url"),
             mode=mode,
             verdict=resp["verdict"],
             score=resp["score"],
