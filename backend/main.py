@@ -20,6 +20,7 @@ from fastapi import FastAPI, UploadFile, File, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, EmailStr, Field
 import redis
 import logging
@@ -156,6 +157,17 @@ app.add_middleware(
 )
 
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+# Return JSON for unexpected errors/validation failures to avoid empty/HTML responses
+@app.exception_handler(Exception)
+async def generic_exception_handler(request: Request, exc: Exception):
+    logger.error(json.dumps({"event": "error", "path": str(request.url), "error": str(exc)}))
+    return JSONResponse({"error": "Internal server error."}, status_code=500)
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    return JSONResponse({"error": "Invalid request.", "detail": exc.errors()}, status_code=422)
 
 
 # Global headers middleware for security headers + request id
