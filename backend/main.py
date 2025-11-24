@@ -136,13 +136,14 @@ logging.basicConfig(level=logging.INFO, format="%(message)s")
 app = FastAPI(title="ScamDetector API")
 
 ALLOWED_ORIGINS = [
-    "https://yourdomain.com",
-    "https://www.yourdomain.com",
+    "https://scamdetectorapp.com",
+    "https://www.scamdetectorapp.com",
 ]
+EXTENSION_ID = os.getenv("EXTENSION_ID", "jehidgbogolbhmfjobodnecbcnbibkaf")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS + [f"chrome-extension://{os.getenv('EXTENSION_ID','jehidgbogolbhmfjobodnecbcnbibkaf')}"],
+    allow_origins=ALLOWED_ORIGINS + [f"chrome-extension://{EXTENSION_ID}"],
     allow_origin_regex=r"chrome-extension://.*",
     allow_credentials=True,
     allow_methods=["*"],
