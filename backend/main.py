@@ -14,6 +14,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from collections import deque
 import copy
+import traceback
 import sentry_sdk
 
 from fastapi import FastAPI, UploadFile, File, Request
@@ -1896,276 +1897,281 @@ async def api_feedback(request: Request):
 # ---------------------------------------------------------
 # ANALYZE / QR
 # ---------------------------------------------------------
-@app.post("/analyze")
-def analyze(req: AnalyzeRequest, request: Request):
-    try:
-        if not _validate_csrf(request):
-            return _csrf_failure()
-        current_user = get_current_user(request)
-        rl = _enforce_rate_limit(current_user, request, "scan")
-        if rl:
-            return rl
-        record_event("request")
+async def process_scan(payload: dict, request: Request):
+    if not _validate_csrf(request):
+        return _csrf_failure()
+    current_user = get_current_user(request)
+    rl = _enforce_rate_limit(current_user, request, "scan")
+    if rl:
+        return rl
+    record_event("request")
 
-        content = req.content.strip()
-        mode = req.mode.lower()
+    content = (payload.get("content") or "").strip()
+    mode = (payload.get("mode") or "auto").lower()
 
-        if len(content) > 10000 and mode != "qr":
-            return JSONResponse({"error": "Input too large. Max 10,000 characters."}, status_code=413)
+    if len(content) > 10000 and mode != "qr":
+        return JSONResponse({"error": "Input too large. Max 10,000 characters."}, status_code=413)
 
-        sanitized_content = sanitize_pii(content)
-        content = sanitized_content
+    content = sanitize_pii(content)
 
-        if MAINTENANCE_MODE:
+    if MAINTENANCE_MODE:
+        return JSONResponse(
+            {"error": "Maintenance mode is active. Please try again later."}, status_code=503
+        )
+
+    if not content and mode != "qr":
+        return JSONResponse({"error": "content is empty"}, status_code=400)
+
+    user = get_current_user(request)
+    user_id = user["id"] if user else None
+    plan = user.get("plan", "free") if user else "guest"
+    is_premium = plan == "premium"
+
+    if CRISIS_MODE:
+        _admin_log("Scan during crisis mode", "warn")
+
+    # Guest limit: simple per-IP daily cap
+    if not user:
+        allowed, remaining, limit = _check_guest_limit(request)
+        if not allowed:
             return JSONResponse(
-                {"error": "Maintenance mode is active. Please try again later."}, status_code=503
+                {
+                    "error": "Guest limit reached. Create a free account to continue scanning.",
+                    "plan": "guest",
+                    "limit": limit,
+                    "remaining": 0,
+                },
+                status_code=429,
             )
 
-        if not content and mode != "qr":
-            return JSONResponse({"error": "content is empty"}, status_code=400)
+    url_like = is_url_like(content)
 
-        user = get_current_user(request)
-        user_id = user["id"] if user else None
-        plan = user.get("plan", "free") if user else "guest"
-        is_premium = plan == "premium"
+    # Premium-only modes
+    if mode in {"chat", "manipulation"} and not is_premium:
+        return JSONResponse(
+            {
+                "error": "This scan mode is available for Premium accounts only.",
+                "plan": plan,
+            },
+            status_code=402,
+        )
 
-        if CRISIS_MODE:
-            _admin_log("Scan during crisis mode", "warn")
-
-        # Guest limit: simple per-IP daily cap
-        if not user:
-            allowed, remaining, limit = _check_guest_limit(request)
+    # --------------------- TEXT (auto) --------------------
+    if mode == "text" or (mode == "auto" and not url_like):
+        if user:
+            allowed, remaining, limit = register_scan_attempt(user_id)
             if not allowed:
                 return JSONResponse(
                     {
-                        "error": "Guest limit reached. Create a free account to continue scanning.",
-                        "plan": "guest",
+                        "error": "Daily free limit reached. Upgrade to Premium for unlimited scans.",
+                        "plan": plan,
                         "limit": limit,
                         "remaining": 0,
                     },
                     status_code=429,
                 )
 
-        url_like = is_url_like(content)
+        result = analyze_text(content) or {}
+        base_score = result.get("score", 0)
+        score = _normalize_score(base_score)
+        verdict = result.get("verdict")
+        explanation = result.get("explanation") or "Scam text analysis."
+        reasons = result.get("reasons", [])
+        details = result.get("details", {})
 
-        # Premium-only modes
-        if mode in {"chat", "manipulation"} and not is_premium:
-            return JSONResponse(
-                {
-                    "error": "This scan mode is available for Premium accounts only.",
-                    "plan": plan,
-                },
-                status_code=402,
-            )
+        resp = build_response(
+            score=score,
+            category="text",
+            reasons=reasons,
+            explanation=explanation,
+            verdict=verdict,
+            details=details,
+        )
+        if CRISIS_MODE:
+            resp["score"] = min(100, resp["score"] + 15)
 
-        # --------------------- TEXT (auto) --------------------
-        if mode == "text" or (mode == "auto" and not url_like):
-            if user:
-                allowed, remaining, limit = register_scan_attempt(user_id)
-                if not allowed:
-                    return JSONResponse(
-                        {
-                            "error": "Daily free limit reached. Upgrade to Premium for unlimited scans.",
-                            "plan": plan,
-                            "limit": limit,
-                            "remaining": 0,
-                        },
-                        status_code=429,
-                    )
+        if resp["verdict"] == "SAFE":
+            record_event("safe")
+        else:
+            record_event("scam")
 
-            try:
-                result = analyze_text(content) or {}
-            except Exception:
-                return JSONResponse({"error": "Scanner unavailable. Please try again later."}, status_code=503)
-            base_score = result.get("score", 0)
-            score = _normalize_score(base_score)
-            verdict = result.get("verdict")
-            explanation = result.get("explanation") or "Scam text analysis."
-            reasons = result.get("reasons", [])
-            details = result.get("details", {})
+        add_scan_log(
+            user_id=user_id,
+            category="text",
+            mode=mode,
+            verdict=resp["verdict"],
+            score=resp["score"],
+            content_snippet=content,
+            details=resp.get("details"),
+        )
+        return resp
 
-            resp = build_response(
-                score=score,
-                category="text",
-                reasons=reasons,
-                explanation=explanation,
-                verdict=verdict,
-                details=details,
-            )
-            if CRISIS_MODE:
-                resp["score"] = min(100, resp["score"] + 15)
+    # --------------------- URL (auto) ---------------------
+    if mode == "url" or (mode == "auto" and url_like):
+        if user:
+            allowed, remaining, limit = register_scan_attempt(user_id)
+            if not allowed:
+                return JSONResponse(
+                    {
+                        "error": "Daily free limit reached. Upgrade to Premium for unlimited scans.",
+                        "plan": plan,
+                        "limit": limit,
+                        "remaining": 0,
+                    },
+                    status_code=429,
+                )
 
-            if resp["verdict"] == "SAFE":
-                record_event("safe")
-            else:
-                record_event("scam")
+        raw = analyze_url(content) or {}
+        base_score = raw.get("score", 0)
+        score = _normalize_score(base_score)
 
-            add_scan_log(
-                user_id=user_id,
-                category="text",
-                mode=mode,
-                verdict=resp["verdict"],
-                score=resp["score"],
-                content_snippet=content,
-                details=resp.get("details"),
-            )
-            return resp
+        verdict = raw.get("verdict")
+        explanation = raw.get("explanation") or "URL risk analysis."
+        reasons = raw.get("reasons", [])
+        details = raw.get("details", raw)
 
-        # --------------------- URL (auto) ---------------------
-        if mode == "url" or (mode == "auto" and url_like):
-            if user:
-                allowed, remaining, limit = register_scan_attempt(user_id)
-                if not allowed:
-                    return JSONResponse(
-                        {
-                            "error": "Daily free limit reached. Upgrade to Premium for unlimited scans.",
-                            "plan": plan,
-                            "limit": limit,
-                            "remaining": 0,
-                        },
-                        status_code=429,
-                    )
+        resp = build_response(
+            score=score,
+            category="url",
+            reasons=reasons,
+            explanation=explanation,
+            verdict=verdict,
+            details=details,
+        )
+        if CRISIS_MODE:
+            resp["score"] = min(100, resp["score"] + 15)
 
-            try:
-                raw = analyze_url(content) or {}
-            except Exception:
-                return JSONResponse({"error": "URL scanner unavailable. Please try again later."}, status_code=503)
-            base_score = raw.get("score", 0)
-            score = _normalize_score(base_score)
+        if resp["verdict"] == "SAFE":
+            record_event("safe")
+        else:
+            record_event("scam")
 
-            verdict = raw.get("verdict")
-            explanation = raw.get("explanation") or "URL risk analysis."
-            reasons = raw.get("reasons", [])
-            details = raw.get("details", raw)
+        add_scan_log(
+            user_id=user_id,
+            category="url",
+            mode=mode,
+            verdict=resp["verdict"],
+            score=resp["score"],
+            content_snippet=content,
+            details=resp.get("details"),
+        )
 
-            resp = build_response(
-                score=score,
-                category="url",
-                reasons=reasons,
-                explanation=explanation,
-                verdict=verdict,
-                details=details,
-            )
-            if CRISIS_MODE:
-                resp["score"] = min(100, resp["score"] + 15)
+        return resp
 
-            if resp["verdict"] == "SAFE":
-                record_event("safe")
-            else:
-                record_event("scam")
+    # ----------------- AI Actor Detection -----------------
+    if mode == "chat":
+        if user:
+            allowed, remaining, limit = register_scan_attempt(user_id)
+            if not allowed:
+                return JSONResponse(
+                    {
+                        "error": "Daily free limit reached. Upgrade to Premium for unlimited scans.",
+                        "plan": plan,
+                        "limit": limit,
+                        "remaining": 0,
+                    },
+                    status_code=429,
+                )
 
-            add_scan_log(
-                user_id=user_id,
-                category="url",
-                mode=mode,
-                verdict=resp["verdict"],
-                score=resp["score"],
-                content_snippet=content,
-                details=resp.get("details"),
-            )
+        result = analyze_actor(content)
+        score = _normalize_score(result.get("ai_probability", 0))
+        explanation = f"Detected actor type: {result.get('actor_type')}"
+        reasons = result.get("signals", [])
 
-            return resp
+        resp = build_response(
+            score=score,
+            category="ai_detector",
+            reasons=reasons,
+            explanation=explanation,
+            verdict=None,
+            details=result,
+        )
 
-        # ----------------- AI Actor Detection -----------------
-        if mode == "chat":
-            if user:
-                allowed, remaining, limit = register_scan_attempt(user_id)
-                if not allowed:
-                    return JSONResponse(
-                        {
-                            "error": "Daily free limit reached. Upgrade to Premium for unlimited scans.",
-                            "plan": plan,
-                            "limit": limit,
-                            "remaining": 0,
-                        },
-                        status_code=429,
-                    )
+        add_scan_log(
+            user_id=user_id,
+            category="ai_detector",
+            mode=mode,
+            verdict=resp["verdict"],
+            score=resp["score"],
+            content_snippet=content,
+            details=resp.get("details"),
+        )
 
-            try:
-                result = analyze_actor(content)
-            except Exception:
-                return JSONResponse({"error": "AI detector unavailable. Please try again later."}, status_code=503)
-            score = _normalize_score(result.get("ai_probability", 0))
-            explanation = f"Detected actor type: {result.get('actor_type')}"
-            reasons = result.get("signals", [])
+        return resp
 
-            resp = build_response(
-                score=score,
-                category="ai_detector",
-                reasons=reasons,
-                explanation=explanation,
-                verdict=None,
-                details=result,
-            )
+    # -------------- Manipulation Profiler -----------------
+    if mode == "manipulation":
+        if user:
+            allowed, remaining, limit = register_scan_attempt(user_id)
+            if not allowed:
+                return JSONResponse(
+                    {
+                        "error": "Daily free limit reached. Upgrade to Premium for unlimited scans.",
+                        "plan": plan,
+                        "limit": limit,
+                        "remaining": 0,
+                    },
+                    status_code=429,
+                )
 
-            add_scan_log(
-                user_id=user_id,
-                category="ai_detector",
-                mode=mode,
-                verdict=resp["verdict"],
-                score=resp["score"],
-                content_snippet=content,
-                details=resp.get("details"),
-            )
+        result = analyze_manipulation(content)
+        score = _normalize_score(result.get("risk_score", 0))
+        profile = result.get("scam_profile", "unclear")
 
-            return resp
+        explanation = (
+            "Emotional manipulation patterns detected."
+            if score > 0
+            else "No strong emotional manipulation detected."
+        )
 
-        # -------------- Manipulation Profiler -----------------
-        if mode == "manipulation":
-            if user:
-                allowed, remaining, limit = register_scan_attempt(user_id)
-                if not allowed:
-                    return JSONResponse(
-                        {
-                            "error": "Daily free limit reached. Upgrade to Premium for unlimited scans.",
-                            "plan": plan,
-                            "limit": limit,
-                            "remaining": 0,
-                        },
-                        status_code=429,
-                    )
+        reasons = result.get("primary_tactics", [])
 
-            try:
-                result = analyze_manipulation(content)
-            except Exception:
-                return JSONResponse({"error": "Manipulation profiler unavailable. Please try again later."}, status_code=503)
-            score = _normalize_score(result.get("risk_score", 0))
-            profile = result.get("scam_profile", "unclear")
+        resp = build_response(
+            score=score,
+            category="manipulation",
+            reasons=reasons,
+            explanation=explanation,
+            verdict=None,
+            details=result,
+        )
 
-            explanation = (
-                "Emotional manipulation patterns detected."
-                if score > 0
-                else "No strong emotional manipulation detected."
-            )
+        add_scan_log(
+            user_id=user_id,
+            category="manipulation",
+            mode=mode,
+            verdict=resp["verdict"],
+            score=resp["score"],
+            content_snippet=content,
+            details=resp.get("details"),
+        )
 
-            reasons = result.get("primary_tactics", [])
+        return resp
 
-            resp = build_response(
-                score=score,
-                category="manipulation",
-                reasons=reasons,
-                explanation=explanation,
-                verdict=None,
-                details=result,
-            )
+    # Unknown mode
+    return JSONResponse({"error": "Unsupported mode."}, status_code=400)
 
-            add_scan_log(
-                user_id=user_id,
-                category="manipulation",
-                mode=mode,
-                verdict=resp["verdict"],
-                score=resp["score"],
-                content_snippet=content,
-                details=resp.get("details"),
-            )
 
-            return resp
+@app.post("/analyze")
+async def analyze(request: Request):
+    try:
+        payload = await request.json()
+        print("==== ANALYZE PAYLOAD ====")
+        print(payload)
 
-        # Unknown mode
-        return JSONResponse({"error": "Unsupported mode."}, status_code=400)
-    except Exception as exc:  # pragma: no cover
-        logger.error(json.dumps({"event": "analyze_error", "error": str(exc)}))
-        return JSONResponse({"error": "Internal server error."}, status_code=500)
+        result = await process_scan(payload, request)
+        return result
+
+    except Exception as e:
+        print("🔥 ANALYZE CRASH 🔥:", str(e))
+        print(traceback.format_exc())
+
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": "Backend crash",
+                "details": str(e)
+            }
+        )
 
 
 @app.post("/qr")
