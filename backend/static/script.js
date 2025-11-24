@@ -911,30 +911,151 @@ async function analyzeContent() {
   }
 }
 
+function extractJsonBlock(text) {
+  if (typeof text !== "string") return null;
+  const match = text.match(/\{[\s\S]*\}/);
+  return match ? match[0] : null;
+}
+
+function tryParseJsonish(text) {
+  if (typeof text !== "string") return null;
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+
+  const candidates = [trimmed];
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    candidates.push(trimmed.slice(1, -1));
+  }
+
+  const block = extractJsonBlock(trimmed);
+  if (block && block !== trimmed) {
+    candidates.push(block);
+  }
+
+  for (const candidate of candidates) {
+    try {
+      return JSON.parse(candidate);
+    } catch (err) {
+      try {
+        return JSON.parse(candidate.replace(/'/g, '"'));
+      } catch (_) {
+        // keep trying fallbacks
+      }
+    }
+  }
+  return null;
+}
+
+function pullFieldsFromJsonish(text) {
+  if (typeof text !== "string") return {};
+  const block = extractJsonBlock(text) || text;
+  const parsed = tryParseJsonish(block);
+
+  if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+    const cleaned = {};
+    if (parsed.explanation) cleaned.explanation = String(parsed.explanation);
+    if (Array.isArray(parsed.reasons)) {
+      cleaned.reasons = parsed.reasons.map((r) => String(r));
+    }
+    if (parsed.verdict) cleaned.verdict = String(parsed.verdict);
+    if (parsed.score !== undefined) cleaned.score = parsed.score;
+    return cleaned;
+  }
+
+  const cleaned = {};
+  const verdictMatch = block.match(/"verdict"\s*:\s*"?(SAFE|SUSPICIOUS|DANGEROUS)"?/i);
+  if (verdictMatch) cleaned.verdict = verdictMatch[1].toUpperCase();
+
+  const scoreMatch = block.match(/"score"\s*:\s*([0-9]+(?:\.[0-9]+)?)/i);
+  if (scoreMatch) cleaned.score = parseFloat(scoreMatch[1]);
+
+  const explanationMatch = block.match(
+    /"explanation"\s*:\s*("?)([\s\S]*?)(?=(,\s*"[A-Za-z0-9_ ]+"\s*:|\s*\}))/i
+  );
+  if (explanationMatch && explanationMatch[2]) {
+    cleaned.explanation = explanationMatch[2].replace(/^[\"'\s]+|[\"'\s]+$/g, "").trim();
+  }
+
+  const reasonsMatch = block.match(/"reasons"\s*:\s*\[([\s\S]*?)\]/i);
+  if (reasonsMatch && reasonsMatch[1]) {
+    const items = reasonsMatch[1]
+      .split(/,(?=(?:[^"]*"[^"]*")*[^"]*$)/)
+      .map((r) => r.replace(/^[\s"']+|[\s"']+$/g, "").trim())
+      .filter(Boolean);
+    if (items.length) cleaned.reasons = items;
+  }
+
+  return cleaned;
+}
+
+function normalizeResultForDisplay(rawResult) {
+  const base = typeof rawResult === "string" ? { explanation: rawResult } : { ...(rawResult || {}) };
+  const explanationText = typeof base.explanation === "string" ? base.explanation.trim() : "";
+  const extracted = explanationText ? pullFieldsFromJsonish(explanationText) : {};
+
+  const normalized = { ...base };
+
+  if (extracted.explanation) {
+    normalized.explanation = extracted.explanation;
+  } else {
+    normalized.explanation = explanationText.replace(/^["']|["']$/g, "");
+  }
+
+  if ((!normalized.reasons || !normalized.reasons.length) && extracted.reasons) {
+    normalized.reasons = extracted.reasons;
+  }
+
+  if (!normalized.verdict && extracted.verdict) {
+    normalized.verdict = extracted.verdict;
+  }
+
+  if (
+    (normalized.score === undefined || normalized.score === null) &&
+    extracted.score !== undefined
+  ) {
+    normalized.score = extracted.score;
+  }
+
+  if (!Array.isArray(normalized.reasons)) {
+    normalized.reasons = normalized.reasons ? [String(normalized.reasons).trim()] : [];
+  } else {
+    normalized.reasons = normalized.reasons.map((r) => String(r).trim()).filter(Boolean);
+  }
+
+  normalized.explanation = typeof normalized.explanation === "string" ? normalized.explanation.trim() : "";
+
+  return normalized;
+}
+
 function renderAnalyzeResult(result, content, mode) {
   if (!verdictBadge || !explanationEl || !reasonsList) return;
 
+  const cleanResult = normalizeResultForDisplay(result);
+
   let label = "";
-  if (result.verdict === "SAFE") {
+  if (cleanResult.verdict === "SAFE") {
     label = "SAFE - No major scam patterns detected";
-  } else if (result.verdict === "SUSPICIOUS") {
+  } else if (cleanResult.verdict === "SUSPICIOUS") {
     label = "SUSPICIOUS - Some warning signs present";
-  } else if (result.verdict === "DANGEROUS") {
+  } else if (cleanResult.verdict === "DANGEROUS") {
     label = "DANGEROUS - Strong scam or manipulation risk";
   } else {
-    label = result.verdict || "Result";
+    label = cleanResult.verdict || "Result";
   }
 
   verdictBadge.textContent = label;
-  setVerdictStyle(result.verdict);
-  explanationEl.textContent = result.explanation || "";
+  setVerdictStyle(cleanResult.verdict);
+  explanationEl.textContent = cleanResult.explanation || "";
 
   reasonsList.innerHTML = "";
-    (result.reasons || []).forEach((r) => {
-      const li = document.createElement("li");
-      li.textContent = r;
-      reasonsList.appendChild(li);
-    });
+  (cleanResult.reasons || []).forEach((r) => {
+    const li = document.createElement("li");
+    li.textContent = r;
+    reasonsList.appendChild(li);
+  });
 
   if (detailsPre) {
     detailsPre.hidden = true;
@@ -942,8 +1063,8 @@ function renderAnalyzeResult(result, content, mode) {
 
   storeFeedbackContext({
     mode,
-    risk_score: result.score,
-    verdict: result.verdict,
+    risk_score: cleanResult.score,
+    verdict: cleanResult.verdict,
     risk_label: label,
     page: window.location.pathname,
     snippet: content.slice(0, 180),
@@ -951,8 +1072,8 @@ function renderAnalyzeResult(result, content, mode) {
   recordFeedbackEvent({
     event: "analyze_result",
     mode,
-    verdict: result.verdict,
-    score: result.score,
+    verdict: cleanResult.verdict,
+    score: cleanResult.score,
   });
 
   if (resultSection) resultSection.hidden = false;
