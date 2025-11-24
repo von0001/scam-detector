@@ -9,18 +9,21 @@ from backend.db import get_cursor
 RETENTION_SECONDS = 90 * 24 * 60 * 60
 
 
-def record_event(event_type: str, metadata: Dict[str, Any] | None = None) -> None:
+def record_event(event_type: str, metadata: Any = None) -> None:
+    if metadata is None:
+        metadata = {}
+
+    if isinstance(metadata, (dict, list)):
+        metadata = json.dumps(metadata)
+
     now = int(time.time())
-    payload = metadata
-    if isinstance(payload, (dict, list)):
-        payload = json.dumps(payload)
     with get_cursor() as (_, cur):
         cur.execute(
             """
             INSERT INTO analytics_events (event_type, ts, metadata)
             VALUES (%s, to_timestamp(%s), %s::jsonb)
             """,
-            (event_type, now, payload or {}),
+            (event_type, now, metadata),
         )
     # lightweight retention check
     if now % 100 == 0:
