@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+import json
 from typing import Dict, Any
 
 from backend.db import get_cursor
@@ -10,13 +11,16 @@ RETENTION_SECONDS = 90 * 24 * 60 * 60
 
 def record_event(event_type: str, metadata: Dict[str, Any] | None = None) -> None:
     now = int(time.time())
+    payload = metadata
+    if isinstance(payload, (dict, list)):
+        payload = json.dumps(payload)
     with get_cursor() as (_, cur):
         cur.execute(
             """
             INSERT INTO analytics_events (event_type, ts, metadata)
             VALUES (%s, to_timestamp(%s), %s::jsonb)
             """,
-            (event_type, now, metadata or {}),
+            (event_type, now, payload or {}),
         )
     # lightweight retention check
     if now % 100 == 0:
