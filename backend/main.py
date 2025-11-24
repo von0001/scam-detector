@@ -829,7 +829,8 @@ def mask_emails(text: str) -> str:
 
 
 def mask_phone_numbers(text: str) -> str:
-    return re.sub(r"(\\+?\\d{1,3}[-.\\s]?)?(\\(?\\d{3}\\)?[-.\\s]?)(\\d{3})([-.\\s]?)(\\d{4})", r"(***) ***-\\5", text)
+    phone_pattern = r"(\+?\d{1,3}[-.\s]?)?(\(?\d{3}\)?[-.\s]?)(\d{3})([-.\s]?)(\d{4})"
+    return re.sub(phone_pattern, r"(***) ***-\5", text)
 
 
 def mask_names(text: str) -> str:
