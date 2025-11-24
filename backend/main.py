@@ -556,7 +556,7 @@ def _analyze_task(mode: str, content: str, user_id: Optional[str]):
             explanation=explanation,
             verdict=verdict,
             details=details,
-            ai_used=bool(result.get("ai_used")),
+            ai_used=bool(raw.get("ai_used")),
         )
         return resp
     return {"error": "Unsupported task mode."}
@@ -2133,15 +2133,15 @@ async def process_scan(payload: dict, request: Request):
         explanation = f"Detected actor type: {result.get('actor_type')}"
         reasons = result.get("signals", [])
 
-            resp = build_response(
-                score=score,
-                category="ai_detector",
-                reasons=reasons,
-                explanation=explanation,
-                verdict=None,
-                details=result,
-                ai_used=True,
-            )
+        resp = build_response(
+            score=score,
+            category="ai_detector",
+            reasons=reasons,
+            explanation=explanation,
+            verdict=None,
+            details=result,
+            ai_used=True,
+        )
 
         add_scan_log(
             user_id=user_id,
