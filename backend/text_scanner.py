@@ -231,30 +231,29 @@ in very simple everyday words:
 Remember: respond ONLY with JSON matching the schema described earlier.
 """
 
-        response = client.chat.completions.create(
+        messages = [
+            {"role": "system", "content": SYSTEM_MSG},
+            {"role": "user", "content": user_prompt},
+        ]
+
+        resp = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
-            messages=[
-                {"role": "system", "content": SYSTEM_MSG},
-                {"role": "user", "content": user_prompt},
-            ],
-            temperature=0.2,
+            messages=messages,
+            temperature=0.0,
         )
 
-        raw_output = response.choices[0].message.content or ""
-        json_text = _extract_json_block(raw_output)
+        raw_output = resp.choices[0].message["content"]
 
-        parsed: Dict[str, Any] | None = None
-        if json_text:
-            try:
-                parsed = json.loads(json_text)
-            except Exception:
-                parsed = None
-
-        # -----------------------------------------------------------------
-        # Normalize / validate AI output
-        # -----------------------------------------------------------------
-        if not isinstance(parsed, dict):
-            raise ValueError("Model returned invalid or non-JSON output.")
+        try:
+            parsed = json.loads(raw_output)
+        except Exception:
+            parsed = {
+                "score": 0,
+                "verdict": "SAFE",
+                "explanation": raw_output.strip(),
+                "reasons": [],
+                "details": {"ai_raw_output": raw_output},
+            }
 
         # Score normalization
         raw_score = parsed.get("score", 0)
@@ -263,16 +262,10 @@ Remember: respond ONLY with JSON matching the schema described earlier.
         except (TypeError, ValueError):
             score = 0.0
 
-        # Clamp to 0-10 just to keep it sane
-        if score < 0:
-            score = 0.0
-        if score > 10:
-            score = 10.0
+        score = max(0, min(10, score))
 
-        # Verdict normalization
         verdict_raw = str(parsed.get("verdict", "SAFE")).upper()
         if verdict_raw not in {"SAFE", "SUSPICIOUS", "DANGEROUS"}:
-            # Fallback from score if verdict is weird
             if score <= 2:
                 verdict_raw = "SAFE"
             elif score <= 5:
@@ -292,23 +285,27 @@ Remember: respond ONLY with JSON matching the schema described earlier.
         reasons = parsed.get("reasons") or []
         if not isinstance(reasons, list):
             reasons = [str(reasons)]
-        # Ensure all reasons are strings
         reasons = [str(r).strip() for r in reasons if str(r).strip()]
-
-        # If AI didn't provide any reasons, at least give one generic one
         if not reasons:
             reasons.append("The message looks risky based on its words and tone.")
 
-        return {
-            "score": score,
-            "verdict": verdict_raw,
-            "explanation": explanation,
-            "reasons": reasons,
-            "details": {
+        details = parsed.get("details") or {}
+        if not isinstance(details, dict):
+            details = {}
+        details.update(
+            {
                 "text_length": len(t),
                 "links_detected": urls,
                 "emoji_count": len(emojis),
-            },
+            }
+        )
+
+        return {
+            "score": score * 10,
+            "verdict": verdict_raw,
+            "explanation": explanation,
+            "reasons": reasons,
+            "details": details,
             "ai_used": True,
         }
 
@@ -318,5 +315,4 @@ Remember: respond ONLY with JSON matching the schema described earlier.
             print(f"[analyze_text] AI call failed: {exc} status={status}")
         except Exception:
             pass
-        # Offline fallback: never expose internal errors to the user.
         return _rule_based(t, urls, emojis)
