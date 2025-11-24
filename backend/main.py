@@ -1962,7 +1962,7 @@ async def process_scan(payload: dict, request: Request):
         )
 
     # --------------------- TEXT --------------------
-    if mode == "text":
+    if mode == "text" or (mode == "auto" and not url_like):
         if user:
             allowed, remaining, limit = register_scan_attempt(user_id)
             if not allowed:
