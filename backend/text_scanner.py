@@ -242,7 +242,7 @@ Remember: respond ONLY with JSON matching the schema described earlier.
             temperature=0.0,
         )
 
-        raw_output = resp.choices[0].message["content"]
+        raw_output = resp.choices[0].message.content if resp.choices else ""
 
         try:
             parsed = json.loads(raw_output)
@@ -250,7 +250,7 @@ Remember: respond ONLY with JSON matching the schema described earlier.
             parsed = {
                 "score": 0,
                 "verdict": "SAFE",
-                "explanation": raw_output.strip(),
+                "explanation": (raw_output or "").strip(),
                 "reasons": [],
                 "details": {"ai_raw_output": raw_output},
             }
