@@ -1011,6 +1011,31 @@ function shouldShowReasons(verdict) {
   return v === "SUSPICIOUS" || v === "DANGEROUS";
 }
 
+function countRiskHits(text, patterns) {
+  const t = (text || "").toLowerCase();
+  let hits = 0;
+  for (const pattern of patterns) {
+    if (pattern.test(t)) hits += 1;
+  }
+  return hits;
+}
+
+function isLowRiskReason(reason) {
+  const r = (reason || "").toLowerCase();
+  const lowSignals = [
+    "no major red flags",
+    "no clear scam signs",
+    "offline fallback",
+    "no strong warning signs",
+    "no clear warning signs",
+    "no scam patterns detected",
+    "the message is empty",
+    "no clear risk detected",
+    "looks risky based on its words and tone",
+  ];
+  return lowSignals.some((p) => r.includes(p));
+}
+
 function deriveDisplayVerdict(verdict, explanation, reasons, mode) {
   const v = (verdict || "").toUpperCase();
   if (v && v !== "SAFE") return v;
@@ -1046,15 +1071,20 @@ function deriveDisplayVerdict(verdict, explanation, reasons, mode) {
     /asking\s+for\s+money/,
   ];
 
-  let hits = 0;
-  for (const pattern of riskSignals) {
-    if (pattern.test(blob)) hits += 1;
-  }
+  const hits = countRiskHits(blob, riskSignals);
+  const reasonHits = Array.isArray(reasons)
+    ? reasons.reduce((acc, r) => {
+        if (isLowRiskReason(r)) return acc;
+        return acc + countRiskHits(String(r), riskSignals);
+      }, 0)
+    : 0;
+  const strongReasons =
+    Array.isArray(reasons) && reasons.filter((r) => !isLowRiskReason(r)).length >= 2;
 
-  if (hits >= 3 || (Array.isArray(reasons) && reasons.length >= 3)) {
+  if (hits >= 3 || reasonHits >= 3) {
     return "DANGEROUS";
   }
-  if (hits >= 1 || (Array.isArray(reasons) && reasons.length > 0)) {
+  if (hits >= 1 || reasonHits >= 1 || strongReasons) {
     return "SUSPICIOUS";
   }
 
