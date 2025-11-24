@@ -20,6 +20,7 @@ const dropZone = document.getElementById("drop-zone");
 // Feedback replay + context capture
 const FEEDBACK_TRACE_KEY = "feedback_trace";
 const FEEDBACK_CONTEXT_KEY = "feedback_context";
+const TASK_TIMEOUT_MS = 25000;
 const flowStart = sessionStorage.getItem("feedback_flow_start") || Date.now().toString();
 sessionStorage.setItem("feedback_flow_start", flowStart);
 
@@ -883,63 +884,101 @@ async function analyzeContent() {
 
     const result = await response.json();
     if (!response.ok) {
-      statusEl.textContent =
-        result.error || "Something went wrong during analysis.";
+    statusEl.textContent =
+      result.error || "Something went wrong during analysis.";
+    return;
+  }
+
+    if (result.task_id) {
+      statusEl.textContent = "Waiting for verdict...";
+      await pollTask(result.task_id, content, mode);
       return;
     }
 
-    if (!verdictBadge || !explanationEl || !reasonsList) return;
-
-    let label = "";
-    if (result.verdict === "SAFE") {
-      label = "SAFE - No major scam patterns detected";
-    } else if (result.verdict === "SUSPICIOUS") {
-      label = "SUSPICIOUS - Some warning signs present";
-    } else if (result.verdict === "DANGEROUS") {
-      label = "DANGEROUS - Strong scam or manipulation risk";
-    } else {
-      label = result.verdict || "Result";
-    }
-
-    verdictBadge.textContent = label;
-    setVerdictStyle(result.verdict);
-    explanationEl.textContent = result.explanation || "";
-
-    reasonsList.innerHTML = "";
-    (result.reasons || []).forEach((r) => {
-      const li = document.createElement("li");
-      li.textContent = r;
-      reasonsList.appendChild(li);
-    });
-
-    if (detailsPre) {
-      detailsPre.hidden = true;
-    }
-
-    storeFeedbackContext({
-      mode,
-      risk_score: result.score,
-      verdict: result.verdict,
-      risk_label: label,
-      page: window.location.pathname,
-      snippet: content.slice(0, 180),
-    });
-    recordFeedbackEvent({
-      event: "analyze_result",
-      mode,
-      verdict: result.verdict,
-      score: result.score,
-    });
-
-    if (resultSection) resultSection.hidden = false;
-    statusEl.textContent = "";
-    loadSession();
+    renderAnalyzeResult(result, content, mode);
   } catch (err) {
     statusEl.textContent = "Network error. Try again in a moment.";
     recordFeedbackEvent({ event: "analyze_error", mode });
   } finally {
     analyzeBtn.disabled = false;
   }
+}
+
+function renderAnalyzeResult(result, content, mode) {
+  if (!verdictBadge || !explanationEl || !reasonsList) return;
+
+  let label = "";
+  if (result.verdict === "SAFE") {
+    label = "SAFE - No major scam patterns detected";
+  } else if (result.verdict === "SUSPICIOUS") {
+    label = "SUSPICIOUS - Some warning signs present";
+  } else if (result.verdict === "DANGEROUS") {
+    label = "DANGEROUS - Strong scam or manipulation risk";
+  } else {
+    label = result.verdict || "Result";
+  }
+
+  verdictBadge.textContent = label;
+  setVerdictStyle(result.verdict);
+  explanationEl.textContent = result.explanation || "";
+
+  reasonsList.innerHTML = "";
+  (result.reasons || []).forEach((r) => {
+    const li = document.createElement("li");
+    li.textContent = r;
+    reasonsList.appendChild(li);
+  });
+
+  if (detailsPre) {
+    detailsPre.hidden = true;
+  }
+
+  storeFeedbackContext({
+    mode,
+    risk_score: result.score,
+    verdict: result.verdict,
+    risk_label: label,
+    page: window.location.pathname,
+    snippet: content.slice(0, 180),
+  });
+  recordFeedbackEvent({
+    event: "analyze_result",
+    mode,
+    verdict: result.verdict,
+    score: result.score,
+  });
+
+  if (resultSection) resultSection.hidden = false;
+  statusEl.textContent = "";
+  loadSession();
+}
+
+async function pollTask(taskId, content, mode) {
+  const start = Date.now();
+  while (Date.now() - start < TASK_TIMEOUT_MS) {
+    try {
+      const resp = await fetch(`${API_BASE_URL}/tasks/status/${taskId}`, {
+        method: "GET",
+        credentials: "include",
+        headers: csrfHeaders(),
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (data?.status === "finished") {
+        renderAnalyzeResult(data.result || {}, content, mode);
+        return;
+      }
+      if (data?.status === "failed") {
+        statusEl.textContent = data.error || "Scan failed. Please try again.";
+        analyzeBtn.disabled = false;
+        return;
+      }
+    } catch (err) {
+      // continue polling
+    }
+    await new Promise((res) => setTimeout(res, 1200));
+  }
+  statusEl.textContent = "Scan timed out. Try again.";
+  analyzeBtn.disabled = false;
 }
 
 // ===================== QR SCAN ======================
