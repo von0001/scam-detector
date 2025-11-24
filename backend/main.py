@@ -135,10 +135,15 @@ logging.basicConfig(level=logging.INFO, format="%(message)s")
 
 app = FastAPI(title="ScamDetector API")
 
-ALLOWED_ORIGINS = [
-    "https://scamdetectorapp.com",
-    "https://www.scamdetectorapp.com",
-]
+FRONTEND_URL_ENV = os.getenv("FRONTEND_URL", "https://scamdetectorapp.com").rstrip("/")
+ALLOWED_ORIGINS = list(
+    {
+        "https://scamdetectorapp.com",
+        "https://www.scamdetectorapp.com",
+        FRONTEND_URL_ENV,
+        FRONTEND_URL_ENV.replace("www.", ""),
+    }
+)
 EXTENSION_ID = os.getenv("EXTENSION_ID", "jehidgbogolbhmfjobodnecbcnbibkaf")
 
 app.add_middleware(
