@@ -60,6 +60,7 @@ from backend.user_auth import (
 from backend.auth import (
     ADMIN_PASSWORD,
     ADMIN_COOKIE_NAME,
+    ADMIN_MAX_AGE,
     create_admin_token,
     verify_admin_token,
 )
