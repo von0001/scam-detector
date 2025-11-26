@@ -1605,7 +1605,8 @@ function resetOcrWorker() {
 async function sendToOcrEndpoint(file, source) {
   const form = new FormData();
   form.append("image", file);
-  const resp = await fetch(`${API_BASE_URL}/ocr`, {
+  console.log("Frontend attempting OCR upload", file?.name);
+  const resp = await fetch(`/ocr`, {
     method: "POST",
     credentials: "include",
     headers: csrfHeaders(),
@@ -1621,6 +1622,7 @@ async function sendToOcrEndpoint(file, source) {
     const msg = data?.error || "OCR upload failed";
     throw new Error(msg);
   }
+  console.log("OCR response received", resp.status);
   recordFeedbackEvent({
     event: "ocr_upload_complete",
     source,
@@ -1644,7 +1646,7 @@ async function handleImageForOcr(file, source = "upload") {
   try {
     await sendToOcrEndpoint(file, source);
   } catch (err) {
-    console.error("[ocr] Upload failed, continuing with local OCR fallback", err);
+    console.error("OCR upload FAILED - network or routing issue");
   }
 
   if (statusEl) statusEl.textContent = "Processing image...";
