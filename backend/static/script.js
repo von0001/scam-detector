@@ -1602,6 +1602,55 @@ function resetOcrWorker() {
   ocrWorkerPromise = null;
 }
 
+async function sendToOcrEndpoint(file, source) {
+  const form = new FormData();
+  form.append("image", file);
+  const resp = await fetch(`${API_BASE_URL}/ocr`, {
+    method: "POST",
+    credentials: "include",
+    headers: csrfHeaders(),
+    body: form,
+  });
+  let data = {};
+  try {
+    data = await resp.json();
+  } catch (err) {
+    // ignore JSON parse issues; logging happens server-side
+  }
+  if (!resp.ok) {
+    const msg = data?.error || "OCR upload failed";
+    throw new Error(msg);
+  }
+  recordFeedbackEvent({
+    event: "ocr_upload_complete",
+    source,
+    payload: {
+      filename: data?.filename,
+      size: data?.size,
+      width: data?.width,
+      height: data?.height,
+    },
+  });
+  return data;
+}
+
+async function handleImageForOcr(file, source = "upload") {
+  if (!file) {
+    if (statusEl) statusEl.textContent = "No image detected. Try again.";
+    return;
+  }
+  if (statusEl) statusEl.textContent = "Uploading image for OCR...";
+
+  try {
+    await sendToOcrEndpoint(file, source);
+  } catch (err) {
+    console.error("[ocr] Upload failed, continuing with local OCR fallback", err);
+  }
+
+  if (statusEl) statusEl.textContent = "Processing image...";
+  await runOCR(file, { source });
+}
+
 async function runBaseGrayscalePass(worker, file, source, meta) {
   const img = await loadImageElement(file);
   const canvas = document.createElement("canvas");
@@ -1774,7 +1823,7 @@ if (ocrBtn && fileInput) {
     if (!file) return;
     const mode = getSelectedMode();
     if (mode === "qr") analyzeQR(file);
-    else runOCR(file, { source: "upload" });
+    else handleImageForOcr(file, "upload");
   });
 }
 
@@ -1800,7 +1849,7 @@ if (dropZone) {
     }
     const mode = getSelectedMode();
     if (mode === "qr") analyzeQR(file);
-    else runOCR(file, { source: "drop" });
+    else handleImageForOcr(file, "drop");
   });
 }
 

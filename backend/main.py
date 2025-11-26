@@ -16,6 +16,7 @@ from collections import deque
 import copy
 import traceback
 import sentry_sdk
+from io import BytesIO
 
 from fastapi import FastAPI, UploadFile, File, Request
 from fastapi.responses import FileResponse, JSONResponse
@@ -72,6 +73,7 @@ from backend.auth import (
     create_admin_token,
     verify_admin_token,
 )
+from PIL import Image
 
 try:
     import stripe  # type: ignore
@@ -2232,6 +2234,44 @@ async def analyze(request: Request):
                 "details": str(e)
             }
         )
+
+
+@app.post("/ocr")
+async def ocr_endpoint(request: Request, image: UploadFile = File(...)):
+    if not _validate_csrf(request):
+        return _csrf_failure()
+    rl = _enforce_rate_limit(get_current_user(request), request, "ocr")
+    if rl:
+        return rl
+    record_event("request")
+
+    max_bytes = 5 * 1024 * 1024
+    img_bytes = await image.read()
+    if len(img_bytes) > max_bytes:
+        return JSONResponse({"error": "Image too large. Max 5MB."}, status_code=413)
+
+    filename = image.filename or "upload"
+    mime = image.content_type or "unknown"
+    width = None
+    height = None
+    try:
+        with Image.open(BytesIO(img_bytes)) as im:
+            width, height = im.size
+    except Exception:
+        pass
+
+    print(f"OCR endpoint hit name={filename} size={len(img_bytes)} bytes mime={mime} dims=({width}x{height})")
+
+    return JSONResponse(
+        {
+            "status": "received",
+            "filename": filename,
+            "size": len(img_bytes),
+            "mime": mime,
+            "width": width,
+            "height": height,
+        }
+    )
 
 
 @app.post("/qr")
