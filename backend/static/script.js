@@ -1376,6 +1376,20 @@ function detectTextBoundingBox(ctx, width, height) {
   };
 }
 
+function computeAverageLuminance(data, step, width, height) {
+  let sum = 0;
+  let count = 0;
+  const stride = Math.max(1, step);
+  for (let y = 0; y < height; y += stride) {
+    for (let x = 0; x < width; x += stride) {
+      const idx = (y * width + x) * 4;
+      sum += ocrLuminance(data[idx], data[idx + 1], data[idx + 2]);
+      count += 1;
+    }
+  }
+  return count ? sum / count : 0;
+}
+
 function enhanceContrastAndSharpen(ctx, width, height) {
   const imageData = ctx.getImageData(0, 0, width, height);
   const data = imageData.data;
@@ -1506,7 +1520,23 @@ async function preprocessImageForOcr(file) {
       targetHeight
     );
 
+    const preEnhanceData = ctx.getImageData(0, 0, targetWidth, targetHeight);
+    const preEnhanceAvg = computeAverageLuminance(
+      preEnhanceData.data,
+      Math.max(2, Math.round(Math.max(targetWidth, targetHeight) / 512)),
+      targetWidth,
+      targetHeight
+    );
+
     enhanceContrastAndSharpen(ctx, targetWidth, targetHeight);
+
+    const postData = ctx.getImageData(0, 0, targetWidth, targetHeight);
+    const postAvg = computeAverageLuminance(
+      postData.data,
+      Math.max(2, Math.round(Math.max(targetWidth, targetHeight) / 512)),
+      targetWidth,
+      targetHeight
+    );
 
     const blob = await new Promise((resolve, reject) => {
       canvas.toBlob(
@@ -1526,11 +1556,19 @@ async function preprocessImageForOcr(file) {
         scale,
         source: { width: img.width, height: img.height },
         cropBox,
+        preEnhanceAvg,
+        postEnhanceAvg,
       },
     };
   } catch (err) {
     console.warn("[ocr] Preprocessing failed, falling back to raw file", err);
-    return { blob: file, meta: { fallback: true, reason: err?.message || "preprocess_error" } };
+    return {
+      blob: file,
+      meta: {
+        fallback: true,
+        reason: err?.message || "preprocess_error",
+      },
+    };
   }
 }
 
@@ -1564,6 +1602,58 @@ function resetOcrWorker() {
   ocrWorkerPromise = null;
 }
 
+async function runBaseGrayscalePass(worker, file, source, meta) {
+  const img = await loadImageElement(file);
+  const canvas = document.createElement("canvas");
+  canvas.width = img.width;
+  canvas.height = img.height;
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const data = imageData.data;
+  for (let i = 0; i < data.length; i += 4) {
+    const lum = ocrLuminance(data[i], data[i + 1], data[i + 2]);
+    data[i] = data[i + 1] = data[i + 2] = clampChannel(lum);
+  }
+  ctx.putImageData(imageData, 0, 0);
+
+  const avg = computeAverageLuminance(
+    data,
+    Math.max(2, Math.round(Math.max(canvas.width, canvas.height) / 512)),
+    canvas.width,
+    canvas.height
+  );
+  if (avg < 2) {
+    console.warn("[ocr] Fallback grayscale canvas appears blank", {
+      avg,
+      width: canvas.width,
+      height: canvas.height,
+    });
+    recordFeedbackEvent({
+      event: "ocr_canvas_blank",
+      source,
+      meta: { ...meta, fallbackAvg: avg },
+    });
+    return { text: "", pixelOk: false, canvasAvg: avg };
+  }
+
+  const blob = await new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (b) => {
+        if (b) resolve(b);
+        else reject(new Error("Failed to encode grayscale image."));
+      },
+      "image/png",
+      1
+    );
+  });
+
+  const { data: ocrData } = await worker.recognize(blob);
+  const text = (ocrData?.text || "").trim();
+  return { text, pixelOk: true, canvasAvg: avg };
+}
+
 async function runOCR(imageFile, { source = "upload" } = {}) {
   if (!statusEl || !contentInput) return;
   if (!imageFile) {
@@ -1573,15 +1663,86 @@ async function runOCR(imageFile, { source = "upload" } = {}) {
 
   statusEl.textContent = "Reading text from your screenshot...";
   try {
+    const fileMeta = {
+      type: imageFile.type || "unknown",
+      size: imageFile.size || 0,
+    };
     const { blob, meta } = await preprocessImageForOcr(imageFile);
+    const dims = meta?.source || {};
+    console.info("[ocr] Image received", {
+      source,
+      file: fileMeta,
+      dimensions: dims,
+      mimeDetected: blob?.type || "unknown",
+    });
+    recordFeedbackEvent({
+      event: "ocr_image_received",
+      source,
+      file: fileMeta,
+      meta: { ...meta, dimensions: dims },
+      mimeDetected: blob?.type || "unknown",
+    });
+
+    const pixelAvg = meta?.postEnhanceAvg ?? meta?.preEnhanceAvg ?? 0;
+    const pixelOk = pixelAvg >= 2;
+    if (!pixelOk) {
+      console.warn("[ocr] Canvas appears blank after preprocessing, skipping OCR", {
+        source,
+        meta,
+        pixelAvg,
+      });
+      statusEl.textContent = "Processing image...";
+      return;
+    }
+
     const worker = await getOrInitOcrWorker();
     const { data } = await worker.recognize(blob);
-    const extractedText = (data?.text || "").trim();
+    let extractedText = (data?.text || "").trim();
+    const enhancedEmpty = !extractedText;
+    let finalPixelOk = pixelOk;
+
+    if (enhancedEmpty) {
+      recordFeedbackEvent({
+        event: "ocr_enhanced_empty",
+        source,
+        meta: { ...meta, pixelAvg, mimeDetected: blob?.type || "unknown" },
+      });
+      console.warn("[ocr] Enhanced OCR empty, retrying with base grayscale", meta);
+      const baseResult = await runBaseGrayscalePass(worker, imageFile, source, meta);
+      extractedText = baseResult.text;
+      finalPixelOk = baseResult.pixelOk;
+      if (!extractedText && baseResult.pixelOk) {
+        recordFeedbackEvent({
+          event: "ocr_base_empty",
+          source,
+          meta: { ...meta, baseAvg: baseResult.canvasAvg },
+        });
+        console.warn("[ocr] Base grayscale pass returned empty text", {
+          source,
+          baseAvg: baseResult.canvasAvg,
+        });
+      }
+    }
 
     if (!extractedText) {
+      if (!finalPixelOk) {
+        statusEl.textContent = "Processing image...";
+        recordFeedbackEvent({
+          event: "ocr_canvas_invalid",
+          source,
+          meta: { ...meta, pixelAvg },
+        });
+        console.warn("[ocr] Canvas invalid, suppressing user-facing error", { meta, pixelAvg });
+        return;
+      }
       statusEl.textContent = "OCR failed. Try a clearer or closer screenshot.";
-      console.warn("[ocr] No text detected after preprocessing", meta);
-      recordFeedbackEvent({ event: "ocr_no_text", source, meta });
+      console.warn("[ocr] No text detected; likely OCR engine miss", meta);
+      recordFeedbackEvent({
+        event: "ocr_no_text",
+        source,
+        meta: { ...meta, pixelAvg },
+        reason: "engine_empty_valid_pixels",
+      });
       return;
     }
 
@@ -1590,6 +1751,7 @@ async function runOCR(imageFile, { source = "upload" } = {}) {
       source,
       chars: extractedText.length,
       crop: meta?.cropApplied ? "cropped" : "full",
+      pixelAvg,
     });
 
     contentInput.value = extractedText;
