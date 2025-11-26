@@ -201,7 +201,7 @@ async def security_headers(request: Request, call_next):
         "default-src 'self'; "
         "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
         "style-src 'self' 'unsafe-inline'; "
-        "img-src 'self' data:; "
+        "img-src 'self' data: blob:; "
         "connect-src 'self' https://cdn.jsdelivr.net; "
         "worker-src 'self' blob:; "
         "frame-ancestors 'none';"
