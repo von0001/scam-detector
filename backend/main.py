@@ -28,7 +28,7 @@ import redis
 import logging
 import uuid
 
-from backend.text_scanner import analyze_text
+from backend.text_scanner import analyze_text, get_client
 from backend.url_scanner import analyze_url
 from backend.ai_detector.classify_actor import analyze_actor
 from backend.manipulation.profiler import analyze_manipulation
@@ -489,6 +489,35 @@ def _enforce_rate_limit(user: Optional[dict], request: Request, scope: str) -> O
     return None
 
 
+def _enforce_ai_ocr_quota(request: Request) -> Optional[JSONResponse]:
+    user = get_current_user(request)
+    ip = _get_client_ip(request)
+    try:
+        r = _redis_client()
+    except Exception as exc:
+        return JSONResponse({"error": f"AI OCR quota backend unavailable: {exc}"}, status_code=503)
+
+    plan = (user or {}).get("plan", "guest")
+    if plan == "premium":
+        limit = 100
+    elif plan == "free":
+        limit = 40
+    else:
+        limit = 20
+
+    user_key = user["id"] if user else f"guest:{ip}"
+    key = f"ai:ocrrepair:{user_key}"
+    count = r.incr(key)
+    if count == 1:
+        r.expire(key, 86400)
+    if count > limit:
+        return JSONResponse(
+            {"error": "AI OCR quota exceeded. Using raw OCR output.", "ai_quota_exceeded": True},
+            status_code=429,
+        )
+    return None
+
+
 def _login_fail_key(email: str, ip: str) -> str:
     return f"login:fail:{email.lower()}:{ip}"
 
@@ -570,6 +599,23 @@ def _analyze_task(mode: str, content: str, user_id: Optional[str]):
         )
         return resp
     return {"error": "Unsupported task mode."}
+
+
+def _repair_ocr_text_ai(text: str) -> str:
+    client = get_client()
+    prompt = (
+        "The following text was extracted from a screenshot and may contain OCR errors. "
+        "Reconstruct the most likely original message while preserving intent. "
+        "Do not invent new content, authority, laws, or links. Only repair clarity, spacing, and malformed words.\n\n"
+        f"{text}\n\n"
+        "Return only the corrected text."
+    )
+    resp = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.0,
+    )
+    return (resp.choices[0].message.content or "").strip()
 
 
 def _compute_error_rate() -> float:
@@ -2280,6 +2326,63 @@ async def ocr_endpoint(request: Request, image: UploadFile = File(...)):
             "height": height,
         }
     )
+
+
+@app.post("/ocr/repair")
+async def ocr_repair(request: Request):
+    if not _validate_csrf(request):
+        return _csrf_failure()
+
+    quota = _enforce_ai_ocr_quota(request)
+    if quota:
+        return quota
+
+    try:
+        payload = await request.json()
+    except Exception:
+        return JSONResponse({"error": "Invalid payload."}, status_code=400)
+
+    text = (payload.get("text") or "").strip()
+    if not text:
+        return JSONResponse({"error": "No text provided."}, status_code=400)
+
+    confidence = payload.get("confidence")
+    distorted = bool(payload.get("distorted"))
+    entropy = payload.get("entropy")
+
+    try:
+        repaired = _repair_ocr_text_ai(text)
+    except Exception as exc:
+        print(f"[ocr_repair] AI repair failed: {exc}")
+        return JSONResponse({"error": "AI repair unavailable. Using raw OCR."}, status_code=503)
+
+    confidence_delta = None
+    try:
+        before = float(confidence) if confidence is not None else None
+        if before is not None:
+            confidence_delta = max(0.0, min(100.0, before))
+    except Exception:
+        pass
+
+    print(
+        "[ocr_repair] applied",
+        json.dumps(
+            {
+                "original_len": len(text),
+                "repaired_len": len(repaired),
+                "confidence": confidence,
+                "distorted": distorted,
+                "entropy": entropy,
+            }
+        ),
+    )
+
+    return {
+        "repaired_text": repaired or text,
+        "used_ai": bool(repaired and repaired != text),
+        "original_text": text,
+        "confidence_delta": confidence_delta,
+    }
 
 
 @app.post("/qr")

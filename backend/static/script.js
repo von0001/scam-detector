@@ -1639,6 +1639,24 @@ function isDistortedText(text) {
   return distortionRatio > 0.25 || text.length < 5;
 }
 
+function wordEntropy(text) {
+  if (!text) return 0;
+  const words = text
+    .split(/\s+/)
+    .map((w) => w.trim().toLowerCase())
+    .filter(Boolean);
+  if (!words.length) return 0;
+  const counts = {};
+  for (const w of words) counts[w] = (counts[w] || 0) + 1;
+  const total = words.length;
+  let entropy = 0;
+  for (const w of Object.keys(counts)) {
+    const p = counts[w] / total;
+    entropy -= p * Math.log2(p);
+  }
+  return entropy;
+}
+
 async function sendToOcrEndpoint(file, source) {
   const form = new FormData();
   form.append("image", file);
@@ -1688,6 +1706,49 @@ async function handleImageForOcr(file, source = "upload") {
 
   if (statusEl) statusEl.textContent = "Processing image...";
   await runOCR(file, { source });
+}
+
+async function maybeRepairOcrText(rawText, { confidence = 0, distorted = false, entropy = 0, source = "upload" } = {}) {
+  const aiThreshold = 90;
+  const entropyThreshold = 3.8;
+  const shouldUseAi = confidence < aiThreshold || distorted || entropy > entropyThreshold;
+  if (!shouldUseAi || !rawText) return { text: rawText, usedAi: false };
+
+  try {
+    const resp = await fetch("/ocr/repair", {
+      method: "POST",
+      credentials: "include",
+      headers: csrfHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({
+        text: rawText,
+        confidence,
+        distorted,
+        entropy,
+        source,
+      }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data?.error || "AI repair failed");
+    const repaired = (data?.repaired_text || "").trim();
+    if (repaired && repaired !== rawText) {
+      recordFeedbackEvent({
+        event: "ocr_ai_repair",
+        source,
+        used_ai: true,
+        confidence_before: confidence,
+        repaired_len: repaired.length,
+        original_len: rawText.length,
+      });
+      return { text: repaired, usedAi: true, confidenceDelta: data?.confidence_delta ?? null };
+    }
+  } catch (err) {
+    recordFeedbackEvent({
+      event: "ocr_ai_repair_error",
+      source,
+      reason: err?.message || "unknown",
+    });
+  }
+  return { text: rawText, usedAi: false };
 }
 
 async function runBaseGrayscalePass(worker, file, source, meta) {
@@ -1811,8 +1872,12 @@ async function runOCR(imageFile, { source = "upload" } = {}) {
     extractedText = (firstPass?.data?.text || "").trim();
     enhancedEmpty = !extractedText && usedBlob === blob;
 
+    let bestConfidence = firstConfidence || 0;
+    const distortionDetected = isDistortedText(extractedText);
+    const entropyScore = wordEntropy(extractedText);
+
     const needSoftPass =
-      (extractedText && (firstConfidence < 85 || isDistortedText(extractedText))) || enhancedEmpty;
+      (extractedText && (bestConfidence < 85 || distortionDetected)) || enhancedEmpty;
 
     if (needSoftPass) {
       if (enhancedEmpty) {
@@ -1848,6 +1913,7 @@ async function runOCR(imageFile, { source = "upload" } = {}) {
       if (baseResult.text && (baseResult.confidence || 0) >= firstConfidence) {
         extractedText = baseResult.text;
         finalPixelOk = baseResult.pixelOk;
+        bestConfidence = Math.max(bestConfidence, baseResult.confidence || 0);
       } else if (!baseResult.text && baseResult.pixelOk) {
         recordFeedbackEvent({
           event: "ocr_base_empty",
@@ -1875,13 +1941,34 @@ async function runOCR(imageFile, { source = "upload" } = {}) {
             confidence: rawConfidence,
             chars: extractedText.length,
           });
+          bestConfidence = Math.max(bestConfidence, rawConfidence);
         } catch (rawErr) {
           console.warn("[ocr] Raw direct OCR failed after blank grayscale", rawErr);
         }
       }
     }
 
-    if (!extractedText) {
+    // AI repair (post-processing) if quality signals are low
+    const aiResult = await maybeRepairOcrText(extractedText, {
+      confidence: bestConfidence,
+      distorted: distortionDetected,
+      entropy: entropyScore,
+      source,
+    });
+    const finalText = aiResult.text || extractedText;
+
+    if (aiResult.usedAi) {
+      recordFeedbackEvent({
+        event: "ocr_ai_repair_applied",
+        source,
+        original_text: extractedText,
+        repaired_text: finalText,
+        confidence_before: bestConfidence,
+        confidence_delta: aiResult.confidenceDelta ?? 0,
+      });
+    }
+
+    if (!finalText) {
       if (!finalPixelOk) {
         statusEl.textContent = "Processing image...";
         recordFeedbackEvent({
@@ -1906,12 +1993,12 @@ async function runOCR(imageFile, { source = "upload" } = {}) {
     recordFeedbackEvent({
       event: "ocr_success",
       source,
-      chars: extractedText.length,
+      chars: finalText.length,
       crop: meta?.cropApplied ? "cropped" : "full",
       pixelAvg,
     });
 
-    contentInput.value = extractedText;
+    contentInput.value = finalText;
     statusEl.textContent = "Text extracted - running safety check...";
     analyzeContent();
   } catch (err) {
