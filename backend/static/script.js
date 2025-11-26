@@ -1315,29 +1315,291 @@ async function analyzeQR(file) {
 
 // ===================== OCR ======================
 
-async function runOCR(imageFile) {
+function ocrLuminance(r, g, b) {
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+function clampChannel(v) {
+  return Math.max(0, Math.min(255, Math.round(v)));
+}
+
+function detectTextBoundingBox(ctx, width, height) {
+  const data = ctx.getImageData(0, 0, width, height).data;
+  const borderSample = [];
+  const marginX = Math.max(2, Math.floor(width * 0.08));
+  const marginY = Math.max(2, Math.floor(height * 0.08));
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (x < marginX || x >= width - marginX || y < marginY || y >= height - marginY) {
+        const idx = (y * width + x) * 4;
+        borderSample.push(ocrLuminance(data[idx], data[idx + 1], data[idx + 2]));
+      }
+    }
+  }
+
+  const bg = borderSample.length
+    ? borderSample.reduce((acc, v) => acc + v, 0) / borderSample.length
+    : 128;
+  const sampleStep = Math.max(1, Math.floor(Math.max(width, height) / 320));
+  const threshold = Math.max(14, Math.min(48, Math.abs(bg - 128) * 0.35 + 20));
+
+  let minX = width;
+  let minY = height;
+  let maxX = 0;
+  let maxY = 0;
+  let hits = 0;
+
+  for (let y = 0; y < height; y += sampleStep) {
+    for (let x = 0; x < width; x += sampleStep) {
+      const idx = (y * width + x) * 4;
+      const diff = Math.abs(ocrLuminance(data[idx], data[idx + 1], data[idx + 2]) - bg);
+      if (diff > threshold) {
+        hits += 1;
+        if (x < minX) minX = x;
+        if (y < minY) minY = y;
+        if (x > maxX) maxX = x;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+
+  if (!hits) return null;
+  const padding = Math.max(6, Math.round(Math.min(width, height) * 0.05));
+  const boxX = Math.max(0, minX - padding);
+  const boxY = Math.max(0, minY - padding);
+  return {
+    x: boxX,
+    y: boxY,
+    w: Math.min(width - boxX, maxX - minX + padding * 2),
+    h: Math.min(height - boxY, maxY - minY + padding * 2),
+  };
+}
+
+function enhanceContrastAndSharpen(ctx, width, height) {
+  const imageData = ctx.getImageData(0, 0, width, height);
+  const data = imageData.data;
+  const contrastBoost = 24;
+  const factor = (259 * (contrastBoost + 255)) / (255 * (259 - contrastBoost));
+
+  for (let i = 0; i < data.length; i += 4) {
+    data[i] = clampChannel(factor * (data[i] - 128) + 128);
+    data[i + 1] = clampChannel(factor * (data[i + 1] - 128) + 128);
+    data[i + 2] = clampChannel(factor * (data[i + 2] - 128) + 128);
+  }
+
+  const sharpened = new Uint8ClampedArray(data.length);
+  const src = new Uint8ClampedArray(data);
+  const kernel = [0, -1, 0, -1, 5, -1, 0, -1, 0];
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const base = (y * width + x) * 4;
+      for (let c = 0; c < 3; c++) {
+        let acc = 0;
+        let k = 0;
+        for (let ky = -1; ky <= 1; ky++) {
+          const py = Math.min(height - 1, Math.max(0, y + ky));
+          for (let kx = -1; kx <= 1; kx++) {
+            const px = Math.min(width - 1, Math.max(0, x + kx));
+            const idx = (py * width + px) * 4 + c;
+            acc += src[idx] * kernel[k];
+            k += 1;
+          }
+        }
+        sharpened[base + c] = clampChannel(acc);
+      }
+      sharpened[base + 3] = src[base + 3];
+    }
+  }
+
+  imageData.data.set(sharpened);
+  ctx.putImageData(imageData, 0, 0);
+}
+
+function expandBox(box, factor, width, height) {
+  const cx = box.x + box.w / 2;
+  const cy = box.y + box.h / 2;
+  const newW = Math.min(width, box.w * factor);
+  const newH = Math.min(height, box.h * factor);
+  const x = Math.max(0, Math.min(width - newW, cx - newW / 2));
+  const y = Math.max(0, Math.min(height - newH, cy - newH / 2));
+  return { x: Math.round(x), y: Math.round(y), w: Math.round(newW), h: Math.round(newH) };
+}
+
+function normalizeDimensions(width, height, minSide = 900, maxSide = 1800) {
+  const maxInputSide = Math.max(width, height);
+  const upscale = maxInputSide < minSide ? minSide / maxInputSide : 1;
+  const downscale = maxInputSide > maxSide ? maxSide / maxInputSide : 1;
+  const scale = Math.min(2.2, Math.max(upscale, downscale));
+  return {
+    targetWidth: Math.max(1, Math.round(width * scale)),
+    targetHeight: Math.max(1, Math.round(height * scale)),
+    scale,
+  };
+}
+
+async function loadImageElement(file) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(img);
+    };
+    img.onerror = (err) => {
+      URL.revokeObjectURL(url);
+      reject(err);
+    };
+    img.src = url;
+  });
+}
+
+async function preprocessImageForOcr(file) {
+  try {
+    const img = await loadImageElement(file);
+    const detectLimit = 900;
+    const detectScale = Math.min(1, detectLimit / Math.max(img.width, img.height));
+    const detectW = Math.max(1, Math.round(img.width * detectScale));
+    const detectH = Math.max(1, Math.round(img.height * detectScale));
+    const detectCanvas = document.createElement("canvas");
+    detectCanvas.width = detectW;
+    detectCanvas.height = detectH;
+    const detectCtx = detectCanvas.getContext("2d", { willReadFrequently: true });
+    detectCtx.drawImage(img, 0, 0, detectW, detectH);
+
+    const rawBox = detectTextBoundingBox(detectCtx, detectW, detectH);
+    const cropBox = rawBox
+      ? expandBox(
+          {
+            x: rawBox.x / detectScale,
+            y: rawBox.y / detectScale,
+            w: rawBox.w / detectScale,
+            h: rawBox.h / detectScale,
+          },
+          1.05,
+          img.width,
+          img.height
+        )
+      : { x: 0, y: 0, w: img.width, h: img.height };
+
+    const { targetWidth, targetHeight, scale } = normalizeDimensions(
+      cropBox.w,
+      cropBox.h
+    );
+
+    const canvas = document.createElement("canvas");
+    canvas.width = targetWidth;
+    canvas.height = targetHeight;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    ctx.imageSmoothingEnabled = scale < 1.1;
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(
+      img,
+      cropBox.x,
+      cropBox.y,
+      cropBox.w,
+      cropBox.h,
+      0,
+      0,
+      targetWidth,
+      targetHeight
+    );
+
+    enhanceContrastAndSharpen(ctx, targetWidth, targetHeight);
+
+    const blob = await new Promise((resolve, reject) => {
+      canvas.toBlob(
+        (b) => {
+          if (b) resolve(b);
+          else reject(new Error("Failed to encode preprocessed image."));
+        },
+        "image/png",
+        1
+      );
+    });
+
+    return {
+      blob,
+      meta: {
+        cropApplied: !!rawBox,
+        scale,
+        source: { width: img.width, height: img.height },
+        cropBox,
+      },
+    };
+  } catch (err) {
+    console.warn("[ocr] Preprocessing failed, falling back to raw file", err);
+    return { blob: file, meta: { fallback: true, reason: err?.message || "preprocess_error" } };
+  }
+}
+
+let ocrWorkerPromise = null;
+
+async function getOrInitOcrWorker() {
+  if (!ocrWorkerPromise) {
+    ocrWorkerPromise = (async () => {
+      const worker = await Tesseract.createWorker();
+      await worker.load();
+      await worker.loadLanguage("eng");
+      await worker.initialize("eng");
+      return worker;
+    })();
+  }
+  return ocrWorkerPromise;
+}
+
+function resetOcrWorker() {
+  if (ocrWorkerPromise) {
+    ocrWorkerPromise
+      .then((worker) => {
+        try {
+          worker.terminate();
+        } catch (e) {
+          // ignore termination errors
+        }
+      })
+      .catch(() => {});
+  }
+  ocrWorkerPromise = null;
+}
+
+async function runOCR(imageFile, { source = "upload" } = {}) {
   if (!statusEl || !contentInput) return;
+  if (!imageFile) {
+    statusEl.textContent = "No image detected. Try again.";
+    return;
+  }
+
   statusEl.textContent = "Reading text from your screenshot...";
   try {
-    const worker = await Tesseract.createWorker();
-    await worker.load();
-    await worker.loadLanguage("eng");
-    await worker.initialize("eng");
+    const { blob, meta } = await preprocessImageForOcr(imageFile);
+    const worker = await getOrInitOcrWorker();
+    const { data } = await worker.recognize(blob);
+    const extractedText = (data?.text || "").trim();
 
-    const { data } = await worker.recognize(imageFile);
-    await worker.terminate();
-
-    const extractedText = data.text.trim();
     if (!extractedText) {
-      statusEl.textContent = "No readable text found in the image.";
+      statusEl.textContent = "OCR failed. Try a clearer or closer screenshot.";
+      console.warn("[ocr] No text detected after preprocessing", meta);
+      recordFeedbackEvent({ event: "ocr_no_text", source, meta });
       return;
     }
+
+    recordFeedbackEvent({
+      event: "ocr_success",
+      source,
+      chars: extractedText.length,
+      crop: meta?.cropApplied ? "cropped" : "full",
+    });
 
     contentInput.value = extractedText;
     statusEl.textContent = "Text extracted - running safety check...";
     analyzeContent();
   } catch (err) {
-    statusEl.textContent = "OCR failed. Try a clearer or closer screenshot.";
+    console.error(`[ocr] OCR failed for ${source}: ${err?.message || err}`, err);
+    recordFeedbackEvent({ event: "ocr_error", source, reason: err?.message || "unknown" });
+    resetOcrWorker();
+    statusEl.textContent = "Unable to process the image right now. Please try again.";
   }
 }
 
@@ -1350,7 +1612,7 @@ if (ocrBtn && fileInput) {
     if (!file) return;
     const mode = getSelectedMode();
     if (mode === "qr") analyzeQR(file);
-    else runOCR(file);
+    else runOCR(file, { source: "upload" });
   });
 }
 
@@ -1366,11 +1628,17 @@ if (dropZone) {
   dropZone.addEventListener("drop", (e) => {
     e.preventDefault();
     dropZone.classList.remove("dragover");
-    const file = e.dataTransfer.files[0];
-    if (!file) return;
+    const dt = e.dataTransfer;
+    const file =
+      (dt && dt.files && dt.files[0]) ||
+      (dt && dt.items && Array.from(dt.items).find((item) => item.kind === "file")?.getAsFile());
+    if (!file) {
+      if (statusEl) statusEl.textContent = "No image detected. Drop a screenshot or QR image.";
+      return;
+    }
     const mode = getSelectedMode();
     if (mode === "qr") analyzeQR(file);
-    else runOCR(file);
+    else runOCR(file, { source: "drop" });
   });
 }
 
