@@ -1557,7 +1557,7 @@ async function preprocessImageForOcr(file) {
         source: { width: img.width, height: img.height },
         cropBox,
         preEnhanceAvg,
-        postEnhanceAvg,
+        postEnhanceAvg: postAvg,
       },
     };
   } catch (err) {
@@ -1736,21 +1736,31 @@ async function runOCR(imageFile, { source = "upload" } = {}) {
 
     const pixelAvg = meta?.postEnhanceAvg ?? meta?.preEnhanceAvg ?? 0;
     const pixelOk = pixelAvg >= 2;
+
+    const worker = await getOrInitOcrWorker();
+    let usedBlob = blob;
+    let extractedText = "";
+    let enhancedEmpty = false;
+    let finalPixelOk = pixelOk;
+
     if (!pixelOk) {
-      console.warn("[ocr] Canvas appears blank after preprocessing, skipping OCR", {
+      console.warn("[ocr] Canvas appears blank after preprocessing, using raw image", {
         source,
         meta,
         pixelAvg,
       });
-      statusEl.textContent = "Processing image...";
-      return;
+      recordFeedbackEvent({
+        event: "ocr_canvas_blank_preprocess",
+        source,
+        meta: { ...meta, pixelAvg },
+      });
+      usedBlob = imageFile;
+      finalPixelOk = true; // force attempt even if average was low
     }
 
-    const worker = await getOrInitOcrWorker();
-    const { data } = await worker.recognize(blob);
-    let extractedText = (data?.text || "").trim();
-    const enhancedEmpty = !extractedText;
-    let finalPixelOk = pixelOk;
+    const firstPass = await worker.recognize(usedBlob);
+    extractedText = (firstPass?.data?.text || "").trim();
+    enhancedEmpty = !extractedText && usedBlob === blob;
 
     if (enhancedEmpty) {
       recordFeedbackEvent({
@@ -1772,6 +1782,15 @@ async function runOCR(imageFile, { source = "upload" } = {}) {
           source,
           baseAvg: baseResult.canvasAvg,
         });
+      } else if (!baseResult.pixelOk) {
+        // even grayscale looked blank; still attempt raw image directly as last resort
+        try {
+          const rawResult = await worker.recognize(imageFile);
+          extractedText = (rawResult?.data?.text || "").trim();
+          finalPixelOk = true;
+        } catch (rawErr) {
+          console.warn("[ocr] Raw direct OCR failed after blank grayscale", rawErr);
+        }
       }
     }
 
