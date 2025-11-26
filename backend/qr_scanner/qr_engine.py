@@ -70,24 +70,26 @@ def classify_qr_content(raw: str) -> Dict[str, Any]:
     def base_score_to_verdict(score: int) -> str:
         return "DANGEROUS" if score >= 30 else "SUSPICIOUS" if score >= 10 else "SAFE"
 
-    def combine_with_url_engine(url: str) -> Tuple[int, str, list]:
-        url_result = analyze_url(url)
-        url_score = int(url_result.get("score", 0))
-        url_verdict = base_score_to_verdict(url_score)
-        reasons = clean_reasons(url_result.get("reasons", []))
-        reasons.insert(0, "QR-derived URL detected and analyzed using URL Security Engine.")
-        return url_score, url_verdict, reasons
-
     # URL QR
     if raw_lower.startswith(("http://", "https://", "www.")):
         url = raw if raw.startswith("http") else "https://" + raw
-        score, verdict, reasons = combine_with_url_engine(url)
+        url_result = analyze_url(url)
+        score = int(url_result.get("score", 0))
+        verdict = url_result.get("verdict", "SAFE")
+        reasons = clean_reasons(url_result.get("reasons", []))
+        reasons.insert(0, "QR-derived URL detected and analyzed using URL Security Engine.")
+        explanation = url_result.get("explanation") or ""
+        if explanation:
+            explanation = f"{explanation} QR-derived URL detected and analyzed using URL Security Engine."
+        else:
+            explanation = "QR-derived URL detected and analyzed using URL Security Engine."
         classification = {
             "qr_type": "url",
             "routed_mode": "url_scan",
             "content": url,
             "score": score,
             "verdict": verdict,
+            "explanation": explanation,
             "reasons": reasons,
         }
         return log_item(classification)
