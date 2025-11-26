@@ -1393,41 +1393,55 @@ function computeAverageLuminance(data, step, width, height) {
 function enhanceContrastAndSharpen(ctx, width, height) {
   const imageData = ctx.getImageData(0, 0, width, height);
   const data = imageData.data;
-  const contrastBoost = 24;
-  const factor = (259 * (contrastBoost + 255)) / (255 * (259 - contrastBoost));
-
+  // Convert to grayscale and compute mean/std for adaptive normalization
+  let sum = 0;
+  let sumSq = 0;
+  const total = width * height;
   for (let i = 0; i < data.length; i += 4) {
-    data[i] = clampChannel(factor * (data[i] - 128) + 128);
-    data[i + 1] = clampChannel(factor * (data[i + 1] - 128) + 128);
-    data[i + 2] = clampChannel(factor * (data[i + 2] - 128) + 128);
+    const lum = ocrLuminance(data[i], data[i + 1], data[i + 2]);
+    sum += lum;
+    sumSq += lum * lum;
+    data[i] = data[i + 1] = data[i + 2] = clampChannel(lum);
+  }
+  const mean = total ? sum / total : 128;
+  const variance = total ? sumSq / total - mean * mean : 0;
+  const std = Math.max(8, Math.sqrt(Math.max(variance, 0)));
+  const targetStd = 55; // mild adaptive contrast
+  const norm = targetStd / std;
+
+  // Adaptive contrast normalization
+  for (let i = 0; i < data.length; i += 4) {
+    const v = data[i];
+    const adjusted = clampChannel((v - mean) * norm + 128);
+    data[i] = data[i + 1] = data[i + 2] = adjusted;
   }
 
-  const sharpened = new Uint8ClampedArray(data.length);
-  const src = new Uint8ClampedArray(data);
-  const kernel = [0, -1, 0, -1, 5, -1, 0, -1, 0];
-
+  // Mild unsharp mask (radius ~1, amount 0.6)
+  const blurred = new Uint8ClampedArray(data.length);
+  const kernel = [1, 2, 1, 2, 4, 2, 1, 2, 1];
+  const kernelWeight = 16;
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
-      const base = (y * width + x) * 4;
-      for (let c = 0; c < 3; c++) {
-        let acc = 0;
-        let k = 0;
-        for (let ky = -1; ky <= 1; ky++) {
-          const py = Math.min(height - 1, Math.max(0, y + ky));
-          for (let kx = -1; kx <= 1; kx++) {
-            const px = Math.min(width - 1, Math.max(0, x + kx));
-            const idx = (py * width + px) * 4 + c;
-            acc += src[idx] * kernel[k];
-            k += 1;
-          }
+      let acc = 0;
+      let k = 0;
+      for (let ky = -1; ky <= 1; ky++) {
+        const py = Math.min(height - 1, Math.max(0, y + ky));
+        for (let kx = -1; kx <= 1; kx++) {
+          const px = Math.min(width - 1, Math.max(0, x + kx));
+          const idx = (py * width + px) * 4;
+          acc += data[idx] * kernel[k];
+          k += 1;
         }
-        sharpened[base + c] = clampChannel(acc);
       }
-      sharpened[base + 3] = src[base + 3];
+      const base = (y * width + x) * 4;
+      const blurVal = acc / kernelWeight;
+      const sharpened = clampChannel(data[base] + 0.6 * (data[base] - blurVal));
+      blurred[base] = blurred[base + 1] = blurred[base + 2] = sharpened;
+      blurred[base + 3] = data[base + 3];
     }
   }
 
-  imageData.data.set(sharpened);
+  imageData.data.set(blurred);
   ctx.putImageData(imageData, 0, 0);
 }
 
@@ -1445,7 +1459,13 @@ function normalizeDimensions(width, height, minSide = 900, maxSide = 1800) {
   const maxInputSide = Math.max(width, height);
   const upscale = maxInputSide < minSide ? minSide / maxInputSide : 1;
   const downscale = maxInputSide > maxSide ? maxSide / maxInputSide : 1;
-  const scale = Math.min(2.2, Math.max(upscale, downscale));
+  let scale = Math.min(2.2, Math.max(upscale, downscale));
+  if (width < 800) {
+    scale = Math.max(scale, 2);
+  }
+  if (width < 600) {
+    scale = Math.max(scale, 2.2);
+  }
   return {
     targetWidth: Math.max(1, Math.round(width * scale)),
     targetHeight: Math.max(1, Math.round(height * scale)),
@@ -1472,6 +1492,8 @@ async function loadImageElement(file) {
 async function preprocessImageForOcr(file) {
   try {
     const img = await loadImageElement(file);
+    const inferredDpi = (img.width >= 300 && img.height >= 300) ? 72 : 72;
+    const lowDpi = inferredDpi < 150 || img.width < 600;
     const detectLimit = 900;
     const detectScale = Math.min(1, detectLimit / Math.max(img.width, img.height));
     const detectW = Math.max(1, Math.round(img.width * detectScale));
@@ -1529,6 +1551,10 @@ async function preprocessImageForOcr(file) {
     );
 
     enhanceContrastAndSharpen(ctx, targetWidth, targetHeight);
+    if (lowDpi) {
+      // Additional pass to ensure low-resolution sources get a cleaner edge profile
+      enhanceContrastAndSharpen(ctx, targetWidth, targetHeight);
+    }
 
     const postData = ctx.getImageData(0, 0, targetWidth, targetHeight);
     const postAvg = computeAverageLuminance(
@@ -1558,6 +1584,8 @@ async function preprocessImageForOcr(file) {
         cropBox,
         preEnhanceAvg,
         postEnhanceAvg: postAvg,
+        lowDpi,
+        inferredDpi,
       },
     };
   } catch (err) {
@@ -1600,6 +1628,15 @@ function resetOcrWorker() {
       .catch(() => {});
   }
   ocrWorkerPromise = null;
+}
+
+const OCR_CHAR_WHITELIST = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,:/-$%()";
+
+function isDistortedText(text) {
+  if (!text) return true;
+  const allowed = text.replace(/[A-Za-z0-9.,:\/\-$%()\s]/g, "");
+  const distortionRatio = allowed.length / Math.max(text.length, 1);
+  return distortionRatio > 0.25 || text.length < 5;
 }
 
 async function sendToOcrEndpoint(file, source) {
@@ -1702,7 +1739,8 @@ async function runBaseGrayscalePass(worker, file, source, meta) {
 
   const { data: ocrData } = await worker.recognize(blob);
   const text = (ocrData?.text || "").trim();
-  return { text, pixelOk: true, canvasAvg: avg };
+  const confidence = typeof ocrData?.confidence === "number" ? ocrData.confidence : 0;
+  return { text, pixelOk: true, canvasAvg: avg, confidence };
 }
 
 async function runOCR(imageFile, { source = "upload" } = {}) {
@@ -1758,21 +1796,59 @@ async function runOCR(imageFile, { source = "upload" } = {}) {
       finalPixelOk = true; // force attempt even if average was low
     }
 
-    const firstPass = await worker.recognize(usedBlob);
+    const firstPass = await worker.recognize(usedBlob, {
+      tessedit_char_whitelist: OCR_CHAR_WHITELIST,
+    });
+    const firstConfidence =
+      typeof firstPass?.data?.confidence === "number" ? firstPass.data.confidence : 0;
+    recordFeedbackEvent({
+      event: "ocr_confidence",
+      source,
+      pass: "enhanced",
+      confidence: firstConfidence,
+      chars: (firstPass?.data?.text || "").length,
+    });
     extractedText = (firstPass?.data?.text || "").trim();
     enhancedEmpty = !extractedText && usedBlob === blob;
 
-    if (enhancedEmpty) {
-      recordFeedbackEvent({
-        event: "ocr_enhanced_empty",
-        source,
-        meta: { ...meta, pixelAvg, mimeDetected: blob?.type || "unknown" },
-      });
-      console.warn("[ocr] Enhanced OCR empty, retrying with base grayscale", meta);
+    const needSoftPass =
+      (extractedText && (firstConfidence < 85 || isDistortedText(extractedText))) || enhancedEmpty;
+
+    if (needSoftPass) {
+      if (enhancedEmpty) {
+        recordFeedbackEvent({
+          event: "ocr_enhanced_empty",
+          source,
+          meta: { ...meta, pixelAvg, mimeDetected: blob?.type || "unknown" },
+        });
+        console.warn("[ocr] Enhanced OCR empty, retrying with base grayscale", meta);
+      } else {
+        recordFeedbackEvent({
+          event: "ocr_low_confidence",
+          source,
+          confidence: firstConfidence,
+          chars: extractedText.length,
+        });
+        console.warn("[ocr] Low-confidence OCR, retrying with softer filtering", {
+          confidence: firstConfidence,
+        });
+      }
+
       const baseResult = await runBaseGrayscalePass(worker, imageFile, source, meta);
-      extractedText = baseResult.text;
-      finalPixelOk = baseResult.pixelOk;
-      if (!extractedText && baseResult.pixelOk) {
+      if (typeof baseResult.confidence === "number") {
+        recordFeedbackEvent({
+          event: "ocr_confidence",
+          source,
+          pass: "soft",
+          confidence: baseResult.confidence,
+          chars: baseResult.text.length,
+        });
+      }
+
+      if (baseResult.text && (baseResult.confidence || 0) >= firstConfidence) {
+        extractedText = baseResult.text;
+        finalPixelOk = baseResult.pixelOk;
+      } else if (!baseResult.text && baseResult.pixelOk) {
         recordFeedbackEvent({
           event: "ocr_base_empty",
           source,
@@ -1785,9 +1861,20 @@ async function runOCR(imageFile, { source = "upload" } = {}) {
       } else if (!baseResult.pixelOk) {
         // even grayscale looked blank; still attempt raw image directly as last resort
         try {
-          const rawResult = await worker.recognize(imageFile);
+          const rawResult = await worker.recognize(imageFile, {
+            tessedit_char_whitelist: OCR_CHAR_WHITELIST,
+          });
           extractedText = (rawResult?.data?.text || "").trim();
           finalPixelOk = true;
+          const rawConfidence =
+            typeof rawResult?.data?.confidence === "number" ? rawResult.data.confidence : 0;
+          recordFeedbackEvent({
+            event: "ocr_confidence",
+            source,
+            pass: "raw",
+            confidence: rawConfidence,
+            chars: extractedText.length,
+          });
         } catch (rawErr) {
           console.warn("[ocr] Raw direct OCR failed after blank grayscale", rawErr);
         }
