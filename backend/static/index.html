@@ -83,7 +83,7 @@
           </div>
 
           <div id="plan-pill" class="plan-pill">
-            Guest mode · Limited free scans. <span>Create a free account</span> to sync history.
+            You are on Free Tier - Safe Starter Mode. <span>Upgrade to Premium</span> to unlock deep protection.
           </div>
 
           <label for="content-input" class="input-label">
@@ -95,47 +95,62 @@
             placeholder="Example: a weird Cash App request, a ‘delivery issue’ email, or a DM that feels off..."
             rows="6"></textarea>
 
-          <!-- MODE SELECT – PILL TOGGLES -->
+          <!-- MODE SELECT -->
           <div class="mode-row">
             <span class="mode-label">Scan mode</span>
 
             <div class="mode-pill-group">
-              <label class="mode-pill">
+              <label class="mode-pill" data-tier="free">
                 <input type="radio" name="mode" value="auto" checked />
                 <span>Auto</span>
               </label>
 
-              <label class="mode-pill">
+              <label class="mode-pill" data-tier="free">
                 <input type="radio" name="mode" value="url" />
                 <span>URL</span>
               </label>
 
-              <label class="mode-pill">
+              <label class="mode-pill" data-tier="free">
                 <input type="radio" name="mode" value="text" />
                 <span>Text</span>
               </label>
 
-              <label class="mode-pill">
+              <label class="mode-pill locked-pill" data-tier="premium" data-feature-key="ai_detector" title="Premium Feature - Unlock with Full Dominance Mode">
                 <input type="radio" name="mode" value="chat" />
                 <span>AI Detector</span>
+                <span class="lock-chip">Premium</span>
               </label>
 
-              <label class="mode-pill">
+              <label class="mode-pill locked-pill" data-tier="premium" data-feature-key="psychology" title="Premium Feature - Unlock with Full Dominance Mode">
                 <input type="radio" name="mode" value="manipulation" />
                 <span>Manipulation</span>
+                <span class="lock-chip">Premium</span>
               </label>
 
-              <label class="mode-pill">
+              <label class="mode-pill locked-pill" data-tier="premium" data-feature-key="qr_scan" title="Premium Feature - Unlock with Full Dominance Mode">
                 <input type="radio" name="mode" value="qr" />
                 <span>QR Code</span>
+                <span class="lock-chip">Premium</span>
               </label>
             </div>
           </div>
 
           <!-- PRIMARY CTA -->
-          <button id="analyze-btn" class="primary-btn">
-            Check Safety
-          </button>
+          <div class="dual-action-row">
+            <button id="analyze-btn" class="primary-btn">
+              Check Safety
+            </button>
+            <button
+              id="deep-analyze-btn"
+              class="secondary-premium-btn"
+              data-tier="premium"
+              data-feature-key="deep_ai"
+              title="Premium Feature - Unlock with Full Dominance Mode"
+            >
+              <span>Deep AI Analysis</span>
+              <span class="lock-chip">Premium</span>
+            </button>
+          </div>
 
           <!-- OCR + DROP -->
           <div class="ocr-container">
@@ -175,6 +190,45 @@
 
       </section>
     </main>
+
+    <section class="feature-map">
+      <div class="feature-map-headline">
+        <h2>Access Wall</h2>
+        <p>Free = Safe Starter Mode. Premium = Full Dominance Mode.</p>
+      </div>
+      <div class="feature-map-grid">
+        <div class="feature-map-row">
+          <span>Basic URL Scan</span>
+          <span class="feature-tag feature-tag-free">Free</span>
+          <span class="feature-tag feature-tag-premium">Premium</span>
+        </div>
+        <div class="feature-map-row">
+          <span>Basic Text Scan</span>
+          <span class="feature-tag feature-tag-free">Free</span>
+          <span class="feature-tag feature-tag-premium">Premium</span>
+        </div>
+        <div class="feature-map-row locked-row" data-tier="premium">
+          <span>Deep AI Analysis</span>
+          <span class="feature-tag feature-tag-locked">Locked</span>
+          <span class="feature-tag feature-tag-premium">Premium</span>
+        </div>
+        <div class="feature-map-row locked-row" data-tier="premium">
+          <span>Psychological Manipulation Detection</span>
+          <span class="feature-tag feature-tag-locked">Locked</span>
+          <span class="feature-tag feature-tag-premium">Premium</span>
+        </div>
+        <div class="feature-map-row locked-row" data-tier="premium">
+          <span>Screenshot / QR Scan</span>
+          <span class="feature-tag feature-tag-locked">Locked</span>
+          <span class="feature-tag feature-tag-premium">Premium</span>
+        </div>
+        <div class="feature-map-row locked-row" data-tier="premium">
+          <span>Full History & Export</span>
+          <span class="feature-tag feature-tag-locked">Locked</span>
+          <span class="feature-tag feature-tag-premium">Premium</span>
+        </div>
+      </div>
+    </section>
 
     <!-- HOW IT WORKS -->
     <section class="how-it-works" id="how-it-works">

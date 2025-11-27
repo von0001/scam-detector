@@ -14,6 +14,7 @@ from psycopg2.extras import Json
 from backend.db import get_cursor, init_db
 
 DEFAULT_FREE_DAILY_LIMIT = 8
+FREE_DAILY_HARD_CAP = 8
 OWNER_EMAIL = (os.getenv("OWNER_EMAIL") or os.getenv("ADMIN_EMAIL") or "").lower()
 
 # Ensure tables exist on import
@@ -442,6 +443,8 @@ def register_scan_attempt(user_id: str) -> Tuple[bool, int, int]:
 
         plan = row.get("plan", "free")
         limit = row.get("daily_limit") or DEFAULT_FREE_DAILY_LIMIT
+        if plan != "premium":
+            limit = min(limit, FREE_DAILY_HARD_CAP)
         last_date = row.get("daily_scan_date")
         daily_count = row.get("daily_scan_count", 0)
 

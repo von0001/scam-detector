@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Optional, Literal, List
+import asyncio
 
 import os
 import time
@@ -236,6 +237,12 @@ class AnalyzeRequest(BaseModel):
     async_job: Optional[bool] = False
 
 
+class DeepScanRequest(BaseModel):
+    content: str
+    include_psychology: Optional[bool] = True
+    include_actor: Optional[bool] = True
+
+
 class FeedbackRequest(BaseModel):
     email: Optional[EmailStr] = None
     message: str
@@ -356,6 +363,9 @@ CSRF_COOKIE_NAME = "sd_csrf"
 CSRF_HEADER_NAME = "x-csrf-token"
 CSRF_MAX_AGE = REFRESH_TOKEN_MAX_AGE
 TASK_EXECUTOR = ThreadPoolExecutor(max_workers=4)
+FREE_HISTORY_LIMIT = 5
+FREE_REASON_CAP = 5
+FREE_THROTTLE_SECONDS = float(os.getenv("FREE_THROTTLE_SECONDS", "0.55"))
 
 
 # ---------------------------------------------------------
@@ -516,6 +526,63 @@ def _enforce_ai_ocr_quota(request: Request) -> Optional[JSONResponse]:
             status_code=429,
         )
     return None
+
+
+def _is_premium(user: Optional[dict]) -> bool:
+    return bool(user and user.get("plan") == "premium")
+
+
+def _log_premium_block(feature: str, request: Request, user: Optional[dict]) -> None:
+    try:
+        payload = {
+            "event": "premium_block",
+            "feature": feature,
+            "user_id": (user or {}).get("id"),
+            "plan": (user or {}).get("plan", "guest"),
+            "ip": _get_client_ip(request),
+            "path": request.url.path,
+        }
+        logger.info(json.dumps(payload))
+        try:
+            record_event("premium_block")
+        except Exception:
+            pass
+    except Exception:
+        pass
+
+
+def _premium_locked_response(feature: str, request: Request, message: str = "Premium Feature Locked") -> JSONResponse:
+    _log_premium_block(feature, request, get_current_user(request))
+    return JSONResponse(
+        {
+            "error": message,
+            "upgrade_prompt": True,
+            "feature": feature,
+            "plan_required": "premium",
+            "cta": {"primary": "Upgrade Now", "secondary": "View Plans"},
+        },
+        status_code=403,
+    )
+
+
+def _require_premium(feature: str, request: Request, user: Optional[dict] = None) -> Optional[JSONResponse]:
+    subject = user or get_current_user(request)
+    if not _is_premium(subject):
+        return _premium_locked_response(feature, request)
+    return None
+
+
+def _apply_free_output_guards(resp: dict, plan: str) -> dict:
+    if plan == "premium":
+        return resp
+    trimmed = copy.deepcopy(resp)
+    trimmed["reasons"] = (trimmed.get("reasons") or [])[:FREE_REASON_CAP]
+    trimmed["explanation"] = str(trimmed.get("explanation") or "")[:240]
+    trimmed["details"] = {}
+    if "confidence_score" in trimmed:
+        trimmed["confidence_score"] = None
+    trimmed["tier"] = plan
+    return trimmed
 
 
 def _login_fail_key(email: str, ip: str) -> str:
@@ -988,8 +1055,14 @@ def account_dashboard(request: Request, limit: int = 25):
     if not user:
         return JSONResponse({"error": "Authentication required."}, status_code=401)
 
-    limit = max(5, min(limit, 200))
+    plan = user.get("plan", "free")
+    max_limit = 200 if plan == "premium" else FREE_HISTORY_LIMIT
+    limit = max(3, min(limit, max_limit))
     snapshot = build_account_snapshot(user, history_limit=limit)
+    usage = snapshot.get("usage", {})
+    usage["history_limited"] = plan != "premium"
+    usage["history_limit"] = limit
+    snapshot["usage"] = usage
     return snapshot
 
 
@@ -1300,8 +1373,14 @@ def scan_history(request: Request, limit: int = 100):
     if not user:
         return JSONResponse({"error": "Authentication required."}, status_code=401)
 
-    logs = get_scan_history_for_user(user["id"], limit=limit)
-    return {"items": logs}
+    plan = user.get("plan", "free")
+    requested_limit = max(1, min(limit, 500))
+    if plan != "premium" and requested_limit > FREE_HISTORY_LIMIT:
+        return _premium_locked_response("full_history", request)
+
+    effective_limit = requested_limit if plan == "premium" else min(requested_limit, FREE_HISTORY_LIMIT)
+    logs = get_scan_history_for_user(user["id"], limit=effective_limit)
+    return {"items": logs, "history_limited": plan != "premium", "limit": effective_limit}
 
 
 @app.post("/log-scan")
@@ -1991,6 +2070,9 @@ async def process_scan(payload: dict, request: Request):
     if CRISIS_MODE:
         _admin_log("Scan during crisis mode", "warn")
 
+    if not is_premium:
+        await asyncio.sleep(FREE_THROTTLE_SECONDS)
+
     # Guest limit: simple per-IP daily cap
     if not user:
         allowed, remaining, limit = _check_guest_limit(request)
@@ -2001,6 +2083,7 @@ async def process_scan(payload: dict, request: Request):
                     "plan": "guest",
                     "limit": limit,
                     "remaining": 0,
+                    "upgrade_prompt": True,
                 },
                 status_code=429,
             )
@@ -2009,13 +2092,10 @@ async def process_scan(payload: dict, request: Request):
 
     # Premium-only modes
     if mode in {"chat", "manipulation"} and not is_premium:
-        return JSONResponse(
-            {
-                "error": "This scan mode is available for Premium accounts only.",
-                "plan": plan,
-            },
-            status_code=402,
-        )
+        feature = "ai_detector" if mode == "chat" else "psychology"
+        locked = _require_premium(feature, request, user)
+        if locked:
+            return locked
 
     # --------------------- TEXT --------------------
     if mode == "text" or (mode == "auto" and not url_like):
@@ -2028,6 +2108,8 @@ async def process_scan(payload: dict, request: Request):
                         "plan": plan,
                         "limit": limit,
                         "remaining": 0,
+                        "upgrade_prompt": True,
+                        "lock_reason": "daily_limit",
                     },
                     status_code=429,
                 )
@@ -2076,7 +2158,7 @@ async def process_scan(payload: dict, request: Request):
             content_snippet=content,
             details=resp.get("details"),
         )
-        return resp
+        return _apply_free_output_guards(resp, plan)
 
     # --------------------- URL / AUTO --------------------
     if mode == "url" or (mode == "auto" and url_like):
@@ -2089,6 +2171,8 @@ async def process_scan(payload: dict, request: Request):
                         "plan": plan,
                         "limit": limit,
                         "remaining": 0,
+                        "upgrade_prompt": True,
+                        "lock_reason": "daily_limit",
                     },
                     status_code=429,
                 )
@@ -2167,7 +2251,7 @@ async def process_scan(payload: dict, request: Request):
             details=resp.get("details"),
         )
 
-        return resp
+        return _apply_free_output_guards(resp, plan)
 
     # ----------------- AI Actor Detection -----------------
     if mode == "chat":
@@ -2180,6 +2264,8 @@ async def process_scan(payload: dict, request: Request):
                         "plan": plan,
                         "limit": limit,
                         "remaining": 0,
+                        "upgrade_prompt": True,
+                        "lock_reason": "daily_limit",
                     },
                     status_code=429,
                 )
@@ -2209,7 +2295,7 @@ async def process_scan(payload: dict, request: Request):
             details=resp.get("details"),
         )
 
-        return resp
+        return _apply_free_output_guards(resp, plan)
 
     # -------------- Manipulation Profiler -----------------
     if mode == "manipulation":
@@ -2222,6 +2308,8 @@ async def process_scan(payload: dict, request: Request):
                         "plan": plan,
                         "limit": limit,
                         "remaining": 0,
+                        "upgrade_prompt": True,
+                        "lock_reason": "daily_limit",
                     },
                     status_code=429,
                 )
@@ -2258,13 +2346,106 @@ async def process_scan(payload: dict, request: Request):
             details=resp.get("details"),
         )
 
-        return resp
+        return _apply_free_output_guards(resp, plan)
 
     # ----------------- QR (not supported in /analyze) -----------------
     if mode == "qr":
         return JSONResponse({"error": "QR scans require image upload via /qr."}, status_code=400)
 
     return JSONResponse({"error": "Unsupported mode."}, status_code=400)
+
+
+@app.post("/scan/deep-ai")
+async def scan_deep_ai(body: DeepScanRequest, request: Request):
+    if not _validate_csrf(request):
+        return _csrf_failure()
+
+    user = get_current_user(request)
+    gate = _require_premium("deep_ai_analysis", request, user)
+    if gate:
+        return gate
+
+    rl = _enforce_rate_limit(user, request, "scan")
+    if rl:
+        return rl
+
+    record_event("request")
+
+    content = (body.content or "").strip()
+    if not content:
+        return JSONResponse({"error": "content is empty"}, status_code=400)
+    if len(content) > 10000:
+        return JSONResponse({"error": "Input too large. Max 10,000 characters."}, status_code=413)
+
+    content = sanitize_pii(content)
+
+    try:
+        register_scan_attempt(user["id"])
+    except Exception:
+        pass
+
+    text_result = analyze_text(content) or {}
+    base_score = _normalize_score(text_result.get("score", 0))
+
+    manipulation_result = analyze_manipulation(content) if body.include_psychology else {}
+    manipulation_score = (
+        _normalize_score(manipulation_result.get("risk_score", 0)) if manipulation_result else 0
+    )
+
+    actor_result = analyze_actor(content) if body.include_actor else {}
+    actor_score = _normalize_score(actor_result.get("ai_probability", 0)) if actor_result else 0
+
+    weighted_score = _normalize_score(
+        (base_score * 0.6) + (manipulation_score * 0.25) + (actor_score * 0.15)
+    )
+
+    risk_breakdown = {
+        "text_score": base_score,
+        "manipulation_score": manipulation_score,
+        "actor_score": actor_score,
+        "weighting": {"text": 0.6, "manipulation": 0.25, "actor": 0.15},
+    }
+
+    reasons = []
+    reasons.extend(text_result.get("reasons") or [])
+    if manipulation_result:
+        reasons.extend(manipulation_result.get("primary_tactics", []))
+    if actor_result:
+        reasons.extend(actor_result.get("signals", []))
+    reasons = reasons[:8] or ["Deep analysis completed."]
+
+    explanation = text_result.get("explanation") or "Deep AI scan completed."
+
+    resp = build_response(
+        score=weighted_score,
+        category="deep_ai",
+        reasons=reasons,
+        explanation=explanation,
+        verdict=None,
+        details={
+            "risk_breakdown": risk_breakdown,
+            "manipulation": manipulation_result or {},
+            "ai_actor": actor_result or {},
+            "confidence_score": weighted_score,
+            "mode": "deep_ai",
+        },
+        ai_used=True,
+    )
+    resp["confidence_score"] = weighted_score
+    resp["priority_queue"] = True
+    resp["plan"] = "premium"
+
+    add_scan_log(
+        user_id=user["id"],
+        category="deep_ai",
+        mode="deep-ai",
+        verdict=resp["verdict"],
+        score=resp["score"],
+        content_snippet=content[:240],
+        details=resp.get("details"),
+    )
+
+    return resp
 
 
 @app.post("/analyze")
@@ -2294,7 +2475,11 @@ async def analyze(request: Request):
 async def ocr_endpoint(request: Request, image: UploadFile = File(...)):
     if not _validate_csrf(request):
         return _csrf_failure()
-    rl = _enforce_rate_limit(get_current_user(request), request, "ocr")
+    user = get_current_user(request)
+    gate = _require_premium("image_scan", request, user)
+    if gate:
+        return gate
+    rl = _enforce_rate_limit(user, request, "ocr")
     if rl:
         return rl
     record_event("request")
@@ -2332,6 +2517,11 @@ async def ocr_endpoint(request: Request, image: UploadFile = File(...)):
 async def ocr_repair(request: Request):
     if not _validate_csrf(request):
         return _csrf_failure()
+
+    user = get_current_user(request)
+    gate = _require_premium("image_scan", request, user)
+    if gate:
+        return gate
 
     quota = _enforce_ai_ocr_quota(request)
     if quota:
@@ -2389,7 +2579,11 @@ async def ocr_repair(request: Request):
 async def qr(request: Request, image: UploadFile = File(...), async_job: bool = False):
     if not _validate_csrf(request):
         return _csrf_failure()
-    rl = _enforce_rate_limit(get_current_user(request), request, "qr")
+    user = get_current_user(request)
+    gate = _require_premium("qr_scan", request, user)
+    if gate:
+        return gate
+    rl = _enforce_rate_limit(user, request, "qr")
     if rl:
         return rl
     record_event("request")
@@ -2401,8 +2595,6 @@ async def qr(request: Request, image: UploadFile = File(...), async_job: bool = 
             return JSONResponse({"error": "Image too large. Max 5MB."}, status_code=413)
     except Exception:
         pass
-
-    user = get_current_user(request)
     user_id = user["id"] if user else None
     plan = user.get("plan", "free") if user else "guest"
 
@@ -2415,6 +2607,8 @@ async def qr(request: Request, image: UploadFile = File(...), async_job: bool = 
                     "plan": plan,
                     "limit": limit,
                     "remaining": 0,
+                    "upgrade_prompt": True,
+                    "lock_reason": "daily_limit",
                 },
                 status_code=429,
             )

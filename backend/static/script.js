@@ -17,6 +17,7 @@ const reasonBlock = document.querySelector(".reason-block");
 const ocrBtn = document.getElementById("ocr-btn");
 const fileInput = document.getElementById("ocr-file");
 const dropZone = document.getElementById("drop-zone");
+const deepAnalyzeBtn = document.getElementById("deep-analyze-btn");
 
 // Feedback replay + context capture
 const FEEDBACK_TRACE_KEY = "feedback_trace";
@@ -147,11 +148,30 @@ const refreshDashboardBtn = document.getElementById("refresh-dashboard-btn");
 const subscribeMonthlyBtn = document.getElementById("subscribe-monthly-btn");
 const subscribeYearlyBtn = document.getElementById("subscribe-yearly-btn");
 const subscribeStatus = document.getElementById("subscribe-status");
+const tierBanner = document.getElementById("tier-banner");
+const tierBannerText = document.getElementById("tier-banner-text");
+const tierBadge = document.getElementById("tier-badge");
+const tierUpgradeBtn = document.getElementById("tier-upgrade-btn");
 
 let authMode = "login";
 let currentUser = null;
 let accountDashboardLoaded = false;
 let pendingSubscriptionCycle = null;
+const FEATURE_GATES = {
+  ai_detector: { tier: "premium", label: "Deep AI Detector" },
+  psychology: { tier: "premium", label: "Psychological manipulation detection" },
+  qr_scan: { tier: "premium", label: "QR and screenshot scan" },
+  image_scan: { tier: "premium", label: "Screenshot / image scan" },
+  deep_ai_analysis: { tier: "premium", label: "Deep AI Analysis" },
+  deep_ai: { tier: "premium", label: "Deep AI Analysis" },
+  full_history: { tier: "premium", label: "Full history export" },
+};
+
+let upgradeModal = null;
+let upgradeFeatureLabel = null;
+let upgradeModalMessage = null;
+let upgradeNowBtn = null;
+let viewPlansBtn = null;
 
 // MODE
 function getSelectedMode() {
@@ -206,6 +226,145 @@ function verdictPillClass(verdict) {
   if (label === "suspicious") return "account-pill account-pill-suspicious";
   if (label === "dangerous") return "account-pill account-pill-dangerous";
   return "account-pill";
+}
+
+function currentPlan() {
+  if (currentUser && currentUser.user && currentUser.user.plan === "premium") return "premium";
+  if (currentUser && currentUser.user) return "free";
+  return "guest";
+}
+
+function isFeatureUnlocked(featureKey) {
+  const gate = FEATURE_GATES[featureKey];
+  if (!gate) return true;
+  const plan = currentPlan();
+  return gate.tier === "free" || plan === "premium";
+}
+
+function ensureUpgradeModal() {
+  if (upgradeModal) return;
+  const wrapper = document.createElement("div");
+  wrapper.id = "upgrade-modal";
+  wrapper.className = "upgrade-modal";
+  wrapper.hidden = true;
+  wrapper.innerHTML = `
+    <div class="upgrade-modal-backdrop"></div>
+    <div class="upgrade-card">
+      <button class="upgrade-close" aria-label="Close upgrade modal">x</button>
+      <div class="upgrade-eyebrow">Premium feature locked</div>
+      <h3>You're attempting to use a Premium Feature.</h3>
+      <p data-upgrade-message>Upgrade now to unlock deep protection and unlimited scans.</p>
+      <p class="upgrade-feature">Feature: <span data-upgrade-feature>Full Dominance Mode</span></p>
+      <div class="upgrade-actions">
+        <button id="upgrade-now-btn" class="primary-btn">Upgrade Now</button>
+        <button id="view-plans-btn" class="ghost-btn">View Plans</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(wrapper);
+  upgradeModal = wrapper;
+  upgradeFeatureLabel = wrapper.querySelector("[data-upgrade-feature]");
+  upgradeModalMessage = wrapper.querySelector("[data-upgrade-message]");
+  upgradeNowBtn = wrapper.querySelector("#upgrade-now-btn");
+  viewPlansBtn = wrapper.querySelector("#view-plans-btn");
+  const closeBtn = wrapper.querySelector(".upgrade-close");
+  const backdrop = wrapper.querySelector(".upgrade-modal-backdrop");
+  const close = () => closeUpgradeModal();
+  closeBtn.addEventListener("click", close);
+  backdrop.addEventListener("click", close);
+  upgradeNowBtn.addEventListener("click", () => {
+    closeUpgradeModal();
+    if (!currentUser) {
+      pendingSubscriptionCycle = "monthly";
+      openAuthModal();
+      return;
+    }
+    triggerSubscription("monthly");
+  });
+  viewPlansBtn.addEventListener("click", () => {
+    closeUpgradeModal();
+    window.location.href = "/subscribe";
+  });
+}
+
+function openUpgradeModal(featureKey = "premium", message) {
+  ensureUpgradeModal();
+  const gate = FEATURE_GATES[featureKey] || {};
+  if (upgradeFeatureLabel) {
+    upgradeFeatureLabel.textContent = gate.label || "Premium feature";
+  }
+  if (upgradeModalMessage) {
+    upgradeModalMessage.textContent =
+      message ||
+      "This tool is part of ScamDetector Full Dominance Mode. Upgrade to unlock deep protection.";
+  }
+  upgradeModal.hidden = false;
+}
+
+function closeUpgradeModal() {
+  if (upgradeModal) upgradeModal.hidden = true;
+}
+
+function requireFeatureAccess(featureKey, message) {
+  if (isFeatureUnlocked(featureKey)) return true;
+  if (!currentUser) openAuthModal();
+  if (statusEl && message) {
+    statusEl.textContent = message;
+  }
+  openUpgradeModal(featureKey, message);
+  return false;
+}
+
+function applyFeatureLocks() {
+  const plan = currentPlan();
+  const premiumNodes = document.querySelectorAll('[data-tier="premium"]');
+  premiumNodes.forEach((node) => {
+    const input = node.tagName === "INPUT" ? node : node.querySelector("input");
+    const featureKey = node.dataset.featureKey || (input && input.dataset.featureKey);
+    if (input) {
+      if (!input.dataset.tier && node.dataset.tier) input.dataset.tier = node.dataset.tier;
+      if (!input.dataset.featureKey && featureKey) input.dataset.featureKey = featureKey;
+    }
+    const isLocked = plan !== "premium";
+    if (node.classList.contains("locked-row")) {
+      node.classList.toggle("unlocked-premium", !isLocked);
+    }
+    if (node.classList.contains("mode-pill")) {
+      node.classList.toggle("locked-pill", isLocked);
+      if (input && input.type === "radio" && isLocked && input.value !== "auto") {
+        input.checked = false;
+      }
+    } else {
+      node.classList.toggle("locked-action", isLocked);
+      if (input) input.disabled = isLocked;
+    }
+  });
+
+  if (plan !== "premium") {
+    const fallback = document.querySelector('input[name=\"mode\"][value=\"auto\"]');
+    if (fallback) fallback.checked = true;
+  }
+
+  if (deepAnalyzeBtn) {
+    deepAnalyzeBtn.classList.toggle("locked-action", plan !== "premium");
+  }
+  if (ocrBtn) {
+    ocrBtn.classList.toggle("locked-action", plan !== "premium");
+  }
+  if (dropZone) {
+    dropZone.classList.toggle("locked-action", plan !== "premium");
+  }
+  if (historyBtn && historyStatus) {
+    historyBtn.disabled = plan !== "premium";
+    historyBtn.classList.toggle("locked-action", plan !== "premium");
+    historyStatus.textContent = plan !== "premium" ? "Full history export is a Premium feature." : "";
+  }
+}
+
+function handleUpgradeResponse(result, featureKey) {
+  const message = (result && result.error) || "Premium feature locked.";
+  if (statusEl) statusEl.textContent = message;
+  openUpgradeModal(featureKey || (result && result.feature) || "premium", message);
 }
 
 function showAccountLocked() {
@@ -393,16 +552,21 @@ function updateAccountOverview() {
 function updatePlanPill() {
   if (!planPill) {
     updateAccountOverview();
+    applyFeatureLocks();
     return;
   }
 
   if (!currentUser) {
     planPill.innerHTML =
-      "Guest mode - Limited free scans. <span>Sign in</span> to sync and unlock more.";
+      'Guest mode - Limited free scans. <span class="plan-pill-cta" id="plan-pill-upgrade">Sign in</span> to sync and unlock more.';
     if (accountBtn) accountBtn.textContent = "Sign In";
     if (accountMenuEmail) accountMenuEmail.textContent = "";
+    if (tierBannerText) tierBannerText.textContent = "Sign in to see your tier and usage.";
+    if (tierBadge) tierBadge.hidden = true;
+    if (tierUpgradeBtn) tierUpgradeBtn.hidden = false;
     accountDashboardLoaded = false;
     updateAccountOverview();
+    applyFeatureLocks();
     return;
   }
 
@@ -413,16 +577,32 @@ function updatePlanPill() {
 
   if (plan === "premium") {
     planPill.innerHTML =
-      "<span>Premium</span> - Unlimited scans & deep analysis.";
+      "<span>Active: Full Dominance Mode</span> - PREMIUM ACTIVE ✅ Priority queue enabled.";
+    if (tierBannerText) tierBannerText.textContent = "Active: Full Dominance Mode";
+    if (tierBadge) tierBadge.hidden = false;
+    if (tierUpgradeBtn) tierUpgradeBtn.hidden = true;
+    if (analyzeBtn) analyzeBtn.disabled = false;
+    if (deepAnalyzeBtn) deepAnalyzeBtn.disabled = false;
   } else {
     const remaining = Math.max((limit || 0) - used, 0);
-    planPill.innerHTML = `<span>Free plan</span> - ${remaining} of ${limit} daily scans left.`;
+    planPill.innerHTML = `<span>Free Tier - Safe Starter Mode</span> - ${remaining} of ${limit} daily scans left.<span class="plan-pill-cta" id="plan-pill-upgrade">Upgrade to Premium</span>`;
+    if (tierBannerText) tierBannerText.textContent = "You are currently on Free Tier - Safe Starter Mode";
+    if (tierBadge) tierBadge.hidden = true;
+    if (tierUpgradeBtn) tierUpgradeBtn.hidden = false;
   }
 
   if (accountBtn) accountBtn.textContent = user.email;
   if (accountMenuEmail) accountMenuEmail.textContent = user.email;
+  const pillUpgradeBtn = document.getElementById("plan-pill-upgrade");
+  if (pillUpgradeBtn) {
+    pillUpgradeBtn.addEventListener("click", () => {
+      if (!currentUser) openAuthModal();
+      openUpgradeModal("deep_ai");
+    });
+  }
 
   updateAccountOverview();
+  applyFeatureLocks();
 
   if (subscribeStatus) {
     if (plan === "premium") {
@@ -480,6 +660,14 @@ function renderAccountDashboard(snapshot) {
 
   renderFlaggedAlerts(flagged);
   renderRecentLogs(recent);
+  if (dashboardStatus) {
+    if (usage.history_limited) {
+      dashboardStatus.textContent = "Free plan shows the most recent scans. Upgrade for full history and logs.";
+      dashboardStatus.classList.remove("account-status-danger");
+    } else if (!dashboardStatus.textContent) {
+      dashboardStatus.textContent = "";
+    }
+  }
 
   if (currentUser.user) {
     if (typeof usage.daily_used === "number") {
@@ -802,6 +990,7 @@ async function loadSession() {
   }
 }
 
+applyFeatureLocks();
 loadSession();
 
 // ===================== EMAIL AUTH SUBMIT ======================
@@ -865,6 +1054,16 @@ async function analyzeContent() {
 
   const content = contentInput.value.trim();
   const mode = getSelectedMode();
+  let lockedByLimit = false;
+  const modeFeatureMap = {
+    chat: "ai_detector",
+    manipulation: "psychology",
+    qr: "qr_scan",
+  };
+  const modeFeatureKey = modeFeatureMap[mode];
+  if (modeFeatureKey && !requireFeatureAccess(modeFeatureKey, "This is a Premium feature.")) {
+    return;
+  }
 
   if (!content && mode !== "qr") {
     statusEl.textContent = "Paste a message, link, or conversation first.";
@@ -892,8 +1091,16 @@ async function analyzeContent() {
       result = { error: text || "Parse error" };
     }
     if (!response.ok) {
-      statusEl.textContent =
-        result.error || "Something went wrong during analysis.";
+      if (result.upgrade_prompt) {
+        if (result.lock_reason === "daily_limit") {
+          lockedByLimit = true;
+          analyzeBtn.disabled = true;
+          if (deepAnalyzeBtn) deepAnalyzeBtn.disabled = true;
+        }
+        handleUpgradeResponse(result, result.feature || mode);
+        return;
+      }
+      statusEl.textContent = result.error || "Something went wrong during analysis.";
       return;
     }
 
@@ -908,7 +1115,60 @@ async function analyzeContent() {
     statusEl.textContent = "Network error. Try again in a moment.";
     recordFeedbackEvent({ event: "analyze_error", mode });
   } finally {
+    analyzeBtn.disabled = lockedByLimit ? true : false;
+    if (deepAnalyzeBtn) {
+      deepAnalyzeBtn.disabled = lockedByLimit ? true : false;
+    }
+  }
+}
+
+async function runDeepAnalysis() {
+  if (!requireFeatureAccess("deep_ai", "Deep AI Analysis is a Premium feature.")) return;
+  if (!contentInput || !statusEl) return;
+
+  const content = contentInput.value.trim();
+  if (!content) {
+    statusEl.textContent = "Paste a message or link to analyze deeply.";
+    return;
+  }
+
+  statusEl.textContent = "Running deep AI analysis with priority queue...";
+  analyzeBtn.disabled = true;
+  if (deepAnalyzeBtn) deepAnalyzeBtn.disabled = true;
+
+  try {
+    const response = await fetch(`${API_BASE_URL}/scan/deep-ai`, {
+      method: "POST",
+      headers: csrfHeaders({ "Content-Type": "application/json" }),
+      credentials: "include",
+      body: JSON.stringify({
+        content,
+        include_psychology: true,
+        include_actor: true,
+      }),
+    });
+    let result = {};
+    try {
+      result = await response.json();
+    } catch {
+      result = { error: "Unable to parse deep analysis response." };
+    }
+    if (!response.ok) {
+      if (result.upgrade_prompt) {
+        handleUpgradeResponse(result, result.feature || "deep_ai");
+        return;
+      }
+      statusEl.textContent = result.error || "Deep analysis failed.";
+      return;
+    }
+
+    renderAnalyzeResult(result, content, "deep_ai");
+    statusEl.textContent = "Deep AI verdict delivered.";
+  } catch (err) {
+    statusEl.textContent = "Network error. Try again in a moment.";
+  } finally {
     analyzeBtn.disabled = false;
+    if (deepAnalyzeBtn) deepAnalyzeBtn.disabled = false;
   }
 }
 
@@ -1153,6 +1413,10 @@ function renderAnalyzeResult(result, content, mode) {
     label = displayVerdict || "Result";
   }
 
+  if (typeof cleanResult.confidence_score === "number") {
+    label = `${label} | Confidence ${Math.round(cleanResult.confidence_score)}%`;
+  }
+
   verdictBadge.textContent = label;
   setVerdictStyle(displayVerdict);
   explanationEl.textContent = cleanResult.explanation || "";
@@ -1248,8 +1512,11 @@ async function analyzeQR(file) {
     const result = await response.json();
 
     if (!response.ok) {
-      statusEl.textContent =
-        result.error || "Failed to analyze QR. Try a clearer image.";
+      if (result.upgrade_prompt) {
+        handleUpgradeResponse(result, result.feature || "qr_scan");
+        return;
+      }
+      statusEl.textContent = result.error || "Failed to analyze QR. Try a clearer image.";
       return;
     }
 
@@ -2011,11 +2278,20 @@ async function runOCR(imageFile, { source = "upload" } = {}) {
 
 // Upload select
 if (ocrBtn && fileInput) {
-  ocrBtn.addEventListener("click", () => fileInput.click());
+  ocrBtn.addEventListener("click", () => {
+    if (!requireFeatureAccess("image_scan", "Screenshot and image scans are Premium only.")) {
+      return;
+    }
+    fileInput.click();
+  });
 
   fileInput.addEventListener("change", () => {
     const file = fileInput.files[0];
     if (!file) return;
+    if (!requireFeatureAccess("image_scan", "Screenshot and image scans are Premium only.")) {
+      fileInput.value = "";
+      return;
+    }
     const mode = getSelectedMode();
     if (mode === "qr") analyzeQR(file);
     else handleImageForOcr(file, "upload");
@@ -2034,6 +2310,9 @@ if (dropZone) {
   dropZone.addEventListener("drop", (e) => {
     e.preventDefault();
     dropZone.classList.remove("dragover");
+    if (!requireFeatureAccess("image_scan", "Screenshot and image scans are Premium only.")) {
+      return;
+    }
     const dt = e.dataTransfer;
     const file =
       (dt && dt.files && dt.files[0]) ||
@@ -2048,11 +2327,43 @@ if (dropZone) {
   });
 }
 
+const modeInputs = document.querySelectorAll('input[name="mode"]');
+modeInputs.forEach((input) => {
+  input.addEventListener("change", (e) => {
+    if (input.dataset.tier === "premium" || input.dataset.featureKey) {
+      const featureKey =
+        input.dataset.featureKey || input.parentElement?.dataset.featureKey || input.value;
+      if (!requireFeatureAccess(featureKey, "This mode is Premium only.")) {
+        e.preventDefault();
+        const fallback = document.querySelector('input[name="mode"][value="auto"]');
+        if (fallback) fallback.checked = true;
+      }
+    }
+  });
+});
+
+const premiumModeLabels = document.querySelectorAll(".mode-pill[data-tier='premium']");
+premiumModeLabels.forEach((label) => {
+  label.addEventListener("click", (e) => {
+    if (currentPlan() === "premium") return;
+    e.preventDefault();
+    const featureKey = label.dataset.featureKey || "premium";
+    requireFeatureAccess(featureKey, "This mode is Premium only.");
+  });
+});
+
 // Submit
 if (analyzeBtn) {
   analyzeBtn.addEventListener("click", (e) => {
     e.preventDefault();
     analyzeContent();
+  });
+}
+
+if (deepAnalyzeBtn) {
+  deepAnalyzeBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    runDeepAnalysis();
   });
 }
 
@@ -2078,6 +2389,13 @@ if (accountManageBtn) {
     } else {
       window.location.href = "/account";
     }
+  });
+}
+
+if (tierUpgradeBtn) {
+  tierUpgradeBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    openUpgradeModal("deep_ai", "Upgrade to unlock unlimited scans and deep intelligence.");
   });
 }
 
@@ -2199,6 +2517,10 @@ if (historyBtn && historyStatus) {
       openAuthModal();
       return;
     }
+    if (!requireFeatureAccess("full_history", "Full history export is a Premium feature.")) {
+      historyStatus.textContent = "Upgrade to download full history.";
+      return;
+    }
 
     historyStatus.textContent = "Preparing download...";
     try {
@@ -2212,6 +2534,10 @@ if (historyBtn && historyStatus) {
       );
       const data = await res.json();
       if (!res.ok) {
+        if (data.upgrade_prompt) {
+          handleUpgradeResponse(data, data.feature || "full_history");
+          return;
+        }
         historyStatus.textContent =
           data.error || "Could not download history.";
         return;
