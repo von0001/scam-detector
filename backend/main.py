@@ -1371,19 +1371,32 @@ def refresh_token(body: RefreshTokenRequest, request: Request):
 
 
 @app.get("/scan-history")
-def scan_history(request: Request, limit: int = 100):
+def scan_history(request: Request, limit: int = 100, offset: int = 0):
     user = get_current_user(request)
     if not user:
         return JSONResponse({"error": "Authentication required."}, status_code=401)
 
     plan = user.get("plan", "free")
     requested_limit = max(1, min(limit, 500))
+    requested_offset = max(0, offset)
     if plan != "premium" and requested_limit > FREE_HISTORY_LIMIT:
         return _premium_locked_response("full_history", request)
 
-    effective_limit = requested_limit if plan == "premium" else min(requested_limit, FREE_HISTORY_LIMIT)
-    logs = get_scan_history_for_user(user["id"], limit=effective_limit)
-    return {"items": logs, "history_limited": plan != "premium", "limit": effective_limit}
+    if plan != "premium":
+        effective_limit = min(requested_limit, FREE_HISTORY_LIMIT)
+        effective_offset = 0
+    else:
+        effective_limit = requested_limit
+        effective_offset = requested_offset
+
+    logs = get_scan_history_for_user(user["id"], limit=effective_limit, offset=effective_offset)
+    return {
+        "items": logs,
+        "history_limited": plan != "premium",
+        "limit": effective_limit,
+        "offset": effective_offset,
+        "plan": plan,
+    }
 
 
 @app.post("/log-scan")

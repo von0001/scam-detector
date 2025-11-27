@@ -1431,6 +1431,134 @@ body {
   text-align: center;
 }
 
+.account-card-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.recent-feed-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.recent-feed-item {
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: rgba(15, 23, 42, 0.6);
+}
+
+.recent-feed-top {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.recent-feed-type {
+  font-size: 0.75rem;
+  padding: 4px 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  color: #cbd5e1;
+}
+
+.recent-feed-time {
+  font-size: 0.8rem;
+  color: #94a3b8;
+}
+
+.recent-feed-snippet {
+  color: #e5e7eb;
+  font-size: 0.92rem;
+}
+
+.history-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.history-filters label {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.85rem;
+  color: #cbd5e1;
+}
+
+.history-filters select {
+  margin-top: 4px;
+  padding: 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  background: rgba(15, 23, 42, 0.85);
+  color: #e5e7eb;
+}
+
+.history-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.history-item {
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: rgba(15, 23, 42, 0.7);
+}
+
+.history-item-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.history-item-type {
+  font-size: 0.78rem;
+  color: #cbd5e1;
+  padding: 4px 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+}
+
+.history-item-time {
+  font-size: 0.8rem;
+  color: #94a3b8;
+}
+
+.history-item-snippet {
+  color: #e5e7eb;
+  margin-bottom: 6px;
+}
+
+.history-item-details summary {
+  cursor: pointer;
+  color: #60a5fa;
+}
+
+.history-item-details pre {
+  white-space: pre-wrap;
+  background: rgba(15, 23, 42, 0.6);
+  padding: 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  color: #cbd5e1;
+  font-size: 0.8rem;
+}
+
 .account-flagged-list {
   list-style: none;
   padding: 0;
@@ -1655,5 +1783,9 @@ body {
 
   .dual-action-row {
     grid-template-columns: 1fr;
+  }
+
+  .history-filters {
+    flex-direction: column;
   }
 }

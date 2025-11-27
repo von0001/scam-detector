@@ -126,6 +126,11 @@ const passwordHint = document.getElementById("password-hint");
 
 const historyBtn = document.getElementById("download-history-btn");
 const historyStatus = document.getElementById("history-status");
+const historyList = document.getElementById("history-list");
+const historyLoadMoreBtn = document.getElementById("history-load-more");
+const historyVerdictFilter = document.getElementById("history-filter-verdict");
+const historyTypeFilter = document.getElementById("history-filter-type");
+const historyPageStatus = document.getElementById("history-page-status");
 
 const deleteForm = document.getElementById("delete-form");
 const deletePassword = document.getElementById("delete-password");
@@ -147,6 +152,7 @@ const flaggedList = document.getElementById("flagged-list");
 const flaggedEmpty = document.getElementById("flagged-empty");
 const recentScansBody = document.getElementById("recent-scans-body");
 const recentEmpty = document.getElementById("recent-empty");
+const recentFeed = document.getElementById("recent-feed");
 const dashboardStatus = document.getElementById("dashboard-status");
 const refreshDashboardBtn = document.getElementById("refresh-dashboard-btn");
 const subscribeMonthlyBtn = document.getElementById("subscribe-monthly-btn");
@@ -665,7 +671,7 @@ function renderAccountDashboard(snapshot) {
   }
 
   renderFlaggedAlerts(flagged);
-  renderRecentLogs(recent);
+  renderRecentLogs(recent.slice(0, 5));
   if (dashboardStatus) {
     if (usage.history_limited) {
       dashboardStatus.textContent = "Free plan shows the most recent scans. Upgrade for full history and logs.";
@@ -716,24 +722,27 @@ function renderFlaggedAlerts(items) {
 }
 
 function renderRecentLogs(logs) {
-  if (!recentScansBody || !recentEmpty) return;
-  recentScansBody.innerHTML = "";
+  if (!recentFeed || !recentEmpty) return;
+  recentFeed.innerHTML = "";
   if (!logs.length) {
     recentEmpty.hidden = false;
     return;
   }
   recentEmpty.hidden = true;
 
-  logs.forEach((log) => {
-    const row = document.createElement("tr");
-    row.innerHTML = `
-      <td>${formatTimestamp(log.timestamp, "Unknown")}</td>
-      <td>${log.category || "unknown"}</td>
-      <td><span class="${verdictPillClass(log.verdict)}">${(log.verdict || "UNKNOWN").toUpperCase()}</span></td>
-      <td>${log.score ?? 0}</td>
-      <td>${sanitizeSnippet(log.snippet || "")}</td>
+  logs.slice(0, 5).forEach((log) => {
+    const verdictClass = verdictPillClass(log.verdict);
+    const li = document.createElement("li");
+    li.className = "recent-feed-item";
+    li.innerHTML = `
+      <div class="recent-feed-top">
+        <span class="${verdictClass}">${(log.verdict || "UNKNOWN").toUpperCase()}</span>
+        <span class="recent-feed-type">${(log.category || log.mode || "unknown").toUpperCase()}</span>
+        <span class="recent-feed-time">${formatTimestamp(log.timestamp, "Unknown")}</span>
+      </div>
+      <div class="recent-feed-snippet">${sanitizeSnippet(log.snippet || "No snippet provided.")}</div>
     `;
-    recentScansBody.appendChild(row);
+    recentFeed.appendChild(li);
   });
 }
 
@@ -757,7 +766,7 @@ async function loadAccountDashboard(force = false) {
   }
 
   try {
-    const res = await fetch(`${API_BASE_URL}/account/dashboard?limit=50`, {
+    const res = await fetch(`${API_BASE_URL}/account/dashboard?limit=5`, {
       method: "GET",
       credentials: "include",
       headers: csrfHeaders(),
@@ -998,6 +1007,10 @@ async function loadSession() {
 
 applyFeatureLocks();
 loadSession();
+
+if (window.location.pathname === "/history") {
+  loadHistoryPage(true);
+}
 
 // ===================== EMAIL AUTH SUBMIT ======================
 
@@ -2595,6 +2608,96 @@ if (historyBtn && historyStatus) {
       historyStatus.textContent = "Network error. Try again.";
     }
   });
+}
+
+let historyOffset = 0;
+const HISTORY_PAGE_SIZE = 25;
+
+async function loadHistoryPage(reset = false) {
+  if (!historyList) return;
+  if (!currentUser) {
+    openAuthModal();
+    return;
+  }
+  if (reset) {
+    historyOffset = 0;
+    historyList.innerHTML = "";
+  }
+  const verdict = historyVerdictFilter ? historyVerdictFilter.value : "all";
+  const type = historyTypeFilter ? historyTypeFilter.value : "all";
+  const params = new URLSearchParams({
+    limit: HISTORY_PAGE_SIZE.toString(),
+    offset: historyOffset.toString(),
+  });
+  try {
+    const res = await fetch(`${API_BASE_URL}/scan-history?${params.toString()}`, {
+      method: "GET",
+      credentials: "include",
+      headers: csrfHeaders(),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      if (data.upgrade_prompt) {
+        handleUpgradeResponse(data, data.feature || "full_history");
+        return;
+      }
+      if (historyPageStatus) historyPageStatus.textContent = data.error || "Could not load history.";
+      return;
+    }
+
+    const items = (data.items || []).filter((item) => {
+      const verdictOk = verdict === "all" || (item.verdict || "").toLowerCase() === verdict;
+      const typeOk = type === "all" || (item.category || item.mode || "").toLowerCase() === type;
+      return verdictOk && typeOk;
+    });
+
+    if (reset) historyList.innerHTML = "";
+    items.forEach((item) => {
+      const li = document.createElement("li");
+      li.className = "history-item";
+      li.innerHTML = `
+        <div class="history-item-top">
+          <span class="${verdictPillClass(item.verdict)}">${(item.verdict || "UNKNOWN").toUpperCase()}</span>
+          <span class="history-item-type">${(item.category || item.mode || "unknown").toUpperCase()}</span>
+          <span class="history-item-time">${formatTimestamp(item.timestamp, "Unknown")}</span>
+        </div>
+        <div class="history-item-snippet">${sanitizeSnippet(item.snippet || "")}</div>
+        <details class="history-item-details">
+          <summary>View details</summary>
+          <pre>${JSON.stringify(item.details || {}, null, 2)}</pre>
+        </details>
+      `;
+      historyList.appendChild(li);
+    });
+
+    const limited = data.history_limited || data.plan !== "premium";
+    const received = items.length;
+    if (historyPageStatus) {
+      historyPageStatus.textContent =
+        limited && !data.offset ? "Free plan shows the last 5 scans." : "";
+    }
+  if (historyLoadMoreBtn) {
+    const noMore = limited || received < HISTORY_PAGE_SIZE;
+    historyLoadMoreBtn.hidden = noMore;
+  }
+    historyOffset += received;
+  } catch (err) {
+    if (historyPageStatus) historyPageStatus.textContent = "Network error loading history.";
+  }
+}
+
+if (historyLoadMoreBtn) {
+  historyLoadMoreBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    loadHistoryPage(false);
+  });
+}
+
+if (historyVerdictFilter) {
+  historyVerdictFilter.addEventListener("change", () => loadHistoryPage(true));
+}
+if (historyTypeFilter) {
+  historyTypeFilter.addEventListener("change", () => loadHistoryPage(true));
 }
 
 if (deleteForm && deleteStatus) {

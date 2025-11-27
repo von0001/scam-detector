@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Scan History - ScamDetector</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="top-nav">
+      <div class="brand">
+        <div class="brand-mark">SD</div>
+        <div class="brand-text">
+          <span class="brand-name">ScamDetector</span>
+          <span class="brand-tagline">Digital Safety Framework</span>
+        </div>
+      </div>
+
+      <nav class="nav-links" style="position: relative;">
+        <a href="/">Home</a>
+        <a href="/account">Account</a>
+        <a href="/support">Support</a>
+        <a href="/privacy">Privacy</a>
+        <button id="account-button" class="nav-pill nav-account">Sign In</button>
+
+        <div id="account-menu" class="account-menu" hidden>
+          <div class="account-menu-email" id="account-menu-email"></div>
+          <button type="button" id="account-manage-btn" class="account-menu-item">
+            Manage account
+          </button>
+          <button type="button" id="account-logout-btn" class="account-menu-item account-menu-item-danger">
+            Sign out
+          </button>
+        </div>
+      </nav>
+    </header>
+
+    <main class="account-main">
+      <h1 class="account-heading">Full scan history</h1>
+      <p class="account-subtitle">
+        Browse, filter, and inspect your scan log. Free shows the last 5 entries; Premium can view everything.
+      </p>
+
+      <div class="history-filters">
+        <label>
+          Verdict
+          <select id="history-filter-verdict">
+            <option value="all">All</option>
+            <option value="safe">SAFE</option>
+            <option value="suspicious">SUSPICIOUS</option>
+            <option value="dangerous">DANGEROUS</option>
+          </select>
+        </label>
+        <label>
+          Scan type
+          <select id="history-filter-type">
+            <option value="all">All</option>
+            <option value="url">URL</option>
+            <option value="text">TEXT</option>
+            <option value="hybrid">HYBRID</option>
+            <option value="ai_detector">AI DETECTOR</option>
+            <option value="manipulation">MANIPULATION</option>
+            <option value="qr">QR</option>
+            <option value="deep_ai">DEEP AI</option>
+          </select>
+        </label>
+      </div>
+
+      <ul id="history-list" class="history-list"></ul>
+      <div id="history-page-status" class="account-status"></div>
+      <button id="history-load-more" class="secondary-btn account-btn" type="button">Load more</button>
+    </main>
+
+    <footer class="app-footer">
+      <p>Built to protect awareness, not to replace your judgment. Not financial or legal advice.</p>
+      <div class="legal-links">
+        <a href="/terms">Terms</a>
+        <a href="/privacy">Privacy</a>
+        <a href="/support">Support</a>
+        <a href="/feedback">Feedback</a>
+      </div>
+    </footer>
+  </div>
+
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script src="/static/script.js"></script>
+</body>
+</html>

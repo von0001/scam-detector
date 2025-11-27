@@ -510,7 +510,7 @@ def add_scan_log(
         )
 
 
-def get_scan_history_for_user(user_id: str, limit: int = 100) -> List[Dict[str, Any]]:
+def get_scan_history_for_user(user_id: str, limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
     with get_cursor() as (_, cur):
         cur.execute(
             """
@@ -518,9 +518,9 @@ def get_scan_history_for_user(user_id: str, limit: int = 100) -> List[Dict[str, 
             FROM scan_logs
             WHERE user_id = %s
             ORDER BY timestamp DESC
-            LIMIT %s
+            LIMIT %s OFFSET %s
             """,
-            (user_id, limit),
+            (user_id, limit, offset),
         )
         rows = cur.fetchall() or []
 

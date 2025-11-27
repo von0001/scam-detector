@@ -157,27 +157,17 @@
 
         <section class="account-card account-card-wide">
           <div class="account-card-headline">
-            <h2>Recent scans</h2>
-            <button id="refresh-dashboard-btn" class="ghost-btn" type="button">Refresh</button>
+            <h2>Recent scans (last 5)</h2>
+            <div class="account-card-actions">
+              <button id="refresh-dashboard-btn" class="ghost-btn" type="button">Refresh</button>
+              <a href="/history" class="primary-btn account-btn">View Full History</a>
+            </div>
           </div>
           <p class="account-hint">
-            A quick feed of your latest scans, verdicts, and snippets. Download the full log anytime below.
+            Quick summary of your latest activity. Free tier shows up to 5 entries; Premium can view full history.
           </p>
-          <div class="account-table-wrap">
-            <table class="account-table">
-              <thead>
-                <tr>
-                  <th>Timestamp</th>
-                  <th>Category</th>
-                  <th>Verdict</th>
-                  <th>Score</th>
-                  <th>Snippet</th>
-                </tr>
-              </thead>
-              <tbody id="recent-scans-body"></tbody>
-            </table>
-            <div id="recent-empty" class="account-empty">No scans yet. Run your first scan to see activity here.</div>
-          </div>
+          <ul id="recent-feed" class="recent-feed-list"></ul>
+          <div id="recent-empty" class="account-empty">No scans yet. Run your first scan to see activity here.</div>
           <p id="dashboard-status" class="account-status"></p>
         </section>
 
@@ -191,6 +181,7 @@
               Download scan history
             </button>
             <p id="history-status" class="account-status"></p>
+            <a href="/history" class="primary-btn account-btn account-btn-link">View Full History</a>
           </section>
 
           <section class="account-card account-card-danger">
