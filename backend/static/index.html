@@ -100,13 +100,14 @@
             <span class="mode-label">Scan mode</span>
 
             <div class="mode-pill-group">
-              <label class="mode-pill" data-tier="free">
-                <input type="radio" name="mode" value="auto" checked />
+              <label class="mode-pill locked-pill" data-tier="premium" data-feature-key="auto" title="Premium Feature - Unlock with Full Dominance Mode">
+                <input type="radio" name="mode" value="auto" />
                 <span>Auto</span>
+                <span class="lock-chip">Premium</span>
               </label>
 
               <label class="mode-pill" data-tier="free">
-                <input type="radio" name="mode" value="url" />
+                <input type="radio" name="mode" value="url" checked />
                 <span>URL</span>
               </label>
 
@@ -152,6 +153,17 @@
             </button>
           </div>
 
+          <button
+            id="realtime-btn"
+            class="ghost-btn locked-action"
+            data-tier="premium"
+            data-feature-key="real_time"
+            title="Real-time Scan Mode — Available via Chrome Extension"
+            style="width:100%; margin-top:8px;"
+          >
+            Real-time Scan Mode (Chrome Extension)
+          </button>
+
           <!-- OCR + DROP -->
           <div class="ocr-container">
             <button id="ocr-btn" class="ocr-button">
@@ -175,6 +187,14 @@
           </div>
 
           <p id="explanation" class="result-explanation"></p>
+
+          <div id="confidence-wrap" class="confidence-wrap" hidden>
+            <div class="confidence-header">AI Confidence Level</div>
+            <div class="confidence-meter">
+              <div id="confidence-fill" class="confidence-fill"></div>
+            </div>
+            <div id="confidence-label" class="confidence-label"></div>
+          </div>
 
           <div class="reason-block">
             <h3 class="reason-title">Why we flagged it</h3>
@@ -224,6 +244,11 @@
         </div>
         <div class="feature-map-row locked-row" data-tier="premium">
           <span>Full History & Export</span>
+          <span class="feature-tag feature-tag-locked">Locked</span>
+          <span class="feature-tag feature-tag-premium">Premium</span>
+        </div>
+        <div class="feature-map-row locked-row" data-tier="premium">
+          <span>Real-time Scan (Chrome Extension)</span>
           <span class="feature-tag feature-tag-locked">Locked</span>
           <span class="feature-tag feature-tag-premium">Premium</span>
         </div>

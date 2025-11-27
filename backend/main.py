@@ -11,6 +11,7 @@ import time
 import json
 import secrets
 import re
+import random
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from collections import deque
@@ -365,7 +366,8 @@ CSRF_MAX_AGE = REFRESH_TOKEN_MAX_AGE
 TASK_EXECUTOR = ThreadPoolExecutor(max_workers=4)
 FREE_HISTORY_LIMIT = 5
 FREE_REASON_CAP = 5
-FREE_THROTTLE_SECONDS = float(os.getenv("FREE_THROTTLE_SECONDS", "0.55"))
+FREE_THROTTLE_MIN = float(os.getenv("FREE_THROTTLE_MIN", "0.8"))
+FREE_THROTTLE_MAX = float(os.getenv("FREE_THROTTLE_MAX", "2.0"))
 
 
 # ---------------------------------------------------------
@@ -582,6 +584,7 @@ def _apply_free_output_guards(resp: dict, plan: str) -> dict:
     if "confidence_score" in trimmed:
         trimmed["confidence_score"] = None
     trimmed["tier"] = plan
+    trimmed["priority"] = False
     return trimmed
 
 
@@ -2066,12 +2069,14 @@ async def process_scan(payload: dict, request: Request):
     user_id = user["id"] if user else None
     plan = user.get("plan", "free") if user else "guest"
     is_premium = plan == "premium"
+    allow_free_modes = {"url", "text"}
 
     if CRISIS_MODE:
         _admin_log("Scan during crisis mode", "warn")
 
     if not is_premium:
-        await asyncio.sleep(FREE_THROTTLE_SECONDS)
+        await asyncio.sleep(random.uniform(FREE_THROTTLE_MIN, FREE_THROTTLE_MAX))
+    priority_job = is_premium
 
     # Guest limit: simple per-IP daily cap
     if not user:
@@ -2089,6 +2094,10 @@ async def process_scan(payload: dict, request: Request):
             )
 
     url_like = is_url_like(content)
+
+    # Hard gating for non-premium: only URL/Text allowed
+    if not is_premium and mode not in allow_free_modes:
+        return _premium_locked_response(mode or "premium_feature", request)
 
     # Premium-only modes
     if mode in {"chat", "manipulation"} and not is_premium:
@@ -2149,15 +2158,18 @@ async def process_scan(payload: dict, request: Request):
         else:
             record_event("scam")
 
-        add_scan_log(
-            user_id=user_id,
-            category="text",
-            mode=mode,
-            verdict=resp["verdict"],
-            score=resp["score"],
-            content_snippet=content,
-            details=resp.get("details"),
-        )
+        resp["priority"] = priority_job
+
+        if user_id:
+            add_scan_log(
+                user_id=user_id,
+                category="text",
+                mode=mode,
+                verdict=resp["verdict"],
+                score=resp["score"],
+                content_snippet=content,
+                details=resp.get("details"),
+            )
         return _apply_free_output_guards(resp, plan)
 
     # --------------------- URL / AUTO --------------------
@@ -2241,15 +2253,18 @@ async def process_scan(payload: dict, request: Request):
         else:
             record_event("scam")
 
-        add_scan_log(
-            user_id=user_id,
-            category=resp.get("category", "url"),
-            mode=mode,
-            verdict=resp["verdict"],
-            score=resp["score"],
-            content_snippet=content,
-            details=resp.get("details"),
-        )
+        resp["priority"] = priority_job
+
+        if user_id:
+            add_scan_log(
+                user_id=user_id,
+                category=resp.get("category", "url"),
+                mode=mode,
+                verdict=resp["verdict"],
+                score=resp["score"],
+                content_snippet=content,
+                details=resp.get("details"),
+            )
 
         return _apply_free_output_guards(resp, plan)
 
@@ -2285,15 +2300,18 @@ async def process_scan(payload: dict, request: Request):
             ai_used=True,
         )
 
-        add_scan_log(
-            user_id=user_id,
-            category="ai_detector",
-            mode=mode,
-            verdict=resp["verdict"],
-            score=resp["score"],
-            content_snippet=content,
-            details=resp.get("details"),
-        )
+        resp["priority"] = priority_job
+
+        if user_id:
+            add_scan_log(
+                user_id=user_id,
+                category="ai_detector",
+                mode=mode,
+                verdict=resp["verdict"],
+                score=resp["score"],
+                content_snippet=content,
+                details=resp.get("details"),
+            )
 
         return _apply_free_output_guards(resp, plan)
 
@@ -2336,15 +2354,18 @@ async def process_scan(payload: dict, request: Request):
             ai_used=True,
         )
 
-        add_scan_log(
-            user_id=user_id,
-            category="manipulation",
-            mode=mode,
-            verdict=resp["verdict"],
-            score=resp["score"],
-            content_snippet=content,
-            details=resp.get("details"),
-        )
+        resp["priority"] = priority_job
+
+        if user_id:
+            add_scan_log(
+                user_id=user_id,
+                category="manipulation",
+                mode=mode,
+                verdict=resp["verdict"],
+                score=resp["score"],
+                content_snippet=content,
+                details=resp.get("details"),
+            )
 
         return _apply_free_output_guards(resp, plan)
 
@@ -2370,6 +2391,7 @@ async def scan_deep_ai(body: DeepScanRequest, request: Request):
         return rl
 
     record_event("request")
+    priority_job = True
 
     content = (body.content or "").strip()
     if not content:
@@ -2404,6 +2426,10 @@ async def scan_deep_ai(body: DeepScanRequest, request: Request):
         "manipulation_score": manipulation_score,
         "actor_score": actor_score,
         "weighting": {"text": 0.6, "manipulation": 0.25, "actor": 0.15},
+        "manipulation": manipulation_score,
+        "phishing": base_score,
+        "spoofing": actor_score,
+        "emotional_trigger": manipulation_score,
     }
 
     reasons = []
@@ -2433,6 +2459,7 @@ async def scan_deep_ai(body: DeepScanRequest, request: Request):
     )
     resp["confidence_score"] = weighted_score
     resp["priority_queue"] = True
+    resp["priority"] = priority_job
     resp["plan"] = "premium"
 
     add_scan_log(
@@ -2476,7 +2503,7 @@ async def ocr_endpoint(request: Request, image: UploadFile = File(...)):
     if not _validate_csrf(request):
         return _csrf_failure()
     user = get_current_user(request)
-    gate = _require_premium("image_scan", request, user)
+    gate = _require_premium("screenshot_scan", request, user)
     if gate:
         return gate
     rl = _enforce_rate_limit(user, request, "ocr")
@@ -2519,7 +2546,7 @@ async def ocr_repair(request: Request):
         return _csrf_failure()
 
     user = get_current_user(request)
-    gate = _require_premium("image_scan", request, user)
+    gate = _require_premium("screenshot_scan", request, user)
     if gate:
         return gate
 
@@ -2629,14 +2656,15 @@ async def qr(request: Request, image: UploadFile = File(...), async_job: bool = 
     else:
         record_event("scam")
 
-    add_scan_log(
-        user_id=user_id,
-        category="qr",
-        mode="qr",
-        verdict=verdict,
-        score=score,
-        content_snippet=f"{result.get('count', 0)} QR code(s)",
-        details=result,
-    )
+    if user_id:
+        add_scan_log(
+            user_id=user_id,
+            category="qr",
+            mode="qr",
+            verdict=verdict,
+            score=score,
+            content_snippet=f"{result.get('count', 0)} QR code(s)",
+            details=result,
+        )
 
     return result

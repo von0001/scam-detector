@@ -747,6 +747,40 @@ body {
   color: #cbd5f5;
 }
 
+.confidence-wrap {
+  margin: 10px 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(30, 41, 59, 0.6);
+}
+
+.confidence-header {
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.confidence-meter {
+  width: 100%;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(51, 65, 85, 0.8);
+  overflow: hidden;
+}
+
+.confidence-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, #fcd34d, #22c55e);
+  transition: width 0.2s ease;
+}
+
+.confidence-label {
+  margin-top: 6px;
+  font-size: 0.85rem;
+  color: #cbd5e1;
+}
+
 .reasons-list li + li {
   margin-top: 3px;
 }
