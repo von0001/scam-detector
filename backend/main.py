@@ -1028,6 +1028,13 @@ def subscribe_page():
 def contact_page():
     return FileResponse(STATIC_DIR / "contact.html")
 
+@app.get("/history")
+def history_page():
+    target = STATIC_DIR / "history.html"
+    if target.exists():
+        return FileResponse(target)
+    return JSONResponse({"error": "History page not found."}, status_code=404)
+
 
 @app.get("/login-admin")
 def login_admin_page():
@@ -1379,8 +1386,6 @@ def scan_history(request: Request, limit: int = 100, offset: int = 0):
     plan = user.get("plan", "free")
     requested_limit = max(1, min(limit, 500))
     requested_offset = max(0, offset)
-    if plan != "premium" and requested_limit > FREE_HISTORY_LIMIT:
-        return _premium_locked_response("full_history", request)
 
     if plan != "premium":
         effective_limit = min(requested_limit, FREE_HISTORY_LIMIT)

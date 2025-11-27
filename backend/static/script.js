@@ -131,6 +131,7 @@ const historyLoadMoreBtn = document.getElementById("history-load-more");
 const historyVerdictFilter = document.getElementById("history-filter-verdict");
 const historyTypeFilter = document.getElementById("history-filter-type");
 const historyPageStatus = document.getElementById("history-page-status");
+const historyExportBtn = document.getElementById("history-export-btn");
 
 const deleteForm = document.getElementById("delete-form");
 const deletePassword = document.getElementById("delete-password");
@@ -2617,6 +2618,7 @@ async function loadHistoryPage(reset = false) {
   if (!historyList) return;
   if (!currentUser) {
     openAuthModal();
+    if (historyPageStatus) historyPageStatus.textContent = "Sign in to view your history.";
     return;
   }
   if (reset) {
@@ -2625,8 +2627,10 @@ async function loadHistoryPage(reset = false) {
   }
   const verdict = historyVerdictFilter ? historyVerdictFilter.value : "all";
   const type = historyTypeFilter ? historyTypeFilter.value : "all";
+  const isPremium = currentUser && currentUser.user && currentUser.user.plan === "premium";
+  const pageSize = isPremium ? HISTORY_PAGE_SIZE : FREE_HISTORY_LIMIT;
   const params = new URLSearchParams({
-    limit: HISTORY_PAGE_SIZE.toString(),
+    limit: pageSize.toString(),
     offset: historyOffset.toString(),
   });
   try {
@@ -2676,10 +2680,10 @@ async function loadHistoryPage(reset = false) {
       historyPageStatus.textContent =
         limited && !data.offset ? "Free plan shows the last 5 scans." : "";
     }
-  if (historyLoadMoreBtn) {
-    const noMore = limited || received < HISTORY_PAGE_SIZE;
-    historyLoadMoreBtn.hidden = noMore;
-  }
+    if (historyLoadMoreBtn) {
+      const noMore = limited || received < pageSize;
+      historyLoadMoreBtn.hidden = noMore;
+    }
     historyOffset += received;
   } catch (err) {
     if (historyPageStatus) historyPageStatus.textContent = "Network error loading history.";
@@ -2698,6 +2702,44 @@ if (historyVerdictFilter) {
 }
 if (historyTypeFilter) {
   historyTypeFilter.addEventListener("change", () => loadHistoryPage(true));
+}
+
+if (historyExportBtn) {
+  historyExportBtn.addEventListener("click", async (e) => {
+    e.preventDefault();
+    if (!currentUser) {
+      openAuthModal();
+      return;
+    }
+    if (!requireFeatureAccess("full_history", "Full history export is a Premium feature.")) {
+      return;
+    }
+    historyPageStatus.textContent = "Preparing export...";
+    try {
+      const res = await fetch(`${API_BASE_URL}/scan-history?limit=500`, {
+        method: "GET",
+        credentials: "include",
+        headers: csrfHeaders(),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        historyPageStatus.textContent = data.error || "Could not export history.";
+        return;
+      }
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "scamdetector-history.json";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      historyPageStatus.textContent = "Export ready.";
+    } catch (err) {
+      historyPageStatus.textContent = "Network error exporting history.";
+    }
+  });
 }
 
 if (deleteForm && deleteStatus) {
