@@ -343,45 +343,31 @@ function applyFeatureLocks() {
   const plan = currentPlan();
   const premiumNodes = document.querySelectorAll('[data-tier="premium"]');
   premiumNodes.forEach((node) => {
-    const input = node.tagName === "INPUT" ? node : node.querySelector("input");
-    const featureKey = node.dataset.featureKey || (input && input.dataset.featureKey);
-    if (input) {
-      if (!input.dataset.tier && node.dataset.tier) input.dataset.tier = node.dataset.tier;
-      if (!input.dataset.featureKey && featureKey) input.dataset.featureKey = featureKey;
-    }
-    const isLocked = plan !== "premium";
     if (node.classList.contains("locked-row")) {
-      node.classList.toggle("unlocked-premium", !isLocked);
+      node.classList.toggle("unlocked-premium", plan === "premium");
     }
-    if (node.classList.contains("mode-pill")) {
-      node.classList.toggle("locked-pill", isLocked);
-      if (input && input.type === "radio" && isLocked) {
-        input.checked = false;
-      }
-    } else {
-      node.classList.toggle("locked-action", isLocked);
-      if (input) input.disabled = isLocked;
-    }
+    node.classList.remove("locked-pill");
+    node.classList.remove("locked-action");
+    const input = node.tagName === "INPUT" ? node : node.querySelector("input");
+    if (input) input.disabled = false;
   });
 
-if (plan !== "premium") {
-    const fallback = document.querySelector('input[name=\"mode\"][value=\"url\"]');
-    if (fallback) fallback.checked = true;
-  }
-
   if (deepAnalyzeBtn) {
-    deepAnalyzeBtn.classList.toggle("locked-action", plan !== "premium");
+    deepAnalyzeBtn.classList.remove("locked-action");
+    deepAnalyzeBtn.disabled = false;
   }
   if (ocrBtn) {
-    ocrBtn.classList.toggle("locked-action", plan !== "premium");
+    ocrBtn.classList.remove("locked-action");
   }
   if (dropZone) {
-    dropZone.classList.toggle("locked-action", plan !== "premium");
+    dropZone.classList.remove("locked-action");
   }
   if (historyBtn && historyStatus) {
-    historyBtn.disabled = plan !== "premium";
-    historyBtn.classList.toggle("locked-action", plan !== "premium");
-    historyStatus.textContent = plan !== "premium" ? "Full history export is a Premium feature." : "";
+    historyBtn.disabled = false;
+    historyBtn.classList.remove("locked-action");
+    if (plan === "premium") {
+      historyStatus.textContent = "";
+    }
   }
 }
 
@@ -583,7 +569,7 @@ function updatePlanPill() {
 
   if (!currentUser) {
     planPill.innerHTML =
-      'Guest Mode — Limited Protection. <span class="plan-pill-cta" id="plan-pill-upgrade">Sign in</span> to sync and unlock more.';
+      'Protection Console ready. <span class="plan-pill-cta" id="plan-pill-upgrade">Sign in</span> to sync scans and personalize protection.';
     if (accountBtn) accountBtn.textContent = "Sign In";
     if (accountMenuEmail) accountMenuEmail.textContent = "";
     if (tierBannerText) tierBannerText.textContent = "Sign in to see your tier and usage.";
@@ -602,7 +588,7 @@ function updatePlanPill() {
 
   if (plan === "premium") {
     planPill.innerHTML =
-      "<span>Active: Full Dominance Mode</span> - PREMIUM ACTIVE ✅ Priority queue enabled.";
+      "<span>Active: Full Dominance Mode</span> - Premium active ✅ Priority queue enabled.";
     if (tierBannerText) tierBannerText.textContent = "Active: Full Dominance Mode";
     if (tierBadge) tierBadge.hidden = false;
     if (tierUpgradeBtn) tierUpgradeBtn.hidden = true;
@@ -610,8 +596,11 @@ function updatePlanPill() {
     if (deepAnalyzeBtn) deepAnalyzeBtn.disabled = false;
   } else {
     const remaining = Math.max((limit || 0) - used, 0);
-    planPill.innerHTML = `<span>You are using Safe Starter Mode — URL & Text Scans Only</span> - ${remaining} of ${limit} daily scans left.<span class="plan-pill-cta" id="plan-pill-upgrade">Upgrade to Premium</span>`;
-    if (tierBannerText) tierBannerText.textContent = "You are currently on Free Tier - Safe Starter Mode";
+    const remainingLabel = limit > 0 ? remaining : "unlimited";
+    const totalLabel = limit > 0 ? limit : "unlimited";
+    planPill.innerHTML = `<span>Core Protection active</span> — ${remainingLabel} of ${totalLabel} scans ready today.<span class="plan-pill-cta" id="plan-pill-upgrade">Boost with Premium</span>`;
+    if (tierBannerText)
+      tierBannerText.textContent = "Core Protection active — deep AI and real-time unlock with Premium anytime.";
     if (tierBadge) tierBadge.hidden = true;
     if (tierUpgradeBtn) tierUpgradeBtn.hidden = false;
   }
