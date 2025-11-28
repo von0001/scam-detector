@@ -1365,24 +1365,14 @@ body {
   justify-content: center;
   font-size: 1.2rem;
   font-weight: 700;
-  color: #0b1224;
-  background: #fff;
+  background: #0b1224;
+  overflow: hidden;
 }
 
-.youtube-icon {
-  background: #ff0000;
-  color: #fff;
-}
-
-.instagram-icon {
-  background: linear-gradient(135deg, #ff9a3c, #d63384, #5b5bdc);
-  color: #fff;
-}
-
-.tiktok-icon {
-  background: #111827;
-  color: #22d3ee;
-  border: 1px solid rgba(34, 211, 238, 0.4);
+.social-icon-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .social-platform {
