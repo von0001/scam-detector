@@ -2,19 +2,19 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>ScamDetector - Digital Threat Analysis Platform</title>
+  <title>ScamDetector - Threat Analysis Platform</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="stylesheet" href="/static/style.css" />
   <link rel="icon" type="image/svg+xml" href="/static/img/favicon.svg" />
 </head>
 
 <body>
+  <div class="hero-bg"></div>
   <div class="app">
 
-    <!-- TOP NAV / BRAND -->
-    <header class="top-nav">
+    <header class="top-nav floating-nav">
       <div class="brand">
-        <div class="brand-mark" aria-hidden="true">
+        <div class="brand-mark gradient-chip" aria-hidden="true">
           <span class="brand-mark-inner"></span>
         </div>
         <div class="brand-text">
@@ -24,8 +24,8 @@
       </div>
 
       <nav class="nav-links" style="position: relative;">
+        <a href="#scanner">Scanner</a>
         <a href="#how-it-works">How it Works</a>
-        <a href="#use-cases">Use Cases</a>
         <a href="#trust">Trust</a>
         <a href="/pricing">Pricing</a>
         <a href="/support">Support</a>
@@ -44,82 +44,61 @@
     </header>
 
     <!-- HERO -->
-    <section class="hero">
+    <section class="hero dynamic-grid">
       <div class="hero-copy">
-        <p class="eyebrow">Institution-grade protection</p>
+        <div class="pill glow">Enterprise threat check</div>
         <h1 class="heading-1">
-          Real-time protection against scams, manipulation, and digital threats.
+          Real-time scam detection with clear actions.
         </h1>
         <p class="hero-lede">
-          Analyze suspicious messages, emails, links, screenshots, or QR codes before they impact your team or finances.
+          Paste a message, link, QR, or screenshot. We return a verified threat level, detected signals, and the safest next step.
         </p>
-        <p class="hero-support">
-          Paste the content, choose the type, and receive a clear risk level with the reasoning behind it.
-        </p>
-
         <div class="hero-actions">
           <a class="primary-btn hero-primary" href="#scanner">Start a scan</a>
-          <a class="secondary-btn hero-secondary" href="#how-it-works">View how it works</a>
+          <a class="secondary-btn hero-secondary" href="#how-it-works">See workflow</a>
         </div>
-
-        <div class="hero-trust-row">
-          <div class="trust-chip">
-            SOC-style reports with clear threat levels
-          </div>
-          <div class="trust-chip">
-            Detection of urgency, impersonation, and spoofed links
-          </div>
-          <div class="trust-chip">
-            Data handling designed for audits and teams
-          </div>
+        <div class="trust-strip">
+          <div class="trust-item">Priority threat queue</div>
+          <div class="trust-item">Link & sender validation</div>
+          <div class="trust-item">Data handled for audits</div>
         </div>
       </div>
 
-      <div class="hero-panel">
-        <div class="hero-preview">
-          <div class="preview-header">
-            <div>
-              <p class="preview-eyebrow">Analysis preview</p>
-              <p class="preview-title">Phishing login link</p>
-            </div>
-            <span class="preview-badge preview-badge-high">Threat: High</span>
+      <div class="hero-panel card-float">
+        <div class="panel-header">
+          <div>
+            <p class="panel-eyebrow">Live analysis preview</p>
+            <h3 class="heading-3">Phishing login link</h3>
           </div>
-          <p class="preview-body">
-            The link mimics a banking domain, routes through a tracking URL, and asks for credentials outside the known login flow.
-          </p>
-          <ul class="signal-list">
-            <li>Domain mismatch: accounts-secure.example-notbank.com</li>
-            <li>Urgency language: “immediate action required”</li>
-            <li>Request for credentials via redirected page</li>
-          </ul>
-          <div class="preview-actions">
-            <span class="signal-label">Recommended: Do not enter credentials. Validate sender via a trusted channel.</span>
-          </div>
+          <span class="badge badge-danger">Threat: High</span>
         </div>
-        <div class="hero-meta">
-          <div class="meta-block">
-            <p class="meta-label">Primary flow</p>
-            <p class="meta-value">Paste → Scan → Read report</p>
-          </div>
-          <div class="meta-block">
-            <p class="meta-label">Coverage</p>
-            <p class="meta-value">Messages, email text, links, QR, screenshots</p>
-          </div>
-          <div class="meta-block">
-            <p class="meta-label">Reporting</p>
-            <p class="meta-value">Risk level, signals detected, recommended actions</p>
+        <p class="preview-body">
+          The link mimics a banking domain, routes through a tracking URL, and asks for credentials outside the known login flow.
+        </p>
+        <ul class="signal-list">
+          <li>Domain mismatch: accounts-secure.example-notbank.com</li>
+          <li>Urgency language: “immediate action required”</li>
+          <li>Redirect to credential form</li>
+        </ul>
+        <div class="preview-actions">
+          <span class="signal-label">Recommendation: Do not sign in. Verify via official site or app.</span>
+        </div>
+        <div class="preview-meter">
+          <div class="meter-label">Confidence</div>
+          <div class="meter-track">
+            <div class="meter-fill" style="width: 88%;"></div>
           </div>
         </div>
       </div>
     </section>
 
     <!-- SCANNER -->
-    <section id="scanner" class="section">
+    <section id="scanner" class="section scanner-shell">
       <div class="section-header">
-        <p class="eyebrow">Primary workflow</p>
-        <h2 class="heading-2">Centralized intake for threat analysis</h2>
+        <div class="pill">Primary workflow</div>
+        <h2 class="heading-2">Paste, scan, and act with confidence</h2>
         <p class="body-md text-muted">
-          One focused interface for rapid review. Advanced controls stay available without crowding the main path.
+          One focused console to review links, messages, QR codes, and screenshots. Advanced options stay tucked away.
         </p>
       </div>
 
@@ -149,7 +128,7 @@
 
           <div class="sample-chips">
             <button class="sample-chip" data-content="https://accounts-secure.example-notbank.com/login" data-mode="url">Suspicious login link</button>
-            <button class="sample-chip" data-content="Your package is on hold. Pay this link in 10 minutes to release it." data-mode="text">Delivery pressure message</button>
+            <button class="sample-chip" data-content="Your package is on hold. Pay this link in 10 minutes to release it." data-mode="text">Delivery pressure</button>
             <button class="sample-chip" data-content="Send your ID and bank details now to confirm the job offer." data-mode="manipulation">Sensitive data request</button>
           </div>
 
@@ -261,43 +240,42 @@
     <!-- HOW IT WORKS -->
     <section class="section" id="how-it-works">
       <div class="section-header">
-        <p class="eyebrow">How the system evaluates risk</p>
-        <h2 class="heading-2">Engineered like an incident response triage</h2>
+        <div class="pill">How it works</div>
+        <h2 class="heading-2">Three steps to a trusted verdict</h2>
         <p class="body-md text-muted">
-          Each scan runs a consistent review: content structure, behavioral markers, and technical checks before issuing a verdict.
+          Intake the content, run layered checks, and return a consistent decision with rationale.
         </p>
       </div>
 
-      <div class="info-grid">
-        <article class="info-card">
-          <h3 class="heading-3">Message and link analysis</h3>
-          <p class="body-sm">
-            We examine syntax, sender claims, link destinations, and attachment cues to spot phishing, fraud, and spoofing attempts.
-          </p>
+      <div class="steps-grid">
+        <article class="step-card">
+          <div class="step-badge">1</div>
+          <h3 class="heading-3">Ingest</h3>
+          <p class="body-sm">Paste or upload content. We normalize text, links, QR, and sender cues for analysis.</p>
         </article>
-        <article class="info-card">
-          <h3 class="heading-3">Behavior and urgency patterns</h3>
-          <p class="body-sm">
-            Language is screened for pressure, fear, or authority plays that push quick action without verification.
-          </p>
+        <article class="step-card">
+          <div class="step-badge">2</div>
+          <h3 class="heading-3">Detect</h3>
+          <p class="body-sm">Language, manipulation, domain reputation, and impersonation patterns are scored in parallel.</p>
         </article>
-        <article class="info-card">
-          <h3 class="heading-3">Impersonation detection</h3>
-          <p class="body-sm">
-            We cross-check brand mentions, domain lookalikes, and role claims to surface likely impersonation attempts.
-          </p>
-        </article>
-        <article class="info-card">
-          <h3 class="heading-3">Risk scoring and actions</h3>
-          <p class="body-sm">
-            Results include a clear threat level, key signals, and recommended actions so teams can respond consistently.
-          </p>
+        <article class="step-card">
+          <div class="step-badge">3</div>
+          <h3 class="heading-3">Decide</h3>
+          <p class="body-sm">Deliver a clear threat level, key signals, and recommended next actions your team can trust.</p>
         </article>
       </div>
+    </section>
 
+    <!-- USE CASES -->
+    <section class="section">
+      <div class="section-header">
+        <div class="pill">Examples</div>
+        <h2 class="heading-2">Real scenarios we flag</h2>
+        <p class="body-md text-muted">Concrete cases with signals and guidance.</p>
+      </div>
       <div class="example-grid">
         <article class="example-card">
-          <div class="example-meta">Example: fake delivery text</div>
+          <div class="example-meta">Fake delivery text</div>
           <p class="example-input">“Your package is held. Confirm payment within 10 minutes: http://quick-drop-off.info”</p>
           <ul class="signal-list">
             <li>Urgency with short deadline</li>
@@ -307,7 +285,7 @@
           <p class="example-outcome">Verdict: High risk. Action: Ignore and report as phishing.</p>
         </article>
         <article class="example-card">
-          <div class="example-meta">Example: phishing login link</div>
+          <div class="example-meta">Phishing login link</div>
           <p class="example-input">“Security alert: login from a new device. Verify at secure-login.example-co.net”</p>
           <ul class="signal-list">
             <li>Lookalike domain with hyphenated brand</li>
@@ -317,8 +295,8 @@
           <p class="example-outcome">Verdict: High risk. Action: Do not sign in; use the official site or app.</p>
         </article>
         <article class="example-card">
-          <div class="example-meta">Example: job interview scam</div>
-          <p class="example-input">“We reviewed your profile and want to hire you today. Send your ID and bank details to process onboarding.”</p>
+          <div class="example-meta">Job interview scam</div>
+          <p class="example-input">“We want to hire you today. Send your ID and bank details to process onboarding.”</p>
           <ul class="signal-list">
             <li>Asks for sensitive data before verification</li>
             <li>Unverified sender domain and no role details</li>
@@ -332,8 +310,8 @@
     <!-- TRUST & SECURITY -->
     <section class="section trust-section" id="trust">
       <div class="section-header">
-        <p class="eyebrow">Trust & security</p>
-        <h2 class="heading-2">Built for teams that need audit-ready clarity</h2>
+        <div class="pill">Trust & Security</div>
+        <h2 class="heading-2">Audit-ready by design</h2>
         <p class="body-md text-muted">
           Transparent data handling, planned compliance milestones, and clear onboarding guidance.
         </p>
@@ -343,7 +321,7 @@
         <article class="trust-card">
           <h3 class="heading-3">Data handling</h3>
           <p class="body-sm">
-            Scans are processed for analysis and discarded. No resale of content. Logs capture minimal metadata for troubleshooting.
+            Scans are processed for analysis and discarded. No resale of content. Minimal metadata retained for reliability.
           </p>
           <p class="body-sm muted">Policy summary available; full policy linked in Privacy.</p>
         </article>
@@ -373,49 +351,11 @@
       </div>
     </section>
 
-    <!-- ADDITIONAL FEATURES -->
-    <section class="section">
-      <div class="section-header">
-        <p class="eyebrow">Additional tools</p>
-        <h2 class="heading-2">Advanced options stay controlled</h2>
-        <p class="body-md text-muted">
-          Keep the main flow simple while making deeper reviews available when needed.
-        </p>
-      </div>
-
-      <div class="info-grid">
-        <article class="info-card">
-          <h3 class="heading-3">Advanced analysis queue</h3>
-          <p class="body-sm">
-            Priority processing for detailed reviews when evidence must be collected and archived.
-          </p>
-        </article>
-        <article class="info-card">
-          <h3 class="heading-3">History & reporting</h3>
-          <p class="body-sm">
-            Keep a record of scans, export findings for audits, and share summaries with incident responders.
-          </p>
-        </article>
-        <article class="info-card">
-          <h3 class="heading-3">Browser extension</h3>
-          <p class="body-sm">
-            Real-time scanning for pages and messages inside the tools you already use.
-          </p>
-        </article>
-        <article class="info-card">
-          <h3 class="heading-3">Team controls</h3>
-          <p class="body-sm">
-            Role-aware access, consistent verdict labels, and guidance that keeps responses aligned across teams.
-          </p>
-        </article>
-      </div>
-    </section>
-
     <!-- CTA -->
     <section class="section final-cta">
       <div class="cta-card">
         <div>
-          <p class="eyebrow">Ready to assess a threat-</p>
+          <div class="pill">Ready to assess a threat?</div>
           <h2 class="heading-2">Start a scan and get a clear verdict.</h2>
           <p class="body-md text-muted">
             No theatrics—just a concise report you can act on.
@@ -490,7 +430,7 @@
         </form>
 
         <p id="auth-hint" class="auth-hint">
-          No account yet- Switch to <strong>Create Account</strong> to start with the free tier.
+          No account yet? Switch to <strong>Create Account</strong> to start with the free tier.
         </p>
         <p id="auth-status" class="auth-status"></p>
       </div>
