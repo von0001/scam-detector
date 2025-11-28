@@ -1,6 +1,8 @@
 // SCRIPT.JS - FULL VERSION WITH AUTH + ACCOUNT + QR + GOOGLE
 
 const API_BASE_URL = "https://scamdetectorapp.com";
+const CHROME_EXTENSION_URL =
+  "https://chromewebstore.google.com/detail/scamdetector-%E2%80%93-link-text/aoiglmnmpicbkkplnlfifipdgmajeich";
 
 // Core scan elements (home page)
 const contentInput = document.getElementById("content-input");
@@ -2411,11 +2413,9 @@ if (deepAnalyzeBtn) {
 if (realtimeBtn) {
   realtimeBtn.addEventListener("click", (e) => {
     e.preventDefault();
-    if (!requireFeatureAccess("real_time", "Real-time scan mode is Premium via Chrome Extension.")) {
-      return;
-    }
-    statusEl.textContent = "Real-time Scan Mode is available via the Chrome Extension. Install to activate.";
-    window.open("https://chrome.google.com/webstore/category/extensions", "_blank");
+    statusEl.textContent =
+      "Real-time Scan Mode runs via our Chrome Extension. Opening the install page...";
+    window.open(CHROME_EXTENSION_URL, "_blank", "noopener,noreferrer");
   });
 }
 
