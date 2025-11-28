@@ -12,6 +12,7 @@ const statusEl = document.getElementById("status");
 const modeSelect = document.getElementById("mode-select");
 const advancedToggle = document.getElementById("advanced-toggle");
 const advancedPanel = document.getElementById("advanced-panel");
+const sampleChips = document.querySelectorAll(".sample-chip");
 
 const resultSection = document.getElementById("result-section");
 const verdictBadge = document.getElementById("verdict-badge");
@@ -194,6 +195,19 @@ let viewPlansBtn = null;
 
 // Ensure auth modal stays closed on load
 if (authModal) authModal.hidden = true;
+let currentConfidencePct = 0;
+const normalizeConfidence = (raw) => {
+  const num = Number(raw);
+  if (!Number.isFinite(num)) return null;
+  const pct = num <= 1 ? num * 100 : num;
+  return Math.min(100, Math.max(0, Math.round(pct)));
+};
+const normalizeConfidence = (raw) => {
+  const num = Number(raw);
+  if (!Number.isFinite(num)) return null;
+  const pct = num <= 1 ? num * 100 : num;
+  return Math.min(100, Math.max(0, Math.round(pct)));
+};
 
 // MODE
 function getSelectedMode() {
@@ -1432,6 +1446,35 @@ function renderAnalyzeResult(result, content, mode) {
   if (!verdictBadge || !explanationEl || !reasonsList) return;
 
   const cleanResult = normalizeResultForDisplay(result);
+  if (
+    !cleanResult.confidence_score &&
+    result?.details &&
+    typeof result.details.confidence_score === "number"
+  ) {
+    cleanResult.confidence_score = result.details.confidence_score;
+  }
+  if (
+    !cleanResult.confidence_score &&
+    result?.details &&
+    typeof result.details.confidence === "number"
+  ) {
+    cleanResult.confidence_score = result.details.confidence;
+  }
+  if (
+    !cleanResult.confidence_score &&
+    result?.details &&
+    typeof result.details.confidence_score === "number"
+  ) {
+    cleanResult.confidence_score = result.details.confidence_score;
+  }
+  if (
+    !cleanResult.confidence_score &&
+    result?.details &&
+    typeof result.details.confidence === "number"
+  ) {
+    cleanResult.confidence_score = result.details.confidence;
+  }
+
   const displayVerdict = deriveDisplayVerdict(
     cleanResult.verdict,
     cleanResult.explanation,
@@ -1450,10 +1493,6 @@ function renderAnalyzeResult(result, content, mode) {
     label = displayVerdict || "Result";
   }
 
-  if (typeof cleanResult.confidence_score === "number") {
-    label = `${label} | Confidence ${Math.round(cleanResult.confidence_score)}%`;
-  }
-
   verdictBadge.textContent = label;
   setVerdictStyle(displayVerdict);
   explanationEl.textContent = cleanResult.explanation || "";
@@ -1462,15 +1501,29 @@ function renderAnalyzeResult(result, content, mode) {
     reasonBlock.hidden = !shouldShowReasons(displayVerdict);
   }
 
-  if (typeof cleanResult.confidence_score === "number") {
-    if (confidenceWrap && confidenceFill && confidenceLabel) {
-      const pct = Math.min(100, Math.max(0, Math.round(cleanResult.confidence_score)));
+  const normalizedConfidence = normalizeConfidence(cleanResult.confidence_score);
+  if (confidenceWrap && confidenceFill && confidenceLabel) {
+    if (normalizedConfidence !== null) {
       confidenceWrap.hidden = false;
-      confidenceFill.style.width = `${pct}%`;
-    confidenceLabel.textContent = `${pct}% confidence - confidence level`;
+      const start = currentConfidencePct;
+      const target = normalizedConfidence;
+      const startTs = performance.now();
+      const duration = 220;
+      const step = (ts) => {
+        const progress = Math.min(1, (ts - startTs) / duration);
+        const val = Math.round(start + (target - start) * progress);
+        confidenceFill.style.width = `${val}%`;
+        confidenceLabel.textContent = `${val}% confidence`;
+        if (progress < 1) requestAnimationFrame(step);
+        else currentConfidencePct = target;
+      };
+      requestAnimationFrame(step);
+    } else {
+      confidenceWrap.hidden = true;
+      confidenceFill.style.width = "0%";
+      confidenceLabel.textContent = "";
+      currentConfidencePct = 0;
     }
-  } else if (confidenceWrap) {
-    confidenceWrap.hidden = true;
   }
 
   reasonsList.innerHTML = "";
@@ -1499,7 +1552,10 @@ function renderAnalyzeResult(result, content, mode) {
     score: cleanResult.score,
   });
 
-  if (resultSection) resultSection.hidden = false;
+  if (resultSection) {
+    resultSection.hidden = false;
+    resultSection.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
   statusEl.textContent = "";
   loadSession();
 }
@@ -2412,6 +2468,20 @@ if (modeSelect) {
       const ok = requireFeatureAccess(selected, `${feature.label} is available on Premium.`);
       if (!ok) modeSelect.value = "auto";
     }
+  });
+}
+
+if (sampleChips && sampleChips.length) {
+  sampleChips.forEach((chip) => {
+    chip.addEventListener("click", () => {
+      const content = chip.dataset.content || "";
+      const mode = chip.dataset.mode || "auto";
+      if (contentInput) contentInput.value = content;
+      if (modeSelect && modeSelect.querySelector(`option[value='${mode}']`)) {
+        modeSelect.value = mode;
+      }
+      statusEl.textContent = "Sample loaded. Run a scan to see the report.";
+    });
   });
 }
 

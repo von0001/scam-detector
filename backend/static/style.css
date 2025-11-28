@@ -36,6 +36,10 @@ body {
   padding: 0;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 body {
   min-height: 100vh;
   background: var(--bg-base);
@@ -723,12 +727,36 @@ textarea:focus,
   height: 100%;
   background: linear-gradient(90deg, var(--accent), var(--accent-strong));
   width: 0%;
+  transition: width 0.25s ease;
 }
 
 .confidence-label {
   margin-top: 6px;
   font-size: 0.9rem;
   color: var(--text-muted);
+}
+
+.sample-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.sample-chip {
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface-2);
+  color: var(--text-primary);
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.sample-chip:hover {
+  border-color: var(--accent);
+  color: var(--accent-strong);
 }
 
 .reason-block {
