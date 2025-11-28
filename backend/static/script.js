@@ -241,6 +241,17 @@ function verdictPillClass(verdict) {
   return "account-pill";
 }
 
+function applyHeaderIdentity() {
+  if (!accountBtn) return;
+  if (currentUser && currentUser.user && currentUser.user.email) {
+    accountBtn.textContent = currentUser.user.email;
+    if (accountMenuEmail) accountMenuEmail.textContent = currentUser.user.email;
+  } else {
+    accountBtn.textContent = "Sign In";
+    if (accountMenuEmail) accountMenuEmail.textContent = "";
+  }
+}
+
 function currentPlan() {
   if (currentUser && currentUser.user && currentUser.user.plan === "premium") return "premium";
   if (currentUser && currentUser.user) return "free";
@@ -566,6 +577,7 @@ function updatePlanPill() {
   if (!planPill) {
     updateAccountOverview();
     applyFeatureLocks();
+    applyHeaderIdentity();
     return;
   }
 
@@ -996,6 +1008,7 @@ async function loadSession() {
       currentUser = data;
     }
     updatePlanPill();
+    applyHeaderIdentity();
     if (window.location.pathname === "/account") {
       loadAccountDashboard(true);
     }
@@ -1003,6 +1016,7 @@ async function loadSession() {
     currentUser = null;
     accountDashboardLoaded = false;
     updatePlanPill();
+    applyHeaderIdentity();
   }
 }
 
@@ -2464,6 +2478,7 @@ if (accountLogoutBtn) {
       currentUser = null;
       accountDashboardLoaded = false;
       updatePlanPill();
+      applyHeaderIdentity();
       if (window.location.pathname === "/account") {
         showAccountLocked();
         window.location.href = "/";
