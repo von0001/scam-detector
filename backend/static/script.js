@@ -166,6 +166,7 @@ const refreshDashboardBtn = document.getElementById("refresh-dashboard-btn");
 const subscribeMonthlyBtn = document.getElementById("subscribe-monthly-btn");
 const subscribeYearlyBtn = document.getElementById("subscribe-yearly-btn");
 const subscribeStatus = document.getElementById("subscribe-status");
+const startFreeBtn = document.getElementById("start-free-btn");
 const tierBanner = document.getElementById("tier-banner");
 const tierBannerText = document.getElementById("tier-banner-text");
 const tierBadge = document.getElementById("tier-badge");
@@ -2579,6 +2580,14 @@ if (accountLogoutBtn) {
 if (accountLockedBtn) {
   accountLockedBtn.addEventListener("click", (e) => {
     e.preventDefault();
+    openAuthModal();
+  });
+}
+
+if (startFreeBtn) {
+  startFreeBtn.addEventListener("click", (e) => {
+    e.preventDefault();
+    setAuthMode("signup");
     openAuthModal();
   });
 }
