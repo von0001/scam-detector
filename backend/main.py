@@ -841,7 +841,6 @@ def build_response(
         "ai_used": ai_used,
     }
 
-
 GUEST_DAILY_LIMIT = int(os.getenv("GUEST_DAILY_LIMIT", "3"))
 
 
@@ -1027,6 +1026,13 @@ def subscribe_page():
 @app.get("/contact")
 def contact_page():
     return FileResponse(STATIC_DIR / "contact.html")
+
+@app.get("/social")
+def social_page():
+    target = STATIC_DIR / "social.html"
+    if target.exists():
+        return FileResponse(target)
+    return JSONResponse({"error": "Social page not found."}, status_code=404)
 
 @app.get("/history")
 def history_page():
