@@ -2,172 +2,114 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Support — ScamDetector</title>
+  <title>Support - ScamDetector</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="/static/style.css" />
   <link rel="icon" type="image/svg+xml" href="/static/img/favicon.svg" />
-
-  <style>
-    body {
-      background: #020617;
-      color: #e5e7eb;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont;
-      display: flex;
-      justify-content: center;
-      padding: 40px 20px;
-    }
-
-    .container {
-      max-width: 900px;
-      width: 100%;
-      background: radial-gradient(circle at top left, #020617, #020617 40%, #020617 100%);
-      padding: 40px;
-      border-radius: 18px;
-      border: 1px solid #1e293b;
-      box-shadow: 0 26px 60px rgba(0,0,0,0.7);
-    }
-
-    h1 {
-      text-align: center;
-      font-size: 32px;
-      color: #60a5fa;
-      margin-bottom: 10px;
-    }
-
-    .subtitle {
-      text-align: center;
-      color: #94a3b8;
-      margin-bottom: 36px;
-      font-size: 14px;
-    }
-
-    h2 {
-      color: #c7d2fe;
-      margin-top: 24px;
-      font-size: 18px;
-    }
-
-    p {
-      color: #cbd5e1;
-      line-height: 1.7;
-      font-size: 15px;
-      margin-top: 6px;
-    }
-
-    .support-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-      gap: 18px;
-      margin-top: 16px;
-    }
-
-    .support-card {
-      background: #020617;
-      border: 1px solid #1e293b;
-      border-radius: 12px;
-      padding: 18px;
-    }
-
-    .support-card h3 {
-      color: #93c5fd;
-      margin-bottom: 8px;
-      font-size: 16px;
-    }
-
-    .support-card p {
-      font-size: 13px;
-      color: #9ca3af;
-    }
-
-    .cta {
-      margin-top: 32px;
-      padding: 20px;
-      background: linear-gradient(135deg, #2563eb, #1e40af);
-      border-radius: 14px;
-      text-align: center;
-    }
-
-    .cta a {
-      color: white;
-      text-decoration: none;
-      font-weight: 600;
-      font-size: 15px;
-    }
-
-    .footer {
-      margin-top: 40px;
-      text-align: center;
-      font-size: 13px;
-      color: #64748b;
-    }
-
-    .footer a {
-      color: #94a3b8;
-      margin: 0 10px;
-      text-decoration: none;
-    }
-
-    .footer a:hover {
-      text-decoration: underline;
-    }
-  </style>
 </head>
 
 <body>
-<div class="container">
-  <h1>Support Center</h1>
-  <p class="subtitle">Something feels off with either a scan or with a message? We’re here.</p>
+  <div class="app">
+    <header class="top-nav">
+      <div class="brand">
+        <div class="brand-mark"><span class="brand-mark-inner"></span></div>
+        <div class="brand-text">
+          <span class="brand-name">ScamDetector</span>
+          <span class="brand-tagline">Threat Analysis Platform</span>
+        </div>
+      </div>
 
-  <h2>Common Topics</h2>
-  <div class="support-grid">
+      <nav class="nav-links">
+        <a href="/">Home</a>
+        <a href="/pricing">Pricing</a>
+        <a href="/support" class="nav-accent">Support</a>
+        <a href="/privacy">Privacy</a>
+        <a href="/feedback">Feedback</a>
+        <button id="account-button" class="nav-pill nav-account">Sign In</button>
 
-    <div class="support-card">
-      <h3>How scans protect you</h3>
-      <p>
-        ScamDetector looks for scam language, emotional pressure, bad links, QR tricks, and account phishing behavior.
-        Which then turns that into a simple verdict you can act on.
+        <div id="account-menu" class="account-menu" hidden>
+          <div class="account-menu-email" id="account-menu-email"></div>
+          <button type="button" id="account-manage-btn" class="account-menu-item">
+            Manage account
+          </button>
+          <button type="button" id="account-logout-btn" class="account-menu-item account-menu-item-danger">
+            Sign out
+          </button>
+        </div>
+      </nav>
+    </header>
+
+    <main class="section">
+      <div class="section-header">
+        <p class="eyebrow">Support</p>
+        <h1 class="heading-2">How we can help</h1>
+        <p class="body-md text-muted">
+          Guidance for scans, troubleshooting, and data handling. If you need direct assistance, use the feedback link below.
+        </p>
+      </div>
+
+      <div class="info-grid">
+        <article class="info-card">
+          <h3 class="heading-3">How scans protect you</h3>
+          <p class="body-sm">
+            We review language, links, QR codes, and sender cues, then return a verdict with the signals we found.
+          </p>
+        </article>
+        <article class="info-card">
+          <h3 class="heading-3">If a result seems off</h3>
+          <p class="body-sm">
+            Share the example with us. Feedback improves the models and helps us correct edge cases quickly.
+          </p>
+        </article>
+        <article class="info-card">
+          <h3 class="heading-3">Screenshot and QR tips</h3>
+          <p class="body-sm">
+            Use clear, uncropped images. Poor lighting or blur can prevent accurate optical recognition.
+          </p>
+        </article>
+        <article class="info-card">
+          <h3 class="heading-3">Privacy and data safety</h3>
+          <p class="body-sm">
+            Scans are processed for analysis and discarded. No resale of content; minimal metadata retained for reliability.
+          </p>
+        </article>
+      </div>
+
+      <section class="section">
+        <h2 class="heading-3">Still need help-</h2>
+        <p class="body-md text-muted">
+          Describe what happened and include examples if possible. We review every report to tighten detection.
+        </p>
+        <div class="social-cta">
+          <div>
+            <p class="body-md">Submit a report</p>
+            <p class="body-sm text-muted">We respond as soon as we can. Include links or screenshots if safe to share.</p>
+          </div>
+          <div class="social-cta-actions">
+            <a class="primary-btn" href="/feedback">Submit feedback</a>
+            <a class="ghost-btn" href="/contact">Contact</a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="app-footer">
+      <div class="footer-top">
+        <div>
+          <p class="footer-title">ScamDetector</p>
+          <p class="footer-text">Digital threat analysis built for clarity, not hype.</p>
+        </div>
+        <div class="footer-links">
+          <a href="/terms">Terms</a>
+          <a href="/privacy">Privacy</a>
+          <a href="/support">Support</a>
+          <a href="/feedback">Feedback</a>
+        </div>
+      </div>
+      <p class="footer-note">
+        Review outcomes carefully before acting. Not financial or legal advice.
       </p>
-    </div>
-
-    <div class="support-card">
-      <h3>Think a result is wrong?</h3>
-      <p>
-        AI isn’t perfect. If something feels off, tell us. Your feedback helps tighten the system and protect the next person.
-      </p>
-    </div>
-
-    <div class="support-card">
-      <h3>Screenshot & QR issues</h3>
-      <p>
-        Blurry, dark, or cropped images can break OCR or QR scanning. Try zooming in, improving lighting, or re-uploading.
-      </p>
-    </div>
-
-    <div class="support-card">
-      <h3>Privacy & data safety</h3>
-      <p>
-        Content you scan is processed in-memory and discarded. No sale of data. No tracking of your personal messages.
-      </p>
-    </div>
-
+    </footer>
   </div>
-
-  <h2>Still Need Help?</h2>
-  <p>
-    Describe what happened, drop examples if you can, and we’ll look into it.
-    We take scam detection and accuracy <strong>very</strong> seriously.
-  </p>
-
-  <div class="cta">
-    <a href="/feedback">Submit feedback or report a problem →</a>
-  </div>
-
-  <div class="footer">
-    <a href="/">Home</a>
-    <a href="/terms">Terms</a>
-    <a href="/privacy">Privacy</a>
-    <a href="/contact">Contact</a>
-    <a href="/feedback">Feedback</a>
-  </div>
-</div>
 </body>
 </html>

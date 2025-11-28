@@ -84,6 +84,39 @@ def normalize_homoglyphs(text: str) -> str:
     text = "".join(c for c in text if not unicodedata.combining(c))
     return text.translate(HOMOGLYPH_MAP)
 
+CONFUSABLE_SEQUENCES = {
+    "rn": "m",
+    "vv": "w",
+    "cl": "d",
+    "0": "o",
+    "1": "l",
+    "l": "1",
+    "o": "0",
+    "5": "s",
+}
+
+
+def _levenshtein(a: str, b: str) -> int:
+    if a == b:
+        return 0
+    if not a:
+        return len(b)
+    if not b:
+        return len(a)
+    prev = list(range(len(b) + 1))
+    for i, ca in enumerate(a, start=1):
+        curr = [i]
+        for j, cb in enumerate(b, start=1):
+            cost = 0 if ca == cb else 1
+            curr.append(min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + cost))
+        prev = curr
+    return prev[-1]
+
+
+def _similarity_ratio(a: str, b: str) -> float:
+    base = max(len(a), len(b), 1)
+    return max(0.0, 1.0 - (_levenshtein(a, b) / base))
+
 
 # ---------------------------------------------------------
 # HELPERS
@@ -111,34 +144,89 @@ def extract_root(url: str) -> str:
 # UNICODE / HOMOGLYPH SPOOF DETECTION
 # ---------------------------------------------------------
 
-def detect_unicode_spoof(host: str, root: str) -> List[str]:
+def detect_unicode_spoof(host: str, root: str) -> Dict[str, Any]:
     reasons: List[str] = []
+    suspicious_chars: List[str] = []
+    similarity_hits: List[Dict[str, Any]] = []
+
+    normalized_host = normalize_homoglyphs(host)
+    normalized_root = normalize_homoglyphs(root)
 
     # Unicode present
-    if any(ord(c) > 127 for c in host):
+    has_unicode = any(ord(c) > 127 for c in host)
+    if has_unicode:
         reasons.append("Website address uses unusual characters.")
 
     # Punycode check
+    punycode_decoded = None
     try:
         decoded = idna.decode(host)
         if decoded != host:
-            reasons.append("Website address is written in a tricky encoded way.")
+            punycode_decoded = decoded
+            reasons.append("Website address is written in encoded form that can hide its real name.")
     except Exception:
         reasons.append("Website address looks broken or fake.")
 
-    # Homoglyph mimic detection
-    normalized = normalize_homoglyphs(host)
-    normalized_root = normalize_homoglyphs(root)
+    # Confusable characters / sequences
+    if normalized_host != host:
+        suspicious_chars.append("Normalized website name differs from what is shown.")
+    for seq, looks_like in CONFUSABLE_SEQUENCES.items():
+        if seq in host:
+            suspicious_chars.append(f"'{seq}' can look like '{looks_like}'.")
+    if suspicious_chars:
+        reasons.append("Website name uses look-alike characters. Verify the real site before clicking.")
 
+    # Homoglyph mimic detection and similarity scoring
     for brand, legit_set in BRAND_KEYWORDS.items():
         for legit in legit_set:
-            if normalized_root == normalize_homoglyphs(legit) and root != legit:
-                reasons.append(
-                    f"Website address tries to look like '{legit}' but is not the real one."
+            legit_norm = normalize_homoglyphs(legit)
+            similarity = _similarity_ratio(normalized_root, legit_norm)
+            if normalized_root == legit_norm and root != legit:
+                similarity_pct = round(similarity * 100, 1)
+                similarity_hits.append(
+                    {
+                        "brand": brand,
+                        "target": legit,
+                        "similarity_pct": similarity_pct,
+                        "type": "character_substitution",
+                    }
                 )
-                return reasons
+                reasons.append(f"This domain closely mimics {legit} using character substitution.")
+                break
+            if similarity >= 0.78 and root != legit:
+                similarity_pct = round(similarity * 100, 1)
+                similarity_hits.append(
+                    {
+                        "brand": brand,
+                        "target": legit,
+                        "similarity_pct": similarity_pct,
+                        "type": "lookalike_similarity",
+                    }
+                )
+                reasons.append(
+                    f"This domain looks {similarity_pct}% similar to {legit}. Verify before interacting."
+                )
+                break
 
-    return reasons
+    uniq_reasons: List[str] = []
+    seen = set()
+    for r in reasons:
+        if r in seen:
+            continue
+        seen.add(r)
+        uniq_reasons.append(r)
+
+    return {
+        "reasons": uniq_reasons,
+        "details": {
+            "normalized_host": normalized_host,
+            "normalized_root": normalized_root,
+            "suspicious_chars": suspicious_chars,
+            "similarity_checks": similarity_hits,
+            "punycode_decoded": punycode_decoded,
+            "has_unicode": has_unicode,
+        },
+    }
 
 
 # ---------------------------------------------------------
@@ -269,6 +357,7 @@ Remember: explain it in very simple words and respond ONLY with JSON.
 def analyze_url(url_raw: str) -> Dict[str, object]:
     reasons: List[str] = []
     score = 0
+    unicode_analysis: Dict[str, Any] = {}
 
     url_raw = url_raw.strip()
 
@@ -294,6 +383,7 @@ def analyze_url(url_raw: str) -> Dict[str, object]:
                 "url": url_raw,
                 "host": host,
                 "root": root,
+                "unicode_analysis": unicode_analysis,
             },
         }
 
@@ -302,9 +392,20 @@ def analyze_url(url_raw: str) -> Dict[str, object]:
     # -------------------------
     # Unicode Spoof Detection
     # -------------------------
-    unicode_hits = detect_unicode_spoof(host_lower, root)
+    unicode_signal = detect_unicode_spoof(host_lower, root)
+    unicode_hits = unicode_signal.get("reasons", [])
+    unicode_analysis = unicode_signal.get("details", {})
     if unicode_hits:
-        score += 10
+        similarity_bonus = 0
+        try:
+            top_similarity = max((c.get("similarity_pct", 0) for c in unicode_analysis.get("similarity_checks", [])), default=0)
+            if top_similarity >= 90:
+                similarity_bonus = 2
+            elif top_similarity >= 80:
+                similarity_bonus = 1
+        except Exception:
+            similarity_bonus = 0
+        score += 10 + similarity_bonus
         reasons.extend(unicode_hits)
 
     # -------------------------
@@ -327,6 +428,7 @@ def analyze_url(url_raw: str) -> Dict[str, object]:
                 "url": url_raw,
                 "host": host,
                 "root": root,
+                "unicode_analysis": unicode_analysis,
             },
         }
         return final
@@ -365,6 +467,7 @@ def analyze_url(url_raw: str) -> Dict[str, object]:
                 "url": url_raw,
                 "host": host,
                 "root": root,
+                "unicode_analysis": unicode_analysis,
             },
         }
 
@@ -494,6 +597,7 @@ def analyze_url(url_raw: str) -> Dict[str, object]:
                 "url": url_raw,
                 "host": host,
                 "root": root,
+                "unicode_analysis": unicode_analysis,
             },
         }
 
@@ -518,5 +622,6 @@ def analyze_url(url_raw: str) -> Dict[str, object]:
             "url": url_raw,
             "host": host,
             "root": root,
+            "unicode_analysis": unicode_analysis,
         },
     }

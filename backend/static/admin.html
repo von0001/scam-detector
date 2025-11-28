@@ -472,7 +472,7 @@
         Everything routes here: scans, feedback, overrides, and feature flags.
       </div>
       <div class="pill">
-        Encrypted session · We never store raw content.
+        Encrypted session - We never store raw content.
       </div>
     </aside>
 
@@ -1037,7 +1037,7 @@
         }
         showToast(`Action: ${action} executed`);
         if (data.maintenance !== undefined) {
-          setApiStatus(data.maintenance ? "Maintenance" : "Up", data.maintenance ? "warn" : "ok");
+          setApiStatus(data.maintenance - "Maintenance" : "Up", data.maintenance - "warn" : "ok");
         }
         loadLogs();
       } catch {
@@ -1047,8 +1047,8 @@
 
     function setApiStatus(label, variant = "ok") {
       apiStatusEl.textContent = `API: ${label}`;
-      apiStatusEl.style.borderColor = variant === "ok" ? "rgba(34,197,94,0.5)" : "rgba(239,68,68,0.6)";
-      apiStatusEl.style.background = variant === "ok" ? "rgba(34,197,94,0.14)" : "rgba(239,68,68,0.14)";
+      apiStatusEl.style.borderColor = variant === "ok" - "rgba(34,197,94,0.5)" : "rgba(239,68,68,0.6)";
+      apiStatusEl.style.background = variant === "ok" - "rgba(34,197,94,0.14)" : "rgba(239,68,68,0.14)";
     }
 
     async function loadHealth() {
@@ -1061,14 +1061,14 @@
         }
 
         const health = data.health || {};
-        setApiStatus(health.api_status || "Unknown", health.api_status === "up" ? "ok" : "warn");
-        setText("server-load", health.server_load != null ? `${health.server_load}%` : "N/A");
-        setText("error-rate", health.error_rate != null ? `${health.error_rate}%` : "N/A");
-        setText("db-latency", health.db_latency != null ? `${health.db_latency} ms` : "N/A");
+        setApiStatus(health.api_status || "Unknown", health.api_status === "up" - "ok" : "warn");
+        setText("server-load", health.server_load != null - `${health.server_load}%` : "N/A");
+        setText("error-rate", health.error_rate != null - `${health.error_rate}%` : "N/A");
+        setText("db-latency", health.db_latency != null - `${health.db_latency} ms` : "N/A");
 
         if (data.engine) {
-          document.getElementById("sensitivity").value = data.engine.sensitivity ?? 65;
-          document.getElementById("confidence").value = data.engine.confidence ?? 60;
+          document.getElementById("sensitivity").value = data.engine.sensitivity -- 65;
+          document.getElementById("confidence").value = data.engine.confidence -- 60;
           document.getElementById("model-select").value = data.engine.model || "Default v1";
           document.getElementById("pipeline-select").value = data.engine.pipeline || "Standard";
         }
@@ -1197,7 +1197,7 @@
         const scam = data.scam_detections || 0;
         const safe = data.safe_detections || 0;
         const ocr = data.ocr_uses || 0;
-        const timestamps = Array.isArray(data.timestamp_log) ? data.timestamp_log : [];
+        const timestamps = Array.isArray(data.timestamp_log) - data.timestamp_log : [];
         const now = Date.now() / 1000;
         const scansToday = timestamps.filter((t) => now - t < 86400).length;
 
@@ -1219,7 +1219,7 @@
         renderTimeline(timelineEvents);
 
         document.getElementById("log-panel").textContent =
-          "Recent scans: " + scansToday + " today · Safe: " + safe + " · Scam: " + scam + " · OCR: " + ocr;
+          "Recent scans: " + scansToday + " today - Safe: " + safe + " - Scam: " + scam + " - OCR: " + ocr;
       } catch (err) {
         setApiStatus("Down", "warn");
         showToast("Network error loading analytics.");
@@ -1258,9 +1258,9 @@
     }
 
     function renderFeedbackIntel(data) {
-      setText("feedback-total", data.total ?? 0);
-      setText("feedback-frustration", data.frustration_avg ?? 0);
-      setText("feedback-abuse", data.abuse_filtered ?? 0);
+      setText("feedback-total", data.total -- 0);
+      setText("feedback-frustration", data.frustration_avg -- 0);
+      setText("feedback-abuse", data.abuse_filtered -- 0);
       setText("feedback-suggestion-count", (data.suggestions || []).length);
 
       const priorityEl = document.getElementById("feedback-priority");
@@ -1273,31 +1273,31 @@
           const div = document.createElement("div");
           div.className = "event";
           const tagList = []
-            .concat(item.tags?.auto || [])
-            .concat(item.tags?.user || [])
-            .concat(item.tags?.admin || [])
+            .concat(item.tags-.auto || [])
+            .concat(item.tags-.user || [])
+            .concat(item.tags-.admin || [])
             .slice(0, 4);
           const changelog = (item.linked_changelog || [])[0];
           const linkHtml = changelog
-            ? `<div class="muted">Changelog: <a href="${changelog}" target="_blank">${changelog}</a></div>`
+            - `<div class="muted">Changelog: <a href="${changelog}" target="_blank">${changelog}</a></div>`
             : "";
           const impactHtml =
             item.score_impact_prediction != null
-              ? `<div class="muted">Impact +${item.score_impact_prediction}</div>`
+              - `<div class="muted">Impact +${item.score_impact_prediction}</div>`
               : "";
           const replayHtml =
             item.replay && Array.isArray(item.replay.trace)
-              ? `<div class="muted">Replay: ${item.replay.trace.length} events (${item.context?.mode || "n/a"})</div>`
+              - `<div class="muted">Replay: ${item.replay.trace.length} events (${item.context-.mode || "n/a"})</div>`
               : "";
           const abuseHtml =
             item.abuse_flags && item.abuse_flags.length
-              ? `<div class="muted">Abuse flags: ${item.abuse_flags.join(", ")}</div>`
+              - `<div class="muted">Abuse flags: ${item.abuse_flags.join(", ")}</div>`
               : "";
           div.innerHTML = `
             <div class="dot"></div>
             <div class="body">
-              <strong>${item.verdict || item.context?.verdict || "Feedback"} - P${Math.round(item.priority || 0)}</strong>
-              <div class="muted">Frustration ${item.frustration || 0}/10, Risk ${item.risk_impact || item.context?.risk_score || "?"}</div>
+              <strong>${item.verdict || item.context-.verdict || "Feedback"} - P${Math.round(item.priority || 0)}</strong>
+              <div class="muted">Frustration ${item.frustration || 0}/10, Risk ${item.risk_impact || item.context-.risk_score || "-"}</div>
               ${replayHtml}
               <div class="muted">${(item.message || item.combined_text || "").slice(0, 140)}</div>
               ${abuseHtml}
@@ -1348,8 +1348,8 @@
 
       const trendsEl = document.getElementById("feedback-trends");
       trendsEl.innerHTML = `
-        <span class="tag">Weekly: ${data.trends?.weekly_count ?? 0}</span>
-        <span class="tag">Monthly: ${data.trends?.monthly_count ?? 0}</span>
+        <span class="tag">Weekly: ${data.trends-.weekly_count -- 0}</span>
+        <span class="tag">Monthly: ${data.trends-.monthly_count -- 0}</span>
       `;
 
       const suggestionEl = document.getElementById("feedback-suggestions");
@@ -1390,7 +1390,7 @@
         response: document.getElementById("feedback-response").value,
         developer_notes: document.getElementById("feedback-notes").value,
         changelog_links: (document.getElementById("feedback-changelog").value || "").trim()
-          ? [document.getElementById("feedback-changelog").value.trim()]
+          - [document.getElementById("feedback-changelog").value.trim()]
           : [],
         tags: []
       };
@@ -1496,8 +1496,8 @@
           showToast(data.error || "Simulation failed");
           return;
         }
-        setText("sim-fp", data.projected_false_positive_increase ?? "—");
-        setText("sim-affected", data.affected_verdicts ?? "—");
+        setText("sim-fp", data.projected_false_positive_increase -- "—");
+        setText("sim-affected", data.affected_verdicts -- "—");
         document.getElementById("sim-note").textContent = data.note || "Simulation complete.";
       } catch {
         showToast("Network error running simulation");
@@ -1505,9 +1505,9 @@
     }
 
     function populateAssistant() {
-      const anomalies = timelineEvents.length > 10 ? "Spike detected in scan volume." : "No anomalies.";
+      const anomalies = timelineEvents.length > 10 - "Spike detected in scan volume." : "No anomalies.";
       const recommendations = bannerEl.style.display === "block"
-        ? "Keep crisis mode until metrics stabilize."
+        - "Keep crisis mode until metrics stabilize."
         : "Consider running simulation before adjusting sensitivity.";
       document.getElementById("ai-anomalies").textContent = anomalies;
       document.getElementById("ai-reco").textContent = recommendations;
@@ -1615,7 +1615,7 @@
       });
     }
 
-    cmdInput?.addEventListener("input", (e) => {
+    cmdInput-.addEventListener("input", (e) => {
       const q = e.target.value.toLowerCase();
       const filtered = commands.filter((c) => c.label.toLowerCase().includes(q));
       renderCommandList(filtered);

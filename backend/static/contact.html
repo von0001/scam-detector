@@ -2,196 +2,91 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Contact — ScamDetector</title>
+  <title>Contact - ScamDetector</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="/static/style.css" />
   <link rel="icon" type="image/svg+xml" href="/static/img/favicon.svg" />
-
-  <style>
-    body {
-      margin: 0;
-      padding: 40px 20px;
-      background: radial-gradient(circle at top left, #0b1020, #02040a);
-      font-family: system-ui, -apple-system, Segoe UI, Roboto;
-      display: flex;
-      justify-content: center;
-      color: #e5e7eb;
-    }
-
-    .app {
-      max-width: 820px;
-      width: 100%;
-      background: radial-gradient(circle at top left, #020617, #020617 45%, #020617 100%);
-      border-radius: 20px;
-      padding: 34px 34px 30px;
-      box-shadow:
-        0 26px 70px rgba(0,0,0,0.9),
-        0 0 0 1px rgba(30,64,175,0.6);
-      border: 1px solid #1f2937;
-      position: relative;
-      overflow: hidden;
-    }
-
-    .app::before {
-      content: "";
-      position: absolute;
-      inset: -40%;
-      background:
-        radial-gradient(circle at 0% -20%, rgba(56,189,248,0.16), transparent 55%),
-        radial-gradient(circle at 120% 0%, rgba(37,99,235,0.2), transparent 60%);
-      opacity: 0.8;
-      pointer-events: none;
-    }
-
-    .app > * {
-      position: relative;
-      z-index: 1;
-    }
-
-    .app-header {
-      margin-bottom: 26px;
-    }
-
-    .hero-pill {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 4px 12px;
-      border-radius: 999px;
-      font-size: 0.72rem;
-      text-transform: uppercase;
-      letter-spacing: 0.16em;
-      background: rgba(15,23,42,0.9);
-      border: 1px solid rgba(37,99,235,0.7);
-      color: #93c5fd;
-      margin-bottom: 10px;
-    }
-
-    .app-header h1 {
-      margin: 0;
-      font-size: 30px;
-      color: #f8fafc;
-    }
-
-    .subtitle {
-      margin-top: 6px;
-      color: #94a3b8;
-      font-size: 15px;
-      max-width: 560px;
-    }
-
-    h2 {
-      margin-top: 30px;
-      font-size: 20px;
-      color: #cbd5f5;
-      border-left: 4px solid #2563eb;
-      padding-left: 10px;
-    }
-
-    p {
-      margin-top: 10px;
-      font-size: 15px;
-      line-height: 1.7;
-      color: #d1d5db;
-    }
-
-    .email-card {
-      margin-top: 15px;
-      background: radial-gradient(circle at top left, #020617, #020617 60%, #020617 100%);
-      border: 1px solid #1e293b;
-      padding: 18px;
-      border-radius: 14px;
-      text-align: center;
-      font-size: 17px;
-      font-weight: 600;
-      color: #38bdf8;
-      letter-spacing: 0.03em;
-      box-shadow:
-        0 16px 40px rgba(15,23,42,0.95),
-        0 0 0 1px rgba(30,64,175,0.6);
-    }
-
-    .response-note {
-      margin-top: 10px;
-      font-size: 13px;
-      color: #94a3b8;
-    }
-
-    .footer {
-      margin-top: 32px;
-      text-align: center;
-      border-top: 1px solid #1e293b;
-      padding-top: 16px;
-      font-size: 13px;
-      color: #64748b;
-    }
-
-    .footer a {
-      color: #94a3b8;
-      margin: 0 10px;
-      font-size: 13px;
-      text-decoration: none;
-    }
-
-    .footer a:hover {
-      text-decoration: underline;
-    }
-
-    .badge {
-      margin-top: 18px;
-      font-size: 12px;
-      color: #475569;
-    }
-  </style>
 </head>
-
 <body>
   <div class="app">
-    <div class="app-header">
-      <div class="hero-pill">
-        <span>🛡</span>
-        <span>Official Contact Channel</span>
+    <header class="top-nav">
+      <div class="brand">
+        <div class="brand-mark"><span class="brand-mark-inner"></span></div>
+        <div class="brand-text">
+          <span class="brand-name">ScamDetector</span>
+          <span class="brand-tagline">Threat Analysis Platform</span>
+        </div>
       </div>
-      <h1>Contact Us</h1>
-      <p class="subtitle">
-        Security questions, bug reports, false positives, or anything that could improve ScamDetector —
-        this is the inbox that actually gets read.
+
+      <nav class="nav-links">
+        <a href="/">Home</a>
+        <a href="/pricing">Pricing</a>
+        <a href="/support">Support</a>
+        <a href="/privacy">Privacy</a>
+        <a href="/feedback">Feedback</a>
+        <button id="account-button" class="nav-pill nav-account">Sign In</button>
+
+        <div id="account-menu" class="account-menu" hidden>
+          <div class="account-menu-email" id="account-menu-email"></div>
+          <button type="button" id="account-manage-btn" class="account-menu-item">
+            Manage account
+          </button>
+          <button type="button" id="account-logout-btn" class="account-menu-item account-menu-item-danger">
+            Sign out
+          </button>
+        </div>
+      </nav>
+    </header>
+
+    <main class="section">
+      <div class="section-header">
+        <p class="eyebrow">Contact</p>
+        <h1 class="heading-2">Get in touch</h1>
+        <p class="body-md text-muted">
+          For account help, questions about scans, or partnership requests, reach us using the details below.
+        </p>
+      </div>
+
+      <div class="info-grid">
+        <article class="info-card">
+          <h3 class="heading-3">Support</h3>
+          <p class="body-sm">Email: support@scamdetectorapp.com</p>
+          <p class="body-sm text-muted">We aim to respond quickly with precise guidance.</p>
+        </article>
+        <article class="info-card">
+          <h3 class="heading-3">Security</h3>
+          <p class="body-sm">Email: security@scamdetectorapp.com</p>
+          <p class="body-sm text-muted">Report suspicious findings or potential vulnerabilities.</p>
+        </article>
+      </div>
+
+      <section class="section">
+        <h2 class="heading-3">Include when you reach out</h2>
+        <ul class="signal-list">
+          <li>- A short description of the issue</li>
+          <li>- Screenshots or copied messages (with personal info removed)</li>
+          <li>- What you expected vs. what actually happened</li>
+        </ul>
+      </section>
+    </main>
+
+    <footer class="app-footer">
+      <div class="footer-top">
+        <div>
+          <p class="footer-title">ScamDetector</p>
+          <p class="footer-text">Digital threat analysis built for clarity, not hype.</p>
+        </div>
+        <div class="footer-links">
+          <a href="/terms">Terms</a>
+          <a href="/privacy">Privacy</a>
+          <a href="/support">Support</a>
+          <a href="/feedback">Feedback</a>
+        </div>
+      </div>
+      <p class="footer-note">
+        Review outcomes carefully before acting. Not financial or legal advice.
       </p>
-    </div>
-
-    <h2>📧 Email Support</h2>
-    <p>
-      If you need assistance, found a bug, or want to report suspicious behavior, reach us here:
-    </p>
-
-    <div class="email-card">
-      scamdetectorapp@gmail.com
-    </div>
-
-    <p class="response-note">
-      Typical response time: 24–48 hours. High-severity security issues are prioritized.
-    </p>
-
-    <h2>🛡 What to Send</h2>
-    <p>
-      When possible, include:
-    </p>
-    <p>
-      • A short description of the issue<br>
-      • Screenshots or copied messages (with personal info blurred if needed)<br>
-      • What you expected vs. what actually happened
-    </p>
-    <p>
-      The more detail you give, the easier it is to strengthen the shield for everyone else.
-    </p>
-
-    <div class="footer">
-      <a href="/">Home</a> •
-      <a href="/terms">Terms</a> •
-      <a href="/privacy">Privacy</a> •
-      <a href="/support">Support</a>
-
-      <div class="badge">ScamDetector™ — Official Contact Portal</div>
-    </div>
+    </footer>
   </div>
 </body>
 </html>

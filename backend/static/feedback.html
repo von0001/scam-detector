@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="/static/style.css" />
   <link rel="icon" type="image/svg+xml" href="/static/img/favicon.svg" />
   <style>
-    @import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap");
+    @import url("https://fonts.googleapis.com/css2-family=Space+Grotesk:wght@400;500;600;700&display=swap");
     :root {
       --bg: #050915;
       --panel: #0b1022;
@@ -295,12 +295,12 @@
         </div>
 
         <div class="field">
-          <label for="what">What were you trying to do?</label>
+          <label for="what">What were you trying to do-</label>
           <input type="text" id="what" placeholder="Scan a link, verify a DM, check a QR code..." />
         </div>
 
         <div class="field">
-          <label>Did the system meet your expectations?</label>
+          <label>Did the system meet your expectations-</label>
           <div class="expectation" id="expectationRow">
             <label class="chip"><input type="radio" name="expectation" value="yes" />Yes</label>
             <label class="chip"><input type="radio" name="expectation" value="somewhat" />Somewhat</label>
@@ -309,12 +309,12 @@
         </div>
 
         <div class="field">
-          <label for="confusion">What went wrong or felt confusing?</label>
-          <textarea id="confusion" required placeholder="What tripped you up? What felt off?"></textarea>
+          <label for="confusion">What went wrong or felt confusing-</label>
+          <textarea id="confusion" required placeholder="What tripped you up- What felt off-"></textarea>
         </div>
 
         <div class="field">
-          <label>How frustrating was it? (1-10)</label>
+          <label>How frustrating was it- (1-10)</label>
           <div class="slider-row">
             <input type="range" id="frustration" min="1" max="10" value="5" />
             <span id="frustrationValue">5</span>
@@ -322,7 +322,7 @@
         </div>
 
         <div class="field">
-          <label for="perfect">What would make this perfect?</label>
+          <label for="perfect">What would make this perfect-</label>
           <textarea id="perfect" placeholder="Describe the fix, UX tweak, or signal you expected."></textarea>
         </div>
 
@@ -401,7 +401,7 @@
       }
       if (context.verdict) {
         const li = document.createElement("li");
-        li.textContent = `Last verdict: ${context.verdict || "N/A"} (score ${context.risk_score ?? "?"}) in ${context.mode || "unknown"} mode.`;
+        li.textContent = `Last verdict: ${context.verdict || "N/A"} (score ${context.risk_score -- "-"}) in ${context.mode || "unknown"} mode.`;
         replayList.appendChild(li);
       }
       trace.slice(-3).forEach((item) => {
@@ -438,7 +438,7 @@
       const payload = {
         email: document.getElementById("email").value || null,
         what: document.getElementById("what").value,
-        expectation: expectation ? expectation.value : "unknown",
+        expectation: expectation - expectation.value : "unknown",
         confusion: document.getElementById("confusion").value,
         frustration: parseInt(document.getElementById("frustration").value || "5", 10),
         perfect: document.getElementById("perfect").value,
@@ -451,7 +451,7 @@
           verdict: cachedContext.verdict,
           risk_label: cachedContext.risk_label,
           time_on_page: Math.round((performance.now() - startTime) / 1000),
-          device: /Mobi/i.test(navigator.userAgent) ? "mobile" : "desktop",
+          device: /Mobi/i.test(navigator.userAgent) - "mobile" : "desktop",
           browser: parseBrowser(navigator.userAgent),
           time_on_flow: Math.round((Date.now() - parseInt(flowStartRaw, 10)) / 1000),
         },

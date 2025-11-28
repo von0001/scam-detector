@@ -6,8 +6,12 @@ const CHROME_EXTENSION_URL =
 
 // Core scan elements (home page)
 const contentInput = document.getElementById("content-input");
+const notesInput = document.getElementById("notes-input");
 const analyzeBtn = document.getElementById("analyze-btn");
 const statusEl = document.getElementById("status");
+const modeSelect = document.getElementById("mode-select");
+const advancedToggle = document.getElementById("advanced-toggle");
+const advancedPanel = document.getElementById("advanced-panel");
 
 const resultSection = document.getElementById("result-section");
 const verdictBadge = document.getElementById("verdict-badge");
@@ -171,15 +175,15 @@ let currentUser = null;
 let accountDashboardLoaded = false;
 let pendingSubscriptionCycle = null;
 const FEATURE_GATES = {
-  auto: { tier: "premium", label: "Auto Mode" },
-  ai_detector: { tier: "premium", label: "Deep AI Detector" },
-  psychology: { tier: "premium", label: "Psychological manipulation detection" },
-  qr_scan: { tier: "premium", label: "QR and screenshot scan" },
-  screenshot_scan: { tier: "premium", label: "Screenshot / image scan" },
-  deep_ai_analysis: { tier: "premium", label: "Deep AI Analysis" },
-  deep_ai: { tier: "premium", label: "Deep AI Analysis" },
+  auto: { tier: "premium", label: "Auto-detect" },
+  ai_detector: { tier: "premium", label: "Actor profiling" },
+  psychology: { tier: "premium", label: "Manipulation analysis" },
+  qr_scan: { tier: "premium", label: "QR and screenshot scanning" },
+  screenshot_scan: { tier: "premium", label: "Screenshot / image scanning" },
+  deep_ai_analysis: { tier: "premium", label: "Detailed analysis" },
+  deep_ai: { tier: "premium", label: "Detailed analysis" },
   full_history: { tier: "premium", label: "Full history export" },
-  real_time: { tier: "premium", label: "Real-time Scan Mode" },
+  real_time: { tier: "premium", label: "Real-time scanning" },
 };
 
 let upgradeModal = null;
@@ -190,6 +194,7 @@ let viewPlansBtn = null;
 
 // MODE
 function getSelectedMode() {
+  if (modeSelect) return modeSelect.value;
   const radios = document.querySelectorAll('input[name="mode"]');
   for (const r of radios) if (r.checked) return r.value;
   return "auto";
@@ -277,10 +282,10 @@ function ensureUpgradeModal() {
     <div class="upgrade-modal-backdrop"></div>
     <div class="upgrade-card">
       <button class="upgrade-close" aria-label="Close upgrade modal">x</button>
-      <div class="upgrade-eyebrow">Premium feature locked</div>
-      <h3>You're attempting to use a Premium Feature.</h3>
-      <p data-upgrade-message>This tool is part of ScamDetector Full Dominance Mode. Upgrade now to unlock deep protection and unlimited scans.</p>
-      <p class="upgrade-feature">Feature: <span data-upgrade-feature>Full Dominance Mode</span></p>
+      <div class="upgrade-eyebrow">Premium access required</div>
+      <h3>This capability is part of the Premium tier.</h3>
+      <p data-upgrade-message>This tool requires Premium analysis access. Upgrade to enable detailed reviews and unlimited scans.</p>
+      <p class="upgrade-feature">Feature: <span data-upgrade-feature>Premium analysis</span></p>
       <div class="upgrade-actions">
         <button id="upgrade-now-btn" class="primary-btn">Upgrade Now</button>
         <button id="view-plans-btn" class="ghost-btn">View Plans</button>
@@ -322,7 +327,7 @@ function openUpgradeModal(featureKey = "premium", message) {
   if (upgradeModalMessage) {
     upgradeModalMessage.textContent =
       message ||
-      "This tool is part of ScamDetector Full Dominance Mode. Upgrade to unlock deep protection.";
+      "This tool requires Premium analysis access. Upgrade to unlock detailed reviews and higher limits.";
   }
   upgradeModal.hidden = false;
 }
@@ -374,7 +379,7 @@ function applyFeatureLocks() {
 }
 
 function handleUpgradeResponse(result, featureKey) {
-  const message = (result && result.error) || "Premium feature locked.";
+  const message = (result && result.error) || "This feature requires Premium access.";
   if (statusEl) statusEl.textContent = message;
   openUpgradeModal(featureKey || (result && result.feature) || "premium", message);
 }
@@ -399,12 +404,12 @@ function setAuthMode(mode) {
     authTabLogin.classList.add("auth-tab-active");
     authTabSignup.classList.remove("auth-tab-active");
     authHint.innerHTML =
-      'No account yet... Switch to <strong>Create Account</strong> to start with the free tier.';
+      'No account yet? Switch to <strong>Create Account</strong> to start on the free tier.';
   } else {
     authTabSignup.classList.add("auth-tab-active");
     authTabLogin.classList.remove("auth-tab-active");
     authHint.textContent =
-      "We'll start you on the free plan. Upgrade to Premium anytime for unlimited scans.";
+      "Free plan enabled at signup. Upgrade to Premium anytime for higher limits and detailed analysis.";
   }
 }
 
@@ -570,8 +575,7 @@ function updatePlanPill() {
   }
 
   if (!currentUser) {
-    planPill.innerHTML =
-      'Protection Console ready. <span class="plan-pill-cta" id="plan-pill-upgrade">Sign in</span> to sync scans and personalize protection.';
+    planPill.textContent = "Plan: Guest - Sign in to sync scans and manage limits.";
     if (accountBtn) accountBtn.textContent = "Sign In";
     if (accountMenuEmail) accountMenuEmail.textContent = "";
     if (tierBannerText) tierBannerText.textContent = "Sign in to see your tier and usage.";
@@ -589,9 +593,8 @@ function updatePlanPill() {
   const limit = user.daily_limit ?? 0;
 
   if (plan === "premium") {
-    planPill.innerHTML =
-      "<span>Active: Full Dominance Mode</span> - Premium active ✅ Priority queue enabled.";
-    if (tierBannerText) tierBannerText.textContent = "Active: Full Dominance Mode";
+    planPill.textContent = "Plan: Premium - Priority queue enabled.";
+    if (tierBannerText) tierBannerText.textContent = "Plan: Premium";
     if (tierBadge) tierBadge.hidden = false;
     if (tierUpgradeBtn) tierUpgradeBtn.hidden = true;
     if (analyzeBtn) analyzeBtn.disabled = false;
@@ -600,22 +603,14 @@ function updatePlanPill() {
     const remaining = Math.max((limit || 0) - used, 0);
     const remainingLabel = limit > 0 ? remaining : "unlimited";
     const totalLabel = limit > 0 ? limit : "unlimited";
-    planPill.innerHTML = `<span>Core Protection active</span> — ${remainingLabel} of ${totalLabel} scans ready today.<span class="plan-pill-cta" id="plan-pill-upgrade">Boost with Premium</span>`;
-    if (tierBannerText)
-      tierBannerText.textContent = "Core Protection active — deep AI and real-time unlock with Premium anytime.";
+    planPill.textContent = `Plan: Free - ${remainingLabel} of ${totalLabel} scans available today.`;
+    if (tierBannerText) tierBannerText.textContent = "Plan: Free";
     if (tierBadge) tierBadge.hidden = true;
     if (tierUpgradeBtn) tierUpgradeBtn.hidden = false;
   }
 
   if (accountBtn) accountBtn.textContent = user.email;
   if (accountMenuEmail) accountMenuEmail.textContent = user.email;
-  const pillUpgradeBtn = document.getElementById("plan-pill-upgrade");
-  if (pillUpgradeBtn) {
-    pillUpgradeBtn.addEventListener("click", () => {
-      if (!currentUser) openAuthModal();
-      openUpgradeModal("deep_ai");
-    });
-  }
 
   updateAccountOverview();
   applyFeatureLocks();
@@ -626,12 +621,11 @@ function updatePlanPill() {
       subscribeStatus.textContent = `You're on Premium (${cycle}).`;
       subscribeStatus.classList.remove("account-status-danger");
     } else {
-      subscribeStatus.textContent = "Upgrade to unlock unlimited scans and deep analysis.";
+      subscribeStatus.textContent = "Upgrade to unlock unlimited scans and detailed analysis.";
       subscribeStatus.classList.remove("account-status-danger");
     }
   }
 }
-
 function renderAccountDashboard(snapshot) {
   if (!snapshot || !currentUser) return;
 
@@ -922,7 +916,7 @@ function handleGoogleCredential(response) {
       }
 
       currentUser = data;
-      authStatus.textContent = "You're in. Syncing your protection...";
+      authStatus.textContent = "Signed in. Syncing your account...";
       authStatus.classList.add("auth-status--success");
       updatePlanPill();
       if (pendingSubscriptionCycle) {
@@ -1053,7 +1047,7 @@ if (authForm && authEmail && authPassword && authStatus) {
       }
 
       currentUser = data;
-      authStatus.textContent = "You're in. Syncing your protection...";
+      authStatus.textContent = "Signed in. Syncing your account...";
       authStatus.classList.add("auth-status--success");
       updatePlanPill();
       if (pendingSubscriptionCycle) {
@@ -1079,6 +1073,7 @@ async function analyzeContent() {
 
   const content = contentInput.value.trim();
   const mode = getSelectedMode();
+  const contextNote = notesInput ? notesInput.value.trim() : "";
   let lockedByLimit = false;
   const modeFeatureMap = {
     auto: "auto",
@@ -1087,7 +1082,7 @@ async function analyzeContent() {
     qr: "qr_scan",
   };
   const modeFeatureKey = modeFeatureMap[mode];
-  if (modeFeatureKey && !requireFeatureAccess(modeFeatureKey, "This is a Premium feature.")) {
+  if (modeFeatureKey && !requireFeatureAccess(modeFeatureKey, "This mode requires Premium access.")) {
     return;
   }
 
@@ -1099,19 +1094,26 @@ async function analyzeContent() {
   const plan = currentPlan();
   statusEl.textContent =
     plan === "premium"
-      ? "Analyzing... Priority Mode"
+      ? "Analyzing with priority processing"
       : plan === "guest"
-        ? "Processing... (Guest - URL & Text only)"
-        : "Processing... (Standard Mode)";
+        ? "Processing (guest access - URL/Text only)"
+        : "Processing (standard queue)";
   analyzeBtn.disabled = true;
-  recordFeedbackEvent({ event: "analyze_start", mode, snippet: content.slice(0, 160) });
+  recordFeedbackEvent({
+    event: "analyze_start",
+    mode,
+    snippet: content.slice(0, 160),
+    context: contextNote.slice(0, 120),
+  });
 
   try {
+    const payload = { content, mode };
+    if (contextNote) payload.context = contextNote;
     const response = await fetch(`${API_BASE_URL}/analyze`, {
       method: "POST",
       headers: csrfHeaders({ "Content-Type": "application/json" }),
       credentials: "include",
-      body: JSON.stringify({ content, mode }),
+      body: JSON.stringify(payload),
     });
 
     let result = {};
@@ -1155,16 +1157,16 @@ async function analyzeContent() {
 }
 
 async function runDeepAnalysis() {
-  if (!requireFeatureAccess("deep_ai", "Deep AI Analysis is a Premium feature.")) return;
+  if (!requireFeatureAccess("deep_ai", "Detailed analysis is available on Premium.")) return;
   if (!contentInput || !statusEl) return;
 
   const content = contentInput.value.trim();
   if (!content) {
-    statusEl.textContent = "Paste a message or link to analyze deeply.";
+    statusEl.textContent = "Paste a message or link to run a detailed review.";
     return;
   }
 
-  statusEl.textContent = "Analyzing... Priority Mode (Deep AI)";
+  statusEl.textContent = "Running detailed analysis...";
   analyzeBtn.disabled = true;
   if (deepAnalyzeBtn) deepAnalyzeBtn.disabled = true;
 
@@ -1195,7 +1197,7 @@ async function runDeepAnalysis() {
     }
 
     renderAnalyzeResult(result, content, "deep_ai");
-    statusEl.textContent = "Deep AI verdict delivered.";
+    statusEl.textContent = "Detailed verdict delivered.";
   } catch (err) {
     statusEl.textContent = "Network error. Try again in a moment.";
   } finally {
@@ -1462,7 +1464,7 @@ function renderAnalyzeResult(result, content, mode) {
       const pct = Math.min(100, Math.max(0, Math.round(cleanResult.confidence_score)));
       confidenceWrap.hidden = false;
       confidenceFill.style.width = `${pct}%`;
-      confidenceLabel.textContent = `${pct}% confidence · AI Confidence Level`;
+    confidenceLabel.textContent = `${pct}% confidence - confidence level`;
     }
   } else if (confidenceWrap) {
     confidenceWrap.hidden = true;
@@ -2322,7 +2324,7 @@ async function runOCR(imageFile, { source = "upload" } = {}) {
 // Upload select
 if (ocrBtn && fileInput) {
   ocrBtn.addEventListener("click", () => {
-    if (!requireFeatureAccess("screenshot_scan", "Premium Feature Locked — Screenshot Scan requires Full Dominance Mode")) {
+    if (!requireFeatureAccess("screenshot_scan", "Premium feature - screenshot scanning requires a Premium plan.")) {
       return;
     }
     fileInput.click();
@@ -2331,7 +2333,7 @@ if (ocrBtn && fileInput) {
   fileInput.addEventListener("change", () => {
     const file = fileInput.files[0];
     if (!file) return;
-    if (!requireFeatureAccess("screenshot_scan", "Premium Feature Locked — Screenshot Scan requires Full Dominance Mode")) {
+    if (!requireFeatureAccess("screenshot_scan", "Premium feature - screenshot scanning requires a Premium plan.")) {
       fileInput.value = "";
       return;
     }
@@ -2353,7 +2355,7 @@ if (dropZone) {
   dropZone.addEventListener("drop", (e) => {
     e.preventDefault();
     dropZone.classList.remove("dragover");
-    if (!requireFeatureAccess("screenshot_scan", "Premium Feature Locked — Screenshot Scan requires Full Dominance Mode")) {
+    if (!requireFeatureAccess("screenshot_scan", "Premium feature - screenshot scanning requires a Premium plan.")) {
       return;
     }
     const dt = e.dataTransfer;
@@ -2385,6 +2387,31 @@ modeInputs.forEach((input) => {
   });
 });
 
+if (advancedToggle && advancedPanel) {
+  advancedToggle.addEventListener("click", () => {
+    const shouldShow = advancedPanel.hidden;
+    advancedPanel.hidden = !shouldShow;
+    advancedToggle.textContent = shouldShow ? "Hide advanced options" : "Advanced options";
+  });
+}
+
+if (modeSelect) {
+  modeSelect.addEventListener("change", (e) => {
+    const selected = modeSelect.value;
+    const selectFeatureMap = {
+      manipulation: "psychology",
+      qr: "qr_scan",
+      chat: "ai_detector",
+      auto: "auto",
+    };
+    const feature = FEATURE_GATES[selectFeatureMap[selected] || selected];
+    if (feature && feature.tier === "premium" && currentPlan() !== "premium") {
+      const ok = requireFeatureAccess(selected, `${feature.label} is available on Premium.`);
+      if (!ok) modeSelect.value = "auto";
+    }
+  });
+}
+
 const premiumModeLabels = document.querySelectorAll(".mode-pill[data-tier='premium']");
 premiumModeLabels.forEach((label) => {
   label.addEventListener("click", (e) => {
@@ -2414,7 +2441,7 @@ if (realtimeBtn) {
   realtimeBtn.addEventListener("click", (e) => {
     e.preventDefault();
     statusEl.textContent =
-      "Real-time Scan Mode runs via our Chrome Extension. Opening the install page...";
+      "Real-time checks run through the Chrome extension. Opening the install page.";
     window.open(CHROME_EXTENSION_URL, "_blank", "noopener,noreferrer");
   });
 }

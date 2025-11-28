@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>ScamDetector — Advanced Scam & Manipulation Scanner</title>
+  <title>ScamDetector - Digital Threat Analysis Platform</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="stylesheet" href="/static/style.css" />
   <link rel="icon" type="image/svg+xml" href="/static/img/favicon.svg" />
@@ -14,19 +14,21 @@
     <!-- TOP NAV / BRAND -->
     <header class="top-nav">
       <div class="brand">
-        <div class="brand-mark">🛡</div>
+        <div class="brand-mark" aria-hidden="true">
+          <span class="brand-mark-inner"></span>
+        </div>
         <div class="brand-text">
           <span class="brand-name">ScamDetector</span>
-          <span class="brand-tagline">Digital Safety Framework</span>
+          <span class="brand-tagline">Threat Analysis Platform</span>
         </div>
       </div>
 
       <nav class="nav-links" style="position: relative;">
         <a href="#how-it-works">How it Works</a>
+        <a href="#use-cases">Use Cases</a>
+        <a href="#trust">Trust</a>
+        <a href="/pricing">Pricing</a>
         <a href="/support">Support</a>
-        <a href="/social">Socials</a>
-        <a href="/privacy">Privacy</a>
-        <a href="/feedback">Feedback</a>
         <button id="account-button" class="nav-pill nav-account">Sign In</button>
 
         <div id="account-menu" class="account-menu" hidden>
@@ -41,130 +43,175 @@
       </nav>
     </header>
 
-    <!-- HERO: LEFT = COPY, RIGHT = CONTROL PANEL -->
-    <main class="hero-layout">
-      <!-- LEFT: PROTECTIVE COPY -->
-      <section class="hero-copy">
-        <p class="hero-eyebrow">Digital Bodyguard • Real-Time Scam Defense</p>
-
-        <h1 class="hero-headline">
-          Before you click. Before you reply.<br />
-          <span class="hero-highlight">Check it first.</span>
+    <!-- HERO -->
+    <section class="hero">
+      <div class="hero-copy">
+        <p class="eyebrow">Institution-grade protection</p>
+        <h1 class="heading-1">
+          Real-time protection against scams, manipulation, and digital threats.
         </h1>
-
-        <p class="hero-subtext">
-          Scan suspicious messages, links, screenshots, and conversations
-          <span class="hero-subtext-strong">before they touch your money, identity, or peace of mind.</span>
+        <p class="hero-lede">
+          Analyze suspicious messages, emails, links, screenshots, or QR codes before they impact your team or finances.
         </p>
+        <p class="hero-support">
+          Paste the content, choose the type, and receive a clear risk level with the reasoning behind it.
+        </p>
+
+        <div class="hero-actions">
+          <a class="primary-btn hero-primary" href="#scanner">Start a scan</a>
+          <a class="secondary-btn hero-secondary" href="#how-it-works">View how it works</a>
+        </div>
 
         <div class="hero-trust-row">
           <div class="trust-chip">
-             Instant risk verdicts
+            SOC-style reports with clear threat levels
           </div>
           <div class="trust-chip">
-             Manipulation & scam patterns
+            Detection of urgency, impersonation, and spoofed links
           </div>
           <div class="trust-chip">
-             Works on DMs, emails & QR
+            Data handling designed for audits and teams
           </div>
         </div>
+      </div>
 
-        <div class="hero-footnote">
-          One scan can be the difference between <span>“glad I checked”</span> and <span>“I should’ve known.”</span>
+      <div class="hero-panel">
+        <div class="hero-preview">
+          <div class="preview-header">
+            <div>
+              <p class="preview-eyebrow">Analysis preview</p>
+              <p class="preview-title">Phishing login link</p>
+            </div>
+            <span class="preview-badge preview-badge-high">Threat: High</span>
+          </div>
+          <p class="preview-body">
+            The link mimics a banking domain, routes through a tracking URL, and asks for credentials outside the known login flow.
+          </p>
+          <ul class="signal-list">
+            <li>Domain mismatch: accounts-secure.example-notbank.com</li>
+            <li>Urgency language: “immediate action required”</li>
+            <li>Request for credentials via redirected page</li>
+          </ul>
+          <div class="preview-actions">
+            <span class="signal-label">Recommended: Do not enter credentials. Validate sender via a trusted channel.</span>
+          </div>
         </div>
-      </section>
+        <div class="hero-meta">
+          <div class="meta-block">
+            <p class="meta-label">Primary flow</p>
+            <p class="meta-value">Paste → Scan → Read report</p>
+          </div>
+          <div class="meta-block">
+            <p class="meta-label">Coverage</p>
+            <p class="meta-value">Messages, email text, links, QR, screenshots</p>
+          </div>
+          <div class="meta-block">
+            <p class="meta-label">Reporting</p>
+            <p class="meta-value">Risk level, signals detected, recommended actions</p>
+          </div>
+        </div>
+      </div>
+    </section>
 
-      <!-- RIGHT: CONTROL CENTER PANEL -->
-      <section class="scan-panel">
+    <!-- SCANNER -->
+    <section id="scanner" class="section">
+      <div class="section-header">
+        <p class="eyebrow">Primary workflow</p>
+        <h2 class="heading-2">Centralized intake for threat analysis</h2>
+        <p class="body-md text-muted">
+          One focused interface for rapid review. Advanced controls stay available without crowding the main path.
+        </p>
+      </div>
 
-        <!-- INPUT SECTION -->
-        <section class="input-section">
+      <div class="scanner-grid">
+        <section class="scan-panel">
           <div class="panel-header">
-            <h2 class="panel-title">Protection Console</h2>
-            <p class="panel-subtitle">Paste anything that feels off. ScamDetector does the thinking.</p>
-          </div>
-
-          <div id="plan-pill" class="plan-pill">
-            Protection Console ready. <span>Sign in to sync scans</span> and elevate protection when you need it.
-          </div>
-
-          <label for="content-input" class="input-label">
-            Paste the message or link you’re unsure about:
-          </label>
-
-          <textarea
-            id="content-input"
-            placeholder="Example: a weird Cash App request, a ‘delivery issue’ email, or a DM that feels off..."
-            rows="6"></textarea>
-
-          <!-- MODE SELECT -->
-          <div class="mode-row">
-            <span class="mode-label">Scan mode</span>
-
-            <div class="mode-pill-group">
-              <label class="mode-pill">
-                <input type="radio" name="mode" value="auto" />
-                <span>Auto</span>
-              </label>
-
-              <label class="mode-pill" data-tier="free">
-                <input type="radio" name="mode" value="url" checked />
-                <span>URL</span>
-              </label>
-
-              <label class="mode-pill" data-tier="free">
-                <input type="radio" name="mode" value="text" />
-                <span>Text</span>
-              </label>
-
-              <label class="mode-pill">
-                <input type="radio" name="mode" value="chat" />
-                <span>AI Detector</span>
-              </label>
-
-              <label class="mode-pill">
-                <input type="radio" name="mode" value="manipulation" />
-                <span>Manipulation</span>
-              </label>
-
-              <label class="mode-pill">
-                <input type="radio" name="mode" value="qr" />
-                <span>QR Code</span>
-              </label>
+            <div>
+              <p class="panel-eyebrow">Threat intake</p>
+              <h3 class="heading-3">Analyze a message or link</h3>
+              <p class="panel-subtitle">
+                We inspect URLs, language, sender cues, and manipulation signals before you engage.
+              </p>
+            </div>
+            <div id="plan-pill" class="plan-pill">
+              Plan: Free - Queue: Standard
             </div>
           </div>
 
-          <!-- PRIMARY CTA -->
+          <label for="content-input" class="input-label">
+            Content to review
+          </label>
+          <textarea
+            id="content-input"
+            placeholder="Paste the message, email text, link, or description you want assessed."
+            rows="6"
+          ></textarea>
+
+          <div class="input-row">
+            <div class="input-col">
+              <label class="input-label" for="mode-select">Input type</label>
+              <select id="mode-select" class="select-input">
+                <option value="auto">Auto-detect</option>
+                <option value="text" selected>Message / Email</option>
+                <option value="url">Link / URL</option>
+                <option value="manipulation">Tone & pressure check</option>
+                <option value="qr">QR / screenshot</option>
+                <option value="chat">Actor profiling</option>
+              </select>
+            </div>
+            <div class="input-col">
+              <label class="input-label" for="notes-input">Context (optional)</label>
+              <input id="notes-input" class="text-input" type="text" placeholder="e.g., expected sender, channel, or recent activity" />
+            </div>
+          </div>
+
           <div class="dual-action-row">
             <button id="analyze-btn" class="primary-btn">
-              Check Safety
+              Start scan
             </button>
             <button
               id="deep-analyze-btn"
-              class="secondary-premium-btn"
+              class="secondary-btn"
             >
-              <span>Deep AI Analysis</span>
+              Run detailed review
             </button>
           </div>
 
-          <button
-            id="realtime-btn"
-            class="ghost-btn"
-            title="Real-time Scan Mode — available via Chrome Extension"
-            style="width:100%; margin-top:8px;"
-          >
-            Real-time Scan Mode (Chrome Extension)
-          </button>
-
-          <!-- OCR + DROP -->
-          <div class="ocr-container">
-            <button id="ocr-btn" class="ocr-button">
-              📷 Upload Screenshot or QR
+          <div class="advanced-shell">
+            <button id="advanced-toggle" class="tertiary-btn" type="button">
+              Advanced options
             </button>
-            <input type="file" id="ocr-file" accept="image/*" hidden />
-
-            <div id="drop-zone" class="drop-zone">
-              Drag &amp; drop an image here (screenshot, QR code, or scam photo)
+            <div id="advanced-panel" class="advanced-panel" hidden>
+              <div class="advanced-grid">
+                <div class="advanced-card">
+                  <p class="advanced-title">Upload evidence</p>
+                  <p class="advanced-text">Attach a screenshot or QR code for optical scanning.</p>
+                  <button id="ocr-btn" class="secondary-btn small-btn">
+                    Upload file
+                  </button>
+                  <input type="file" id="ocr-file" accept="image/*" hidden />
+                  <div id="drop-zone" class="drop-zone">
+                    Drag and drop an image here
+                  </div>
+                </div>
+                <div class="advanced-card">
+                  <p class="advanced-title">Real-time checks</p>
+                  <p class="advanced-text">Use the browser extension to scan pages and messages as you work.</p>
+                  <button
+                    id="realtime-btn"
+                    class="ghost-btn full-width"
+                    title="Real-time checks use the Chrome extension"
+                  >
+                    Enable browser scanning
+                  </button>
+                </div>
+                <div class="advanced-card">
+                  <p class="advanced-title">Deep manipulation review</p>
+                  <p class="advanced-text">
+                    Select “Tone & pressure check” to profile urgency, emotional pressure, and impersonation language.
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -174,14 +221,17 @@
         <!-- RESULTS PANEL -->
         <section class="result-section" id="result-section" hidden>
           <div class="result-header">
-            <h2>Scan Verdict</h2>
-            <div id="verdict-badge" class="verdict-badge">–</div>
+            <div>
+              <p class="panel-eyebrow">Scan result</p>
+              <h3 class="heading-3">Threat verdict</h3>
+            </div>
+            <div id="verdict-badge" class="verdict-badge">—</div>
           </div>
 
           <p id="explanation" class="result-explanation"></p>
 
           <div id="confidence-wrap" class="confidence-wrap" hidden>
-            <div class="confidence-header">AI Confidence Level</div>
+            <div class="confidence-header">Confidence level</div>
             <div class="confidence-meter">
               <div id="confidence-fill" class="confidence-fill"></div>
             </div>
@@ -189,88 +239,221 @@
           </div>
 
           <div class="reason-block">
-            <h3 class="reason-title">Why we flagged it</h3>
+            <h4 class="reason-title">Signals detected</h4>
             <ul id="reasons-list" class="reasons-list"></ul>
           </div>
 
           <pre id="details-json" class="details-json" hidden></pre>
 
           <p class="result-disclaimer">
-            ScamDetector gives you an instant risk read. Final judgment is always yours — when in doubt, don’t engage.
+            Review the findings before responding. When in doubt, do not engage and confirm the sender through a trusted channel.
           </p>
         </section>
-
-      </section>
-    </main>
+      </div>
+    </section>
 
     <!-- HOW IT WORKS -->
-    <section class="how-it-works" id="how-it-works">
-      <h2>How ScamDetector Keeps You Safe</h2>
-      <div class="works-grid">
+    <section class="section" id="how-it-works">
+      <div class="section-header">
+        <p class="eyebrow">How the system evaluates risk</p>
+        <h2 class="heading-2">Engineered like an incident response triage</h2>
+        <p class="body-md text-muted">
+          Each scan runs a consistent review: content structure, behavioral markers, and technical checks before issuing a verdict.
+        </p>
+      </div>
 
-        <div class="work-box">
-          <h3>1. Reads the situation</h3>
-          <p>
-            We break down the message like a fraud investigator: scanning wording, structure, and patterns used in real scams.
+      <div class="info-grid">
+        <article class="info-card">
+          <h3 class="heading-3">Message and link analysis</h3>
+          <p class="body-sm">
+            We examine syntax, sender claims, link destinations, and attachment cues to spot phishing, fraud, and spoofing attempts.
+          </p>
+        </article>
+        <article class="info-card">
+          <h3 class="heading-3">Behavior and urgency patterns</h3>
+          <p class="body-sm">
+            Language is screened for pressure, fear, or authority plays that push quick action without verification.
+          </p>
+        </article>
+        <article class="info-card">
+          <h3 class="heading-3">Impersonation detection</h3>
+          <p class="body-sm">
+            We cross-check brand mentions, domain lookalikes, and role claims to surface likely impersonation attempts.
+          </p>
+        </article>
+        <article class="info-card">
+          <h3 class="heading-3">Risk scoring and actions</h3>
+          <p class="body-sm">
+            Results include a clear threat level, key signals, and recommended actions so teams can respond consistently.
+          </p>
+        </article>
+      </div>
+
+      <div class="example-grid">
+        <article class="example-card">
+          <div class="example-meta">Example: fake delivery text</div>
+          <p class="example-input">“Your package is held. Confirm payment within 10 minutes: http://quick-drop-off.info”</p>
+          <ul class="signal-list">
+            <li>Urgency with short deadline</li>
+            <li>Unverified URL with tracking parameters</li>
+            <li>Payment request outside normal carrier flow</li>
+          </ul>
+          <p class="example-outcome">Verdict: High risk. Action: Ignore and report as phishing.</p>
+        </article>
+        <article class="example-card">
+          <div class="example-meta">Example: phishing login link</div>
+          <p class="example-input">“Security alert: login from a new device. Verify at secure-login.example-co.net”</p>
+          <ul class="signal-list">
+            <li>Lookalike domain with hyphenated brand</li>
+            <li>Requests credentials via redirected page</li>
+            <li>Claims security event without verification path</li>
+          </ul>
+          <p class="example-outcome">Verdict: High risk. Action: Do not sign in; use the official site or app.</p>
+        </article>
+        <article class="example-card">
+          <div class="example-meta">Example: job interview scam</div>
+          <p class="example-input">“We reviewed your profile and want to hire you today. Send your ID and bank details to process onboarding.”</p>
+          <ul class="signal-list">
+            <li>Asks for sensitive data before verification</li>
+            <li>Unverified sender domain and no role details</li>
+            <li>Promises immediate hiring without process</li>
+          </ul>
+          <p class="example-outcome">Verdict: Medium risk. Action: Verify company and role through official channels.</p>
+        </article>
+      </div>
+    </section>
+
+    <!-- TRUST & SECURITY -->
+    <section class="section trust-section" id="trust">
+      <div class="section-header">
+        <p class="eyebrow">Trust & security</p>
+        <h2 class="heading-2">Built for teams that need audit-ready clarity</h2>
+        <p class="body-md text-muted">
+          Transparent data handling, planned compliance milestones, and clear onboarding guidance.
+        </p>
+      </div>
+
+      <div class="trust-grid">
+        <article class="trust-card">
+          <h3 class="heading-3">Data handling</h3>
+          <p class="body-sm">
+            Scans are processed for analysis and discarded. No resale of content. Logs capture minimal metadata for troubleshooting.
+          </p>
+          <p class="body-sm muted">Policy summary available; full policy linked in Privacy.</p>
+        </article>
+        <article class="trust-card">
+          <h3 class="heading-3">Compliance readiness</h3>
+          <p class="body-sm">
+            SOC 2 and ISO 27001 readiness under review. Structure in place for audit trails, access controls, and data retention rules.
+          </p>
+          <p class="body-sm muted">Status: Preparing controls; external audit scheduling in progress.</p>
+        </article>
+        <article class="trust-card">
+          <h3 class="heading-3">Team onboarding</h3>
+          <ul class="trust-list">
+            <li>What happens when you paste: content analyzed, signals returned, no auto-actions.</li>
+            <li>Team safety: consistent risk labels and recommended responses.</li>
+            <li>Data path: encrypted in transit, scoped storage for queued scans only.</li>
+          </ul>
+        </article>
+        <article class="trust-card">
+          <h3 class="heading-3">Safe usage</h3>
+          <ul class="trust-list">
+            <li>Confirm high-risk findings with a second channel.</li>
+            <li>Use role-based access for shared accounts.</li>
+            <li>Export reports for compliance reviews when needed.</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <!-- ADDITIONAL FEATURES -->
+    <section class="section">
+      <div class="section-header">
+        <p class="eyebrow">Additional tools</p>
+        <h2 class="heading-2">Advanced options stay controlled</h2>
+        <p class="body-md text-muted">
+          Keep the main flow simple while making deeper reviews available when needed.
+        </p>
+      </div>
+
+      <div class="info-grid">
+        <article class="info-card">
+          <h3 class="heading-3">Advanced analysis queue</h3>
+          <p class="body-sm">
+            Priority processing for detailed reviews when evidence must be collected and archived.
+          </p>
+        </article>
+        <article class="info-card">
+          <h3 class="heading-3">History & reporting</h3>
+          <p class="body-sm">
+            Keep a record of scans, export findings for audits, and share summaries with incident responders.
+          </p>
+        </article>
+        <article class="info-card">
+          <h3 class="heading-3">Browser extension</h3>
+          <p class="body-sm">
+            Real-time scanning for pages and messages inside the tools you already use.
+          </p>
+        </article>
+        <article class="info-card">
+          <h3 class="heading-3">Team controls</h3>
+          <p class="body-sm">
+            Role-aware access, consistent verdict labels, and guidance that keeps responses aligned across teams.
+          </p>
+        </article>
+      </div>
+    </section>
+
+    <!-- CTA -->
+    <section class="section final-cta">
+      <div class="cta-card">
+        <div>
+          <p class="eyebrow">Ready to assess a threat-</p>
+          <h2 class="heading-2">Start a scan and get a clear verdict.</h2>
+          <p class="body-md text-muted">
+            No theatrics—just a concise report you can act on.
           </p>
         </div>
-
-        <div class="work-box">
-          <h3>2. Detects manipulation</h3>
-          <p>
-            ScamDetector spots psychological tricks instantly whether it's urgency, guilt, someone trying to impersonate authority, romance pressure.
-          </p>
+        <div class="cta-actions">
+          <a class="primary-btn" href="#scanner">Start a scan</a>
+          <a class="secondary-btn" href="#trust">Review data practices</a>
         </div>
-
-        <div class="work-box">
-          <h3>3. Scores the risk</h3>
-          <p>
-            Each scan gets a risk score and a clear verdict: <strong>SAFE</strong>, <strong>SUSPICIOUS</strong>, or <strong>DANGEROUS</strong>.
-          </p>
-        </div>
-
-        <div class="work-box">
-          <h3>4. Explains the red flags</h3>
-          <p>
-            You don't just get some random basic color; you get a breakdown of the exact red flags so you walk away smarter than before.
-          </p>
-        </div>
-
       </div>
     </section>
 
     <!-- FOOTER -->
     <footer class="app-footer">
-      <div class="footer-socials">
-        <h3>Join the Scam Safety Community</h3>
-        <div class="footer-social-links">
-          <a href="https://www.youtube.com/@CheckBeforeYouClick" target="_blank" rel="noopener noreferrer">YouTube</a>
-          <a href="https://www.instagram.com/checkbeforeyouclick/?hl=en" target="_blank" rel="noopener noreferrer">Instagram</a>
-          <a href="https://www.tiktok.com/@beforeyouclick_" target="_blank" rel="noopener noreferrer">TikTok</a>
+      <div class="footer-top">
+        <div>
+          <p class="footer-title">ScamDetector</p>
+          <p class="footer-text">Digital threat analysis built for clarity, not hype.</p>
+        </div>
+        <div class="footer-links">
+          <a href="/terms">Terms</a>
+          <a href="/privacy">Privacy</a>
+          <a href="/support">Support</a>
+          <a href="/feedback">Feedback</a>
         </div>
       </div>
-      <p>Built to protect awareness, not to replace your judgment. Not financial or legal advice.</p>
-      <div class="legal-links">
-        <a href="/terms">Terms</a>
-        <a href="/privacy">Privacy</a>
-        <a href="/support">Support</a>
-        <a href="/feedback">Feedback</a>
-      </div>
+      <p class="footer-note">
+        Review outcomes carefully before acting. Not financial or legal advice.
+      </p>
     </footer>
 
     <!-- AUTH MODAL -->
     <div id="auth-modal" class="auth-modal" hidden>
       <div class="auth-card">
-        <button id="auth-close" class="auth-close" aria-label="Close">✕</button>
+        <button id="auth-close" class="auth-close" aria-label="Close">×</button>
 
         <div class="auth-header-pill">
-          <span>🛡</span>
-          <span>Account & Sync</span>
+          <span class="brand-mark-mini" aria-hidden="true"></span>
+          <span>Account access</span>
         </div>
 
-        <h2 class="auth-title">Sign in to protect everything, everywhere.</h2>
+        <h2 class="auth-title">Sign in to manage scans and limits.</h2>
         <p class="auth-subtitle">
-          One account across web, extension, and iOS. Sync your scans, unlock higher limits, upgrade when you’re ready.
+          One account across web and extension. Sync history, manage limits, and upgrade when needed.
         </p>
 
         <div class="auth-tabs">
@@ -301,7 +484,7 @@
         </form>
 
         <p id="auth-hint" class="auth-hint">
-          No account yet? Switch to <strong>Create Account</strong> to start with the free tier.
+          No account yet- Switch to <strong>Create Account</strong> to start with the free tier.
         </p>
         <p id="auth-status" class="auth-status"></p>
       </div>
