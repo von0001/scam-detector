@@ -110,6 +110,57 @@
         Review outcomes carefully before acting. Not financial or legal advice.
       </p>
     </footer>
+
+    <div id="auth-modal" class="auth-modal" hidden>
+      <div class="auth-card">
+        <button id="auth-close" class="auth-close" aria-label="Close">×</button>
+
+        <div class="auth-header-pill">
+          <span class="brand-mark-mini" aria-hidden="true"></span>
+          <span>Account access</span>
+        </div>
+
+        <h2 class="auth-title">Sign in to manage your scans.</h2>
+        <p class="auth-subtitle">
+          Sync activity, manage limits, and upgrade when needed.
+        </p>
+
+        <div class="auth-tabs">
+          <button type="button" id="auth-tab-login" class="auth-tab auth-tab-active" data-mode="login">
+            Sign In
+          </button>
+          <button type="button" id="auth-tab-signup" class="auth-tab" data-mode="signup">
+            Create Account
+          </button>
+        </div>
+
+        <div id="google-btn" class="google-btn-container" data-google-client-id="YOUR_GOOGLE_CLIENT_ID_HERE"></div>
+
+        <div class="auth-divider">
+          <span>or continue with email</span>
+        </div>
+
+        <form id="auth-form" class="auth-form">
+          <label for="auth-email">Email</label>
+          <input type="email" id="auth-email" required placeholder="you@example.com" />
+
+          <label for="auth-password">Password</label>
+          <input type="password" id="auth-password" required minlength="8" placeholder="Minimum 8 characters" />
+
+          <button type="submit" id="auth-submit" class="primary-btn auth-submit">
+            Continue
+          </button>
+        </form>
+
+        <p id="auth-hint" class="auth-hint">
+          No account yet? Switch to <strong>Create Account</strong> to start with the free tier.
+        </p>
+        <p id="auth-status" class="auth-status"></p>
+      </div>
+    </div>
   </div>
+
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <script src="/static/script.js"></script>
 </body>
 </html>

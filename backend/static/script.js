@@ -192,6 +192,9 @@ let upgradeModalMessage = null;
 let upgradeNowBtn = null;
 let viewPlansBtn = null;
 
+// Ensure auth modal stays closed on load
+if (authModal) authModal.hidden = true;
+
 // MODE
 function getSelectedMode() {
   if (modeSelect) return modeSelect.value;

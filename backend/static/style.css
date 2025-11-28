@@ -1018,6 +1018,10 @@ textarea:focus,
   z-index: 50;
 }
 
+.auth-modal[hidden] {
+  display: none !important;
+}
+
 .auth-card {
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
@@ -1127,7 +1131,7 @@ textarea:focus,
   display: grid;
   place-items: center;
   z-index: 60;
-  pointer-events: none;
+  pointer-events: auto;
 }
 
 .upgrade-modal[hidden] {
